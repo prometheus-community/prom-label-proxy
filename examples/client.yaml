@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: curl
+spec:
+  selector:
+    matchLabels:
+      name: curl
+  template:
+    metadata:
+      name: curl
+      labels:
+        name: curl
+    spec:
+      containers:
+      - name: curl
+        image: quay.io/brancz/curl:v0.0.1
