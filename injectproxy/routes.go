@@ -38,6 +38,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	labelValue := q.Get(r.label)
 	if labelValue == "" {
 		http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
+		return
 	}
 	req.URL.Query().Del(r.label)
 
@@ -68,6 +69,7 @@ func (r *routes) federate(w http.ResponseWriter, req *http.Request) {
 	labelValue := q.Get(r.label)
 	if labelValue == "" {
 		http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
+		return
 	}
 	req.URL.Query().Del(r.label)
 
