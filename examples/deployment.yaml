@@ -49,7 +49,7 @@ kind: ConfigMap
 metadata:
   name: kube-rbac-proxy
 data:
-  resource-attributes.yaml: |+
+  config.yaml: |+
     authorization:
       rewrites:
         byQueryParameter:
@@ -74,11 +74,11 @@ spec:
       serviceAccountName: kube-rbac-proxy
       containers:
       - name: kube-rbac-proxy
-        image: quay.io/brancz/kube-rbac-proxy-dev:v0.3.1-c617c88
+        image: quay.io/brancz/kube-rbac-proxy:v0.4.0
         args:
         - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://localhost:8080/"
-        - "--resource-attributes-file=/etc/kube-rbac-proxy/resource-attributes.yaml"
+        - "--config-file=/etc/kube-rbac-proxy/config.yaml"
         - "--logtostderr=true"
         - "--v=10"
         ports:
@@ -88,7 +88,7 @@ spec:
         - name: config
           mountPath: /etc/kube-rbac-proxy
       - name: prom-label-enforcer
-        image: quay.io/brancz/prom-label-proxy:v0.1.0
+        image: quay.io/coreos/prom-label-proxy:v0.1.0
         imagePullPolicy: Always
         args:
         - "--insecure-listen-address=127.0.0.1:8080"
