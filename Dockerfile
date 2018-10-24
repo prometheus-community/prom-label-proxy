@@ -1,14 +1,10 @@
-FROM openshift/origin-base AS build
+FROM openshift/origin-release:golang-1.10 AS builder
 
-ENV GOPATH /go
-RUN mkdir $GOPATH
-RUN yum install -y golang make
-
-COPY . $GOPATH/src/github.com/openshift/prom-label-proxy
-RUN cd $GOPATH/src/github.com/openshift/prom-label-proxy && make build
+COPY . /go/src/github.com/openshift/prom-label-proxy
+RUN cd /go/src/github.com/openshift/prom-label-proxy && make build
 
 FROM openshift/origin-base
-COPY --from=build /go/src/github.com/openshift/prom-label-proxy/_output/linux/amd64/prom-label-proxy /usr/bin/prom-kube-proxy
+COPY --from=builder /go/src/github.com/openshift/prom-label-proxy/_output/linux/amd64/prom-label-proxy /usr/bin/prom-kube-proxy
 
 LABEL io.k8s.display-name="" \
       io.k8s.description="" \

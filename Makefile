@@ -7,7 +7,7 @@ OUT_DIR=_output
 BIN?=prom-label-proxy
 VERSION?=$(shell cat VERSION)
 PKGS=$(shell go list ./... | grep -v /vendor/)
-DOCKER_REPO?=quay.io/openshift/prom-label-proxy
+DOCKER_REPO?=quay.io/coreos/prom-label-proxy
 
 check-license:
 	@echo ">> checking license headers"
@@ -26,6 +26,10 @@ build:
 
 container:
 	docker build -t $(DOCKER_REPO):$(VERSION) .
+
+run-curl-container:
+	@echo 'Example: curl -v -s -k -H "Authorization: Bearer `cat /var/run/secrets/kubernetes.io/serviceaccount/token`" https://kube-rbac-proxy.default.svc:8443/api/v1/query?query=up\&namespace=default'
+	kubectl run -i -t krp-curl --image=quay.io/brancz/krp-curl:v0.0.1 --restart=Never --command -- /bin/sh
 
 test:
 	@echo ">> running all tests"
