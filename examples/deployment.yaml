@@ -55,9 +55,9 @@ data:
         byQueryParameter:
           name: "namespace"
       resourceAttributes:
-        apiVersion: v1
-        resource: node
-        subresource: metrics
+        apiVersion: v1beta1
+        apiGroup: metrics.k8s.io
+        resource: pods
         namespace: "{{ .Value }}"
 ---
 apiVersion: extensions/v1beta1
