@@ -3,8 +3,8 @@ kind: Role
 metadata:
   name: prom-label-proxy-client
 rules:
-- apiGroups: [""]
-  resources: ["node/metrics"]
+- apiGroups: ["metrics.k8s.io/v1beta1"]
+  resources: ["pods"]
   verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
