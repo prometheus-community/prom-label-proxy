@@ -1,0 +1,62 @@
+# github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973
+github.com/beorn7/perks/quantile
+# github.com/cespare/xxhash v1.0.0
+github.com/cespare/xxhash
+# github.com/go-kit/kit v0.7.0
+github.com/go-kit/kit/log
+github.com/go-kit/kit/log/level
+# github.com/go-logfmt/logfmt v0.3.0
+github.com/go-logfmt/logfmt
+# github.com/go-stack/stack v1.7.0
+github.com/go-stack/stack
+# github.com/golang/protobuf v1.1.0
+github.com/golang/protobuf/proto
+# github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
+github.com/kr/logfmt
+# github.com/matttproud/golang_protobuf_extensions v1.0.1
+github.com/matttproud/golang_protobuf_extensions/pbutil
+# github.com/oklog/ulid v1.0.0
+github.com/oklog/ulid
+# github.com/opentracing/opentracing-go v1.0.2
+github.com/opentracing/opentracing-go
+github.com/opentracing/opentracing-go/log
+# github.com/pkg/errors v0.8.0
+github.com/pkg/errors
+# github.com/prometheus/client_golang v0.8.0
+github.com/prometheus/client_golang/prometheus
+# github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910
+github.com/prometheus/client_model/go
+# github.com/prometheus/common v0.0.0-20180801064454-c7de2306084e
+github.com/prometheus/common/model
+github.com/prometheus/common/expfmt
+github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
+# github.com/prometheus/procfs v0.0.0-20180725123919-05ee40e3a273
+github.com/prometheus/procfs
+github.com/prometheus/procfs/nfs
+github.com/prometheus/procfs/xfs
+github.com/prometheus/procfs/internal/util
+# github.com/prometheus/prometheus v2.3.2+incompatible
+github.com/prometheus/prometheus/pkg/labels
+github.com/prometheus/prometheus/promql
+github.com/prometheus/prometheus/pkg/textparse
+github.com/prometheus/prometheus/pkg/timestamp
+github.com/prometheus/prometheus/pkg/value
+github.com/prometheus/prometheus/storage
+github.com/prometheus/prometheus/util/stats
+github.com/prometheus/prometheus/util/strutil
+github.com/prometheus/prometheus/util/testutil
+github.com/prometheus/prometheus/storage/tsdb
+# github.com/prometheus/tsdb v0.0.0-20180807144027-eeb3a7435a75
+github.com/prometheus/tsdb
+github.com/prometheus/tsdb/labels
+github.com/prometheus/tsdb/chunkenc
+github.com/prometheus/tsdb/chunks
+github.com/prometheus/tsdb/fileutil
+github.com/prometheus/tsdb/index
+github.com/prometheus/tsdb/wal
+# golang.org/x/net v0.0.0-20180811021610-c39426892332
+golang.org/x/net/context
+# golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
+golang.org/x/sync/errgroup
+# golang.org/x/sys v0.0.0-20180814072032-4e1fef560951
+golang.org/x/sys/unix

@@ -1,6 +1,7 @@
-FROM openshift/origin-release:golang-1.10 AS builder
+FROM openshift/origin-release:golang-1.12 AS builder
 
 COPY . /go/src/github.com/openshift/prom-label-proxy
+ENV GOFLAGS="-mod=vendor"
 RUN cd /go/src/github.com/openshift/prom-label-proxy && make build; \
     mkdir -p /tmp/build; \
     cp /go/src/github.com/openshift/prom-label-proxy/_output/linux/$(go env GOARCH)/prom-label-proxy /tmp/build/prom-label-proxy
