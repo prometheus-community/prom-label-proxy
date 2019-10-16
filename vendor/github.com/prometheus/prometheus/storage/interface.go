@@ -52,10 +52,13 @@ type Queryable interface {
 // Querier provides reading access to time series data.
 type Querier interface {
 	// Select returns a set of series that matches the given label matchers.
-	Select(*SelectParams, ...*labels.Matcher) (SeriesSet, error)
+	Select(*SelectParams, ...*labels.Matcher) (SeriesSet, Warnings, error)
 
 	// LabelValues returns all potential values for a label name.
-	LabelValues(name string) ([]string, error)
+	LabelValues(name string) ([]string, Warnings, error)
+
+	// LabelNames returns all the unique label names present in the block in sorted order.
+	LabelNames() ([]string, Warnings, error)
 
 	// Close releases the resources of the Querier.
 	Close() error
@@ -63,6 +66,9 @@ type Querier interface {
 
 // SelectParams specifies parameters passed to data selections.
 type SelectParams struct {
+	Start int64 // Start time in milliseconds for this select.
+	End   int64 // End time in milliseconds for this select.
+
 	Step int64  // Query step size in milliseconds.
 	Func string // String representation of surrounding function or aggregation.
 }
@@ -116,3 +122,5 @@ type SeriesIterator interface {
 	// Err returns the current error.
 	Err() error
 }
+
+type Warnings []error
