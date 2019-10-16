@@ -9,23 +9,7 @@ import (
 
 func SetRecursive(node promql.Node, matchersToEnforce []*labels.Matcher) (err error) {
 	switch n := node.(type) {
-	case promql.Statements:
-		for _, s := range n {
-			if err := SetRecursive(s, matchersToEnforce); err != nil {
-				return err
-			}
-		}
-	case *promql.AlertStmt:
-		if err := SetRecursive(n.Expr, matchersToEnforce); err != nil {
-			return err
-		}
-
 	case *promql.EvalStmt:
-		if err := SetRecursive(n.Expr, matchersToEnforce); err != nil {
-			return err
-		}
-
-	case *promql.RecordStmt:
 		if err := SetRecursive(n.Expr, matchersToEnforce); err != nil {
 			return err
 		}
@@ -60,6 +44,11 @@ func SetRecursive(node promql.Node, matchersToEnforce []*labels.Matcher) (err er
 		}
 
 	case *promql.UnaryExpr:
+		if err := SetRecursive(n.Expr, matchersToEnforce); err != nil {
+			return err
+		}
+
+	case *promql.SubqueryExpr:
 		if err := SetRecursive(n.Expr, matchersToEnforce); err != nil {
 			return err
 		}
