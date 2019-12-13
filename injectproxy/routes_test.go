@@ -1,6 +1,7 @@
 package injectproxy
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -9,21 +10,62 @@ import (
 	"testing"
 )
 
-var mockResponse = []byte("ok")
+var okResponse = []byte(`ok`)
 
-type mockHandler struct {
-	values url.Values
+// checkQueryParameterHandler verifies that the request contains the given parameter key/value.
+func checkQueryParameterHandler(key string, value string) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		values, err := url.ParseQuery(req.URL.RawQuery)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+		}
+		if len(values[key]) != 1 {
+			http.Error(w, fmt.Sprintf("expected 1 parameter %q, got %d", key, len(values[key])), http.StatusInternalServerError)
+		}
+		if values.Get(key) != value {
+			http.Error(w, fmt.Sprintf("expected parameter %q with value %q, got %q", key, value, values.Get(key)), http.StatusInternalServerError)
+		}
+		w.Write(okResponse)
+	})
 }
 
-func (m *mockHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	m.values, _ = url.ParseQuery(req.URL.RawQuery)
-	w.Write(mockResponse)
+// mockUpstream simulates an upstream HTTP server. It runs on localhost.
+type mockUpstream struct {
+	h   http.Handler
+	srv *httptest.Server
+	url *url.URL
+}
+
+func newMockUpstream(h http.Handler) *mockUpstream {
+	m := mockUpstream{h: h}
+
+	m.srv = httptest.NewServer(&m)
+
+	u, err := url.Parse(m.srv.URL)
+	if err != nil {
+		panic(err)
+	}
+	m.url = u
+
+	return &m
+}
+
+func (m *mockUpstream) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	m.h.ServeHTTP(w, req)
+}
+
+func (m *mockUpstream) Close() {
+	m.srv.Close()
 }
 
 const proxyLabel = "namespace"
 
 func TestEndpointNotImplemented(t *testing.T) {
-	r := NewRoutes(nil, proxyLabel)
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Write(okResponse)
+	}))
+	defer m.Close()
+	r := NewRoutes(m.url, proxyLabel)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://prometheus.example.com/graph", nil)
@@ -40,9 +82,9 @@ func TestFederate(t *testing.T) {
 		labelv  string
 		matches []string
 
-		expCode    int
-		expMatches []string
-		expBody    []byte
+		expCode  int
+		expMatch string
+		expBody  []byte
 	}{
 		{
 			// No "namespace" parameter returns an error.
@@ -50,23 +92,24 @@ func TestFederate(t *testing.T) {
 		},
 		{
 			// No "match" parameter.
-			labelv:     "default",
-			expCode:    http.StatusOK,
-			expMatches: []string{`{namespace="default"}`},
-			expBody:    mockResponse,
+			labelv:   "default",
+			expCode:  http.StatusOK,
+			expMatch: `{namespace="default"}`,
+			expBody:  okResponse,
 		},
 		{
-			// "match" parameters.
-			labelv:     "default",
-			matches:    []string{`name={job="prometheus"}`, `{__name__=~"job:.*"}`},
-			expCode:    http.StatusOK,
-			expMatches: []string{`{namespace="default"}`},
-			expBody:    mockResponse,
+			// Many "match" parameters.
+			labelv:   "default",
+			matches:  []string{`name={job="prometheus"}`, `{__name__=~"job:.*"}`},
+			expCode:  http.StatusOK,
+			expMatch: `{namespace="default"}`,
+			expBody:  okResponse,
 		},
 	} {
 		t.Run(strings.Join(tc.matches, "&"), func(t *testing.T) {
-			h := &mockHandler{}
-			r := NewRoutes(h, proxyLabel)
+			m := newMockUpstream(checkQueryParameterHandler("match[]", tc.expMatch))
+			defer m.Close()
+			r := NewRoutes(m.url, proxyLabel)
 
 			u, err := url.Parse("http://prometheus.example.com/federate")
 			if err != nil {
@@ -84,27 +127,20 @@ func TestFederate(t *testing.T) {
 			r.ServeHTTP(w, req)
 
 			resp := w.Result()
+			body, _ := ioutil.ReadAll(resp.Body)
+			defer resp.Body.Close()
 
 			if resp.StatusCode != tc.expCode {
-				t.Fatalf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+				t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+				t.Logf("%s", string(body))
+				t.FailNow()
 			}
 			if resp.StatusCode != http.StatusOK {
 				return
 			}
 
-			body, _ := ioutil.ReadAll(resp.Body)
 			if string(body) != string(tc.expBody) {
 				t.Fatalf("expected body %q, got %q", string(tc.expBody), string(body))
-			}
-
-			matches := h.values["match[]"]
-			if len(matches) != len(tc.expMatches) {
-				t.Fatalf("expected %d matches, got %d", len(tc.expMatches), len(matches))
-			}
-			for i := range tc.expMatches {
-				if matches[i] != tc.expMatches[i] {
-					t.Fatalf("expected match %q, got %q", tc.expMatches[i], matches[i])
-				}
 			}
 		})
 	}
@@ -129,28 +165,44 @@ func TestQuery(t *testing.T) {
 			expCode: http.StatusOK,
 		},
 		{
-			// Vector selector.
+			// Query without a vector selector.
 			labelv:       "default",
 			promQuery:    "up",
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace="default"}`,
-			expBody:      mockResponse,
+			expBody:      okResponse,
 		},
 		{
-			// Scalar.
+			// Query with a vector selector.
+			labelv:       "default",
+			promQuery:    `up{namespace="other"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace="default"}`,
+			expBody:      okResponse,
+		},
+		{
+			// Query with a vector selector.
+			labelv:       "default",
+			promQuery:    `up{namespace="default",}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace="default"}`,
+			expBody:      okResponse,
+		},
+		{
+			// Query with a scalar.
 			labelv:       "default",
 			promQuery:    "1",
 			expCode:      http.StatusOK,
 			expPromQuery: `1`,
-			expBody:      mockResponse,
+			expBody:      okResponse,
 		},
 		{
-			// Function.
+			// Query with a function.
 			labelv:       "default",
 			promQuery:    "time()",
 			expCode:      http.StatusOK,
 			expPromQuery: `time()`,
-			expBody:      mockResponse,
+			expBody:      okResponse,
 		},
 		{
 			// An invalid expression returns 200 with empty body.
@@ -161,8 +213,9 @@ func TestQuery(t *testing.T) {
 	} {
 		for _, endpoint := range []string{"query", "query_range"} {
 			t.Run(endpoint+"/"+tc.promQuery, func(t *testing.T) {
-				h := &mockHandler{}
-				r := NewRoutes(h, proxyLabel)
+				m := newMockUpstream(checkQueryParameterHandler("query", tc.expPromQuery))
+				defer m.Close()
+				r := NewRoutes(m.url, proxyLabel)
 
 				u, err := url.Parse("http://prometheus.example.com/api/v1/" + endpoint)
 				if err != nil {
@@ -178,19 +231,19 @@ func TestQuery(t *testing.T) {
 				r.ServeHTTP(w, req)
 
 				resp := w.Result()
+				body, _ := ioutil.ReadAll(resp.Body)
+				defer resp.Body.Close()
+
 				if resp.StatusCode != tc.expCode {
-					t.Fatalf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+					t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+					t.Logf("%s", string(body))
+					t.FailNow()
 				}
 				if resp.StatusCode != http.StatusOK {
 					return
 				}
-				body, _ := ioutil.ReadAll(resp.Body)
 				if string(body) != string(tc.expBody) {
 					t.Fatalf("expected body %q, got %q", string(tc.expBody), string(body))
-				}
-
-				if h.values.Get("query") != tc.expPromQuery {
-					t.Fatalf("expected PromQL query %q, got %q", tc.expPromQuery, h.values.Get("query"))
 				}
 			})
 		}
