@@ -1,4 +1,4 @@
-FROM openshift/origin-release:golang-1.12 AS builder
+FROM openshift/origin-release:golang-1.13 AS builder
 
 COPY . /go/src/github.com/openshift/prom-label-proxy
 ENV GOFLAGS="-mod=vendor"
