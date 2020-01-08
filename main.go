@@ -21,7 +21,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
@@ -48,9 +47,9 @@ func main() {
 		log.Fatalf("Failed to build parse upstream URL: %v", err)
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
+	routes := injectproxy.NewRoutes(upstreamURL, label)
 	mux := http.NewServeMux()
-	mux.Handle("/", injectproxy.NewRoutes(proxy, label))
+	mux.Handle("/", routes)
 
 	srv := &http.Server{Handler: mux}
 
