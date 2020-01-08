@@ -12,7 +12,7 @@ Risks outside the scope of this project:
 
 ## How does this project work?
 
-This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/rules` Prometheus endpoints and ensures that a particular label is enforced in the particular request and response.
+This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/rules`, `/api/v1/alerts` Prometheus endpoints and ensures that a particular label is enforced in the particular request and response.
 
 Once again for clarity: this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or authorize the requesting entity in any way, this has to be built around this project.
 
@@ -42,6 +42,10 @@ This is enforced for any case, whether a label matcher is specified in the origi
 ### Rules endpoint
 
 The proxy requests the `/api/v1/rules` Prometheus endpoint, discards the rules that don't contain an exact match of the label and returns the modified response to the client.
+
+### Alerts endpoint
+
+The proxy requests the `/api/v1/alerts` Prometheus endpoint, discards the rules that don't contain an exact match of the label and returns the modified response to the client.
 
 ## Example use
 
