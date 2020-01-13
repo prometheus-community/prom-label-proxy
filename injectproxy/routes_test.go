@@ -6,25 +6,33 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
 	"testing"
 )
 
 var okResponse = []byte(`ok`)
 
-// checkQueryParameterHandler verifies that the request contains the given parameter key/value exactly once.
-func checkQueryParameterHandler(key string, value string) http.HandlerFunc {
+// checkQueryParameterHandler verifies that the request contains the given parameter key/values.
+func checkQueryParameterHandler(key string, values ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		values, err := url.ParseQuery(req.URL.RawQuery)
+		kvs, err := url.ParseQuery(req.URL.RawQuery)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			return
 		}
 		// Verify that the client provides the parameter only once.
-		if len(values[key]) != 1 {
-			http.Error(w, fmt.Sprintf("expected 1 parameter %q, got %d", key, len(values[key])), http.StatusInternalServerError)
+		if len(kvs[key]) != len(values) {
+			http.Error(w, fmt.Sprintf("expected %d values of parameter %q, got %d", len(values), key, len(kvs[key])), http.StatusInternalServerError)
+			return
 		}
-		if values.Get(key) != value {
-			http.Error(w, fmt.Sprintf("expected parameter %q with value %q, got %q", key, value, values.Get(key)), http.StatusInternalServerError)
+		sort.Strings(values)
+		sort.Strings(kvs[key])
+		for i := range values {
+			if kvs[key][i] != values[i] {
+				http.Error(w, fmt.Sprintf("expected parameter %q with value %q, got %q", key, values[i], kvs[key][i]), http.StatusInternalServerError)
+				return
+			}
 		}
 		w.Write(okResponse)
 	})
@@ -69,7 +77,7 @@ func TestEndpointNotImplemented(t *testing.T) {
 	r := NewRoutes(m.url, proxyLabel)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "http://prometheus.example.com/graph", nil)
+	req := httptest.NewRequest("GET", "http://prometheus.example.com/graph?namespace=ns1", nil)
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()

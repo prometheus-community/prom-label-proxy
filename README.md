@@ -1,6 +1,6 @@
 # prom-label-proxy
 
-The prom-label-proxy can enforce a given label in a given PromQL query or in Prometheus API responses.
+The prom-label-proxy can enforce a given label in a given PromQL query, in Prometheus API responses or in Alertmanager API requests.
 
 This proxy does not perform authentication or authorization, this has to happen before the request reaches this proxy. The [kube-rbac-proxy](https://github.com/brancz/kube-rbac-proxy) is an example for such an additional building block.
 
@@ -12,7 +12,7 @@ Risks outside the scope of this project:
 
 ## How does this project work?
 
-This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/rules`, `/api/v1/alerts` Prometheus endpoints and ensures that a particular label is enforced in the particular request and response.
+This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/rules`, `/api/v1/alerts` Prometheus endpoints as well as `/api/v2/silences` Alertmanager endpoint and it ensures that a particular label is enforced in the particular request and response.
 
 Once again for clarity: this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or authorize the requesting entity in any way, this has to be built around this project.
 
@@ -46,6 +46,14 @@ The proxy requests the `/api/v1/rules` Prometheus endpoint, discards the rules t
 ### Alerts endpoint
 
 The proxy requests the `/api/v1/alerts` Prometheus endpoint, discards the rules that don't contain an exact match of the label and returns the modified response to the client.
+
+### Silences endpoint
+
+The proxy ensures the following:
+
+* `GET` requests to the `/api/v2/silences` endpoint contain a `filter` parameter that matches exactly the particular label and throws away all other matchers for the label.
+* `POST` requests to the `/api/v2/silences` endpoint can only affect silences that match the label and the label matcher is enforced.
+* `DELETE` requests to the `/api/v2/silence/` endpoint can only affect silences that match the label.
 
 ## Example use
 
