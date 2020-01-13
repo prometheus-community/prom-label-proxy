@@ -39,15 +39,6 @@ func getAPIResponse(resp *http.Response) (*apiResponse, error) {
 	return &apir, nil
 }
 
-func (a *apiResponse) setData(v interface{}) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	a.Data = json.RawMessage(b)
-	return nil
-}
-
 type rulesData struct {
 	RuleGroups []*ruleGroup `json:"groups"`
 }
@@ -142,85 +133,84 @@ type alert struct {
 	Value       string        `json:"value"`
 }
 
-// modifyAPIResponse unwraps the Prometheus API response, passes the data field
-// to the process function and replaces the result in the response.
-func modifyAPIResponse(resp *http.Response, process func([]byte) (interface{}, error)) error {
-	if resp.StatusCode != http.StatusOK {
-		// Pass non-200 responses as-is.
+// modifyAPIResponse unwraps the Prometheus API response, passes the enforced
+// label value and the response to the given function and finally replaces the
+// result in the response.
+func modifyAPIResponse(f func(string, *apiResponse) (interface{}, error)) func(*http.Response) error {
+	return func(resp *http.Response) error {
+		if resp.StatusCode != http.StatusOK {
+			// Pass non-200 responses as-is.
+			return nil
+		}
+
+		apir, err := getAPIResponse(resp)
+		if err != nil {
+			return errors.Wrap(err, "can't decode API response")
+		}
+
+		v, err := f(mustLabelValue(resp.Request.Context()), apir)
+		if err != nil {
+			return err
+		}
+
+		b, err := json.Marshal(v)
+		if err != nil {
+			return errors.Wrap(err, "can't replace data")
+		}
+		apir.Data = json.RawMessage(b)
+
+		var buf bytes.Buffer
+		if err = json.NewEncoder(&buf).Encode(apir); err != nil {
+			return errors.Wrap(err, "can't encode API response")
+		}
+		resp.Body = ioutil.NopCloser(&buf)
+		resp.Header["Content-Length"] = []string{fmt.Sprint(buf.Len())}
+
 		return nil
 	}
-
-	apir, err := getAPIResponse(resp)
-	if err != nil {
-		return errors.Wrap(err, "can't decode API response")
-	}
-
-	v, err := process([]byte(apir.Data))
-	if err != nil {
-		return err
-	}
-
-	if err := apir.setData(v); err != nil {
-		return errors.Wrap(err, "can't set data")
-	}
-
-	var buf bytes.Buffer
-	if err = json.NewEncoder(&buf).Encode(apir); err != nil {
-		return errors.Wrap(err, "can't encode API response")
-	}
-	resp.Body = ioutil.NopCloser(&buf)
-	resp.Header["Content-Length"] = []string{fmt.Sprint(buf.Len())}
-
-	return nil
 }
 
-func (r *routes) rules(resp *http.Response) error {
-	return modifyAPIResponse(resp, func(b []byte) (interface{}, error) {
-		var rgs rulesData
-		if err := json.Unmarshal([]byte(b), &rgs); err != nil {
-			return nil, errors.Wrap(err, "can't decode rules data")
-		}
+func (r *routes) filterRules(lvalue string, resp *apiResponse) (interface{}, error) {
+	var rgs rulesData
+	if err := json.Unmarshal(resp.Data, &rgs); err != nil {
+		return nil, errors.Wrap(err, "can't decode rules data")
+	}
 
-		lvalue := mustLabelValue(resp.Request.Context())
-		filtered := []*ruleGroup{}
-		for _, rg := range rgs.RuleGroups {
-			var rules []rule
-			for _, rule := range rg.Rules {
-				for _, lbl := range rule.Labels() {
-					if lbl.Name == r.label && lbl.Value == lvalue {
-						rules = append(rules, rule)
-						break
-					}
-				}
-			}
-			if len(rules) > 0 {
-				rg.Rules = rules
-				filtered = append(filtered, rg)
-			}
-		}
-
-		return &rulesData{RuleGroups: filtered}, nil
-	})
-}
-
-func (r *routes) alerts(resp *http.Response) error {
-	return modifyAPIResponse(resp, func(b []byte) (interface{}, error) {
-		var data alertsData
-		if err := json.Unmarshal([]byte(b), &data); err != nil {
-			return nil, errors.Wrap(err, "can't decode alerts data")
-		}
-
-		lvalue := mustLabelValue(resp.Request.Context())
-		filtered := []*alert{}
-		for _, alert := range data.Alerts {
-			for _, lbl := range alert.Labels {
+	filtered := []*ruleGroup{}
+	for _, rg := range rgs.RuleGroups {
+		var rules []rule
+		for _, rule := range rg.Rules {
+			for _, lbl := range rule.Labels() {
 				if lbl.Name == r.label && lbl.Value == lvalue {
-					filtered = append(filtered, alert)
+					rules = append(rules, rule)
 					break
 				}
 			}
 		}
+		if len(rules) > 0 {
+			rg.Rules = rules
+			filtered = append(filtered, rg)
+		}
+	}
 
-		return &alertsData{Alerts: filtered}, nil
-	})
+	return &rulesData{RuleGroups: filtered}, nil
+}
+
+func (r *routes) filterAlerts(lvalue string, resp *apiResponse) (interface{}, error) {
+	var data alertsData
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		return nil, errors.Wrap(err, "can't decode alerts data")
+	}
+
+	filtered := []*alert{}
+	for _, alert := range data.Alerts {
+		for _, lbl := range alert.Labels {
+			if lbl.Name == r.label && lbl.Value == lvalue {
+				filtered = append(filtered, alert)
+				break
+			}
+		}
+	}
+
+	return &alertsData{Alerts: filtered}, nil
 }

@@ -33,8 +33,8 @@ func NewRoutes(upstream *url.URL, label string) *routes {
 		"/api/v1/rules":       r.noop,
 	}
 	r.modifiers = map[string]func(*http.Response) error{
-		"/api/v1/rules":  r.rules,
-		"/api/v1/alerts": r.alerts,
+		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
+		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
 	}
 	proxy.ModifyResponse = r.ModifyResponse
 	return r
