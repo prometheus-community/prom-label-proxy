@@ -29,10 +29,12 @@ func NewRoutes(upstream *url.URL, label string) *routes {
 		"/federate":           r.federate,
 		"/api/v1/query":       r.query,
 		"/api/v1/query_range": r.query,
+		"/api/v1/alerts":      r.noop,
 		"/api/v1/rules":       r.noop,
 	}
 	r.modifiers = map[string]func(*http.Response) error{
-		"/api/v1/rules": r.rules,
+		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
+		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
 	}
 	proxy.ModifyResponse = r.ModifyResponse
 	return r
@@ -59,6 +61,7 @@ func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func (r *routes) ModifyResponse(resp *http.Response) error {
 	m, found := r.modifiers[resp.Request.URL.Path]
 	if !found {
+		// Return the server's response unmodified.
 		return nil
 	}
 	return m(resp)

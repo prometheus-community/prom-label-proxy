@@ -12,13 +12,14 @@ import (
 
 var okResponse = []byte(`ok`)
 
-// checkQueryParameterHandler verifies that the request contains the given parameter key/value.
+// checkQueryParameterHandler verifies that the request contains the given parameter key/value exactly once.
 func checkQueryParameterHandler(key string, value string) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		values, err := url.ParseQuery(req.URL.RawQuery)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
 		}
+		// Verify that the client provides the parameter only once.
 		if len(values[key]) != 1 {
 			http.Error(w, fmt.Sprintf("expected 1 parameter %q, got %d", key, len(values[key])), http.StatusInternalServerError)
 		}
