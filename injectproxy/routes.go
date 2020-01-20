@@ -12,26 +12,31 @@ import (
 )
 
 type routes struct {
-	handler    http.Handler
-	label      string
-	forwarders map[string]func(http.ResponseWriter, *http.Request)
-	modifiers  map[string]func(*http.Response) error
+	upstream  *url.URL
+	handler   http.Handler
+	label     string
+	mux       *http.ServeMux
+	modifiers map[string]func(*http.Response) error
 }
 
 func NewRoutes(upstream *url.URL, label string) *routes {
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
 	r := &routes{
-		handler: proxy,
-		label:   label,
+		upstream: upstream,
+		handler:  proxy,
+		label:    label,
 	}
-	r.forwarders = map[string]func(http.ResponseWriter, *http.Request){
-		"/federate":           r.federate,
-		"/api/v1/query":       r.query,
-		"/api/v1/query_range": r.query,
-		"/api/v1/alerts":      r.noop,
-		"/api/v1/rules":       r.noop,
-	}
+	mux := http.NewServeMux()
+	mux.Handle("/federate", enforceMethods(r.federate, "GET"))
+	mux.Handle("/api/v1/query", enforceMethods(r.query, "GET", "POST"))
+	mux.Handle("/api/v1/query_range", enforceMethods(r.query, "GET", "POST"))
+	mux.Handle("/api/v1/alerts", enforceMethods(r.noop, "GET"))
+	mux.Handle("/api/v1/rules", enforceMethods(r.noop, "GET"))
+	mux.Handle("/api/v2/silences", enforceMethods(r.silences, "GET", "POST"))
+	mux.Handle("/api/v2/silences/", enforceMethods(r.silences, "GET", "POST"))
+	mux.Handle("/api/v2/silence/", enforceMethods(r.deleteSilence, "DELETE"))
+	r.mux = mux
 	r.modifiers = map[string]func(*http.Response) error{
 		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
 		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
@@ -41,21 +46,16 @@ func NewRoutes(upstream *url.URL, label string) *routes {
 }
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	h, found := r.forwarders[req.URL.Path]
-	if !found {
-		http.NotFound(w, req)
-		return
-	}
-
 	lvalue := req.URL.Query().Get(r.label)
 	if lvalue == "" {
 		http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
 		return
 	}
 	req = req.WithContext(withLabelValue(req.Context(), lvalue))
+	//FIXME(simonpasquier): this doesn't do anything, we need to update req.URL.RawQuery.
 	req.URL.Query().Del(r.label)
 
-	h(w, req)
+	r.mux.ServeHTTP(w, req)
 }
 
 func (r *routes) ModifyResponse(resp *http.Response) error {
@@ -65,6 +65,18 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 		return nil
 	}
 	return m(resp)
+}
+
+func enforceMethods(h http.HandlerFunc, methods ...string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		for _, m := range methods {
+			if m == req.Method {
+				h(w, req)
+				return
+			}
+		}
+		http.NotFound(w, req)
+	})
 }
 
 type ctxKey int

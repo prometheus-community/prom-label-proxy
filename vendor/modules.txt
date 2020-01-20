@@ -1,9 +1,17 @@
+# github.com/PuerkitoBio/purell v1.1.1
+github.com/PuerkitoBio/purell
+# github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578
+github.com/PuerkitoBio/urlesc
 # github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4
 github.com/alecthomas/units
+# github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a
+github.com/asaskevich/govalidator
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
 # github.com/cespare/xxhash v1.1.0
 github.com/cespare/xxhash
+# github.com/cespare/xxhash/v2 v2.1.0
+github.com/cespare/xxhash/v2
 # github.com/edsrzf/mmap-go v1.0.0
 github.com/edsrzf/mmap-go
 # github.com/go-kit/kit v0.9.0
@@ -11,14 +19,50 @@ github.com/go-kit/kit/log
 github.com/go-kit/kit/log/level
 # github.com/go-logfmt/logfmt v0.4.0
 github.com/go-logfmt/logfmt
+# github.com/go-openapi/analysis v0.19.4
+github.com/go-openapi/analysis
+github.com/go-openapi/analysis/internal
+# github.com/go-openapi/errors v0.19.2
+github.com/go-openapi/errors
+# github.com/go-openapi/jsonpointer v0.19.2
+github.com/go-openapi/jsonpointer
+# github.com/go-openapi/jsonreference v0.19.2
+github.com/go-openapi/jsonreference
+# github.com/go-openapi/loads v0.19.2
+github.com/go-openapi/loads
+# github.com/go-openapi/runtime v0.19.4
+github.com/go-openapi/runtime
+github.com/go-openapi/runtime/client
+github.com/go-openapi/runtime/logger
+github.com/go-openapi/runtime/middleware
+github.com/go-openapi/runtime/middleware/denco
+github.com/go-openapi/runtime/middleware/header
+github.com/go-openapi/runtime/middleware/untyped
+github.com/go-openapi/runtime/security
+# github.com/go-openapi/spec v0.19.2
+github.com/go-openapi/spec
+# github.com/go-openapi/strfmt v0.19.2
+github.com/go-openapi/strfmt
+# github.com/go-openapi/swag v0.19.5
+github.com/go-openapi/swag
+# github.com/go-openapi/validate v0.19.2
+github.com/go-openapi/validate
+# github.com/go-stack/stack v1.8.0
+github.com/go-stack/stack
 # github.com/golang/protobuf v1.3.2
 github.com/golang/protobuf/proto
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
 # github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
 github.com/kr/logfmt
+# github.com/mailru/easyjson v0.0.0-20190626092158-b2ccc519800e
+github.com/mailru/easyjson/buffer
+github.com/mailru/easyjson/jlexer
+github.com/mailru/easyjson/jwriter
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
+# github.com/mitchellh/mapstructure v1.1.2
+github.com/mitchellh/mapstructure
 # github.com/oklog/ulid v1.3.1
 github.com/oklog/ulid
 # github.com/opentracing/opentracing-go v1.1.0
@@ -26,18 +70,28 @@ github.com/opentracing/opentracing-go
 github.com/opentracing/opentracing-go/log
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
-# github.com/prometheus/client_golang v1.1.0
+# github.com/prometheus/alertmanager v0.20.0
+github.com/prometheus/alertmanager/api/v2/client
+github.com/prometheus/alertmanager/api/v2/client/alert
+github.com/prometheus/alertmanager/api/v2/client/alertgroup
+github.com/prometheus/alertmanager/api/v2/client/general
+github.com/prometheus/alertmanager/api/v2/client/receiver
+github.com/prometheus/alertmanager/api/v2/client/silence
+github.com/prometheus/alertmanager/api/v2/models
+github.com/prometheus/alertmanager/pkg/labels
+# github.com/prometheus/client_golang v1.2.1
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/internal
 # github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.6.0
+# github.com/prometheus/common v0.7.0
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
 github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.0.3
+# github.com/prometheus/procfs v0.0.5
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
+github.com/prometheus/procfs/internal/util
 # github.com/prometheus/prometheus v2.3.2+incompatible => github.com/prometheus/prometheus v0.0.0-20190818123050-43acd0e2e93f
 github.com/prometheus/prometheus/pkg/gate
 github.com/prometheus/prometheus/pkg/labels
@@ -61,8 +115,25 @@ github.com/prometheus/prometheus/util/stats
 github.com/prometheus/prometheus/util/strutil
 github.com/prometheus/prometheus/util/teststorage
 github.com/prometheus/prometheus/util/testutil
+# go.mongodb.org/mongo-driver v1.0.4
+go.mongodb.org/mongo-driver/bson
+go.mongodb.org/mongo-driver/bson/bsoncodec
+go.mongodb.org/mongo-driver/bson/bsonrw
+go.mongodb.org/mongo-driver/bson/bsontype
+go.mongodb.org/mongo-driver/bson/primitive
+go.mongodb.org/mongo-driver/x/bsonx/bsoncore
+# golang.org/x/net v0.0.0-20190724013045-ca1201d0de80
+golang.org/x/net/idna
 # golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20190813064441-fde4db37ae7a
+# golang.org/x/sys v0.0.0-20191010194322-b09406accb47
 golang.org/x/sys/unix
 golang.org/x/sys/windows
+# golang.org/x/text v0.3.2
+golang.org/x/text/secure/bidirule
+golang.org/x/text/transform
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+golang.org/x/text/width
+# gopkg.in/yaml.v2 v2.2.2
+gopkg.in/yaml.v2
