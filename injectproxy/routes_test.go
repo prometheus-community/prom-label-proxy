@@ -13,6 +13,21 @@ import (
 
 var okResponse = []byte(`ok`)
 
+func checkParameterAbsent(param string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		kvs, err := url.ParseQuery(req.URL.RawQuery)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			return
+		}
+		if len(kvs[param]) != 0 {
+			http.Error(w, fmt.Sprintf("unexpected parameter %q", param), http.StatusInternalServerError)
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
+}
+
 // checkQueryParameterHandler verifies that the request contains the given parameter key/values.
 func checkQueryParameterHandler(key string, values ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -116,7 +131,12 @@ func TestFederate(t *testing.T) {
 		},
 	} {
 		t.Run(strings.Join(tc.matches, "&"), func(t *testing.T) {
-			m := newMockUpstream(checkQueryParameterHandler("match[]", tc.expMatch))
+			m := newMockUpstream(
+				checkParameterAbsent(
+					proxyLabel,
+					checkQueryParameterHandler("match[]", tc.expMatch),
+				),
+			)
 			defer m.Close()
 			r := NewRoutes(m.url, proxyLabel)
 
@@ -222,7 +242,12 @@ func TestQuery(t *testing.T) {
 	} {
 		for _, endpoint := range []string{"query", "query_range"} {
 			t.Run(endpoint+"/"+tc.promQuery, func(t *testing.T) {
-				m := newMockUpstream(checkQueryParameterHandler("query", tc.expPromQuery))
+				m := newMockUpstream(
+					checkParameterAbsent(
+						proxyLabel,
+						checkQueryParameterHandler("query", tc.expPromQuery),
+					),
+				)
 				defer m.Close()
 				r := NewRoutes(m.url, proxyLabel)
 

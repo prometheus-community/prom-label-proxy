@@ -52,8 +52,10 @@ func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	req = req.WithContext(withLabelValue(req.Context(), lvalue))
-	//FIXME(simonpasquier): this doesn't do anything, we need to update req.URL.RawQuery.
-	req.URL.Query().Del(r.label)
+	// Remove the proxy label from the query parameters.
+	q := req.URL.Query()
+	q.Del(r.label)
+	req.URL.RawQuery = q.Encode()
 
 	r.mux.ServeHTTP(w, req)
 }
