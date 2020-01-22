@@ -7,7 +7,5 @@ require (
 	github.com/go-openapi/strfmt v0.19.2
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/alertmanager v0.20.0
-	github.com/prometheus/prometheus v2.3.2+incompatible
+	github.com/prometheus/prometheus v1.8.2-0.20200106144642-d9613e5c466c
 )
-
-replace github.com/prometheus/prometheus => github.com/prometheus/prometheus v0.0.0-20190818123050-43acd0e2e93f

@@ -52,10 +52,11 @@ func Ok(tb TB, err error) {
 }
 
 // NotOk fails the test if an err is nil.
-func NotOk(tb TB, err error, format string, a ...interface{}) {
+func NotOk(tb TB, err error, a ...interface{}) {
 	tb.Helper()
 	if err == nil {
 		if len(a) != 0 {
+			format := a[0].(string)
 			tb.Fatalf("\033[31m"+format+": expected error, got none\033[39m", a...)
 		}
 		tb.Fatalf("\033[31mexpected error, got none\033[39m")
@@ -66,8 +67,23 @@ func NotOk(tb TB, err error, format string, a ...interface{}) {
 func Equals(tb TB, exp, act interface{}, msgAndArgs ...interface{}) {
 	tb.Helper()
 	if !reflect.DeepEqual(exp, act) {
-		tb.Fatalf("\033[31m%s\n\nexp: %#v\n\ngot: %#v%s\033[39m\n", formatMessage(msgAndArgs), exp, act)
+		tb.Fatalf("\033[31m%s\n\nexp: %#v\n\ngot: %#v\033[39m\n", formatMessage(msgAndArgs), exp, act)
 	}
+}
+
+// ErrorEqual compares Go errors for equality.
+func ErrorEqual(tb TB, left, right error, msgAndArgs ...interface{}) {
+	tb.Helper()
+	if left == right {
+		return
+	}
+
+	if left != nil && right != nil {
+		Equals(tb, left.Error(), right.Error(), msgAndArgs...)
+		return
+	}
+
+	tb.Fatalf("\033[31m%s\n\nexp: %#v\n\ngot: %#v\033[39m\n", formatMessage(msgAndArgs), left, right)
 }
 
 func formatMessage(msgAndArgs []interface{}) string {
@@ -76,7 +92,7 @@ func formatMessage(msgAndArgs []interface{}) string {
 	}
 
 	if msg, ok := msgAndArgs[0].(string); ok {
-		return fmt.Sprintf("\nmsg: "+msg, msgAndArgs[1:]...)
+		return fmt.Sprintf("\n\nmsg: "+msg, msgAndArgs[1:]...)
 	}
 	return ""
 }

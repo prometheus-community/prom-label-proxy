@@ -34,13 +34,18 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	_ "github.com/prometheus/prometheus/tsdb/goversion"
-	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/prometheus/prometheus/tsdb/wal"
 	"golang.org/x/sync/errgroup"
+)
+
+// Default duration of a block in milliseconds - 2h.
+const (
+	DefaultBlockDuration = int64(2 * 60 * 60 * 1000)
 )
 
 // DefaultOptions used for the DB. They are sane for setups using
@@ -48,7 +53,7 @@ import (
 var DefaultOptions = &Options{
 	WALSegmentSize:         wal.DefaultSegmentSize,
 	RetentionDuration:      15 * 24 * 60 * 60 * 1000, // 15 days in milliseconds
-	BlockRanges:            ExponentialBlockRanges(int64(2*time.Hour)/1e6, 3, 5),
+	BlockRanges:            ExponentialBlockRanges(DefaultBlockDuration, 3, 5),
 	NoLockfile:             false,
 	AllowOverlappingBlocks: false,
 	WALCompression:         false,
@@ -216,7 +221,7 @@ func newDBMetrics(db *DB, r prometheus.Registerer) *dbMetrics {
 		db.mtx.RLock()
 		defer db.mtx.RUnlock()
 		if len(db.blocks) == 0 {
-			return float64(db.head.minTime)
+			return float64(db.head.MinTime())
 		}
 		return float64(db.blocks[0].meta.MinTime)
 	})
@@ -260,7 +265,7 @@ func newDBMetrics(db *DB, r prometheus.Registerer) *dbMetrics {
 var ErrClosed = errors.New("db already closed")
 
 // DBReadOnly provides APIs for read only operations on a database.
-// Current implementation doesn't support concurency so
+// Current implementation doesn't support concurrency so
 // all API calls should happen in the same go routine.
 type DBReadOnly struct {
 	logger  log.Logger
@@ -272,7 +277,7 @@ type DBReadOnly struct {
 // OpenDBReadOnly opens DB in the given directory for read only operations.
 func OpenDBReadOnly(dir string, l log.Logger) (*DBReadOnly, error) {
 	if _, err := os.Stat(dir); err != nil {
-		return nil, errors.Wrap(err, "openning the db dir")
+		return nil, errors.Wrap(err, "opening the db dir")
 	}
 
 	if l == nil {
@@ -286,6 +291,49 @@ func OpenDBReadOnly(dir string, l log.Logger) (*DBReadOnly, error) {
 	}, nil
 }
 
+// FlushWAL creates a new block containing all data that's currently in the memory buffer/WAL.
+// Samples that are in existing blocks will not be written to the new block.
+// Note that if the read only database is running concurrently with a
+// writable database then writing the WAL to the database directory can race.
+func (db *DBReadOnly) FlushWAL(dir string) error {
+	blockReaders, err := db.Blocks()
+	if err != nil {
+		return errors.Wrap(err, "read blocks")
+	}
+	maxBlockTime := int64(math.MinInt64)
+	if len(blockReaders) > 0 {
+		maxBlockTime = blockReaders[len(blockReaders)-1].Meta().MaxTime
+	}
+	w, err := wal.Open(db.logger, nil, filepath.Join(db.dir, "wal"))
+	if err != nil {
+		return err
+	}
+	head, err := NewHead(nil, db.logger, w, 1)
+	if err != nil {
+		return err
+	}
+	// Set the min valid time for the ingested wal samples
+	// to be no lower than the maxt of the last block.
+	if err := head.Init(maxBlockTime); err != nil {
+		return errors.Wrap(err, "read WAL")
+	}
+	mint := head.MinTime()
+	maxt := head.MaxTime()
+	rh := &rangeHead{
+		head: head,
+		mint: mint,
+		maxt: maxt,
+	}
+	compactor, err := NewLeveledCompactor(context.Background(), nil, db.logger, DefaultOptions.BlockRanges, chunkenc.NewPool())
+	if err != nil {
+		return errors.Wrap(err, "create leveled compactor")
+	}
+	// Add +1 millisecond to block maxt because block intervals are half-open: [b.MinTime, b.MaxTime).
+	// Because of this block intervals are always +1 than the total samples it includes.
+	_, err = compactor.Write(dir, rh, mint, maxt+1, nil)
+	return errors.Wrap(err, "writing WAL")
+}
+
 // Querier loads the wal and returns a new querier over the data partition for the given time range.
 // Current implementation doesn't support multiple Queriers.
 func (db *DBReadOnly) Querier(mint, maxt int64) (Querier, error) {
@@ -294,12 +342,12 @@ func (db *DBReadOnly) Querier(mint, maxt int64) (Querier, error) {
 		return nil, ErrClosed
 	default:
 	}
-	blocksReaders, err := db.Blocks()
+	blockReaders, err := db.Blocks()
 	if err != nil {
 		return nil, err
 	}
-	blocks := make([]*Block, len(blocksReaders))
-	for i, b := range blocksReaders {
+	blocks := make([]*Block, len(blockReaders))
+	for i, b := range blockReaders {
 		b, ok := b.(*Block)
 		if !ok {
 			return nil, errors.New("unable to convert a read only block to a normal block")
@@ -316,7 +364,7 @@ func (db *DBReadOnly) Querier(mint, maxt int64) (Querier, error) {
 		maxBlockTime = blocks[len(blocks)-1].Meta().MaxTime
 	}
 
-	// Also add the WAL if the current blocks don't cover the requestes time range.
+	// Also add the WAL if the current blocks don't cover the requests time range.
 	if maxBlockTime <= maxt {
 		w, err := wal.Open(db.logger, nil, filepath.Join(db.dir, "wal"))
 		if err != nil {
@@ -380,7 +428,7 @@ func (db *DBReadOnly) Blocks() ([]BlockReader, error) {
 	}
 
 	if len(loadable) == 0 {
-		return nil, errors.New("no blocks found")
+		return nil, nil
 	}
 
 	sort.Slice(loadable, func(i, j int) bool {
@@ -817,7 +865,7 @@ func openBlocks(l log.Logger, dir string, loaded []*Block, chunkPool chunkenc.Po
 	for _, bDir := range bDirs {
 		meta, _, err := readMetaFile(bDir)
 		if err != nil {
-			level.Error(l).Log("msg", "not a block dir", "dir", bDir)
+			level.Error(l).Log("msg", "failed to read meta.json for a block", "dir", bDir, "err", err)
 			continue
 		}
 
@@ -890,7 +938,11 @@ func (db *DB) beyondSizeRetention(blocks []*Block) (deleteable map[ulid.ULID]*Bl
 	}
 
 	deleteable = make(map[ulid.ULID]*Block)
-	blocksSize := int64(0)
+
+	walSize, _ := db.Head().wal.Size()
+	// Initializing size counter with WAL size,
+	// as that is part of the retention strategy.
+	blocksSize := walSize
 	for i, block := range blocks {
 		blocksSize += block.Size()
 		if blocksSize > db.opts.MaxBytes {
@@ -1200,7 +1252,7 @@ func rangeForTimestamp(t int64, width int64) (maxt int64) {
 }
 
 // Delete implements deletion of metrics. It only has atomicity guarantees on a per-block basis.
-func (db *DB) Delete(mint, maxt int64, ms ...labels.Matcher) error {
+func (db *DB) Delete(mint, maxt int64, ms ...*labels.Matcher) error {
 	db.cmtx.Lock()
 	defer db.cmtx.Unlock()
 

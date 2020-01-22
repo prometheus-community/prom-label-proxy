@@ -29,12 +29,13 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
-	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/tombstones"
 )
 
 // ExponentialBlockRanges returns the time ranges based on the stepSize.
@@ -568,7 +569,7 @@ func (c *LeveledCompactor) write(dest string, meta *BlockMeta, blocks ...BlockRe
 		}
 	}
 
-	indexw, err := index.NewWriter(filepath.Join(tmp, indexFilename))
+	indexw, err := index.NewWriter(c.ctx, filepath.Join(tmp, indexFilename))
 	if err != nil {
 		return errors.Wrap(err, "open index writer")
 	}
@@ -607,7 +608,7 @@ func (c *LeveledCompactor) write(dest string, meta *BlockMeta, blocks ...BlockRe
 	}
 
 	// Create an empty tombstones file.
-	if _, err := writeTombstoneFile(c.logger, tmp, newMemTombstones()); err != nil {
+	if _, err := tombstones.WriteFile(c.logger, tmp, tombstones.NewMemTombstones()); err != nil {
 		return errors.Wrap(err, "write new tombstones file")
 	}
 
@@ -649,7 +650,7 @@ func (c *LeveledCompactor) populateBlock(blocks []BlockReader, meta *BlockMeta, 
 
 	var (
 		set         ChunkSeriesSet
-		allSymbols  = make(map[string]struct{}, 1<<16)
+		symbols     index.StringIter
 		closers     = []io.Closer{}
 		overlapping bool
 	)
@@ -699,44 +700,39 @@ func (c *LeveledCompactor) populateBlock(blocks []BlockReader, meta *BlockMeta, 
 		}
 		closers = append(closers, tombsr)
 
-		symbols, err := indexr.Symbols()
-		if err != nil {
-			return errors.Wrap(err, "read symbols")
-		}
-		for s := range symbols {
-			allSymbols[s] = struct{}{}
-		}
-
-		all, err := indexr.Postings(index.AllPostingsKey())
+		k, v := index.AllPostingsKey()
+		all, err := indexr.Postings(k, v)
 		if err != nil {
 			return err
 		}
 		all = indexr.SortedPostings(all)
 
 		s := newCompactionSeriesSet(indexr, chunkr, tombsr, all)
+		syms := indexr.Symbols()
 
 		if i == 0 {
 			set = s
+			symbols = syms
 			continue
 		}
 		set, err = newCompactionMerger(set, s)
 		if err != nil {
 			return err
 		}
+		symbols = newMergedStringIter(symbols, syms)
 	}
 
-	// We fully rebuild the postings list index from merged series.
-	var (
-		postings = index.NewMemPostings()
-		values   = map[string]stringset{}
-		i        = uint64(0)
-	)
-
-	if err := indexw.AddSymbols(allSymbols); err != nil {
-		return errors.Wrap(err, "add symbols")
+	for symbols.Next() {
+		if err := indexw.AddSymbol(symbols.At()); err != nil {
+			return errors.Wrap(err, "add symbol")
+		}
+	}
+	if symbols.Err() != nil {
+		return errors.Wrap(symbols.Err(), "next symbol")
 	}
 
 	delIter := &deletedIterator{}
+	ref := uint64(0)
 	for set.Next() {
 		select {
 		case <-c.ctx.Done():
@@ -768,7 +764,7 @@ func (c *LeveledCompactor) populateBlock(blocks []BlockReader, meta *BlockMeta, 
 			//
 			// TODO think how to avoid the typecasting to verify when it is head block.
 			if _, isHeadChunk := chk.Chunk.(*safeChunk); isHeadChunk && chk.MaxTime >= meta.MaxTime {
-				dranges = append(dranges, Interval{Mint: meta.MaxTime, Maxt: math.MaxInt64})
+				dranges = append(dranges, tombstones.Interval{Mint: meta.MaxTime, Maxt: math.MaxInt64})
 
 			} else
 			// Sanity check for disk blocks.
@@ -820,7 +816,7 @@ func (c *LeveledCompactor) populateBlock(blocks []BlockReader, meta *BlockMeta, 
 			return errors.Wrap(err, "write chunks")
 		}
 
-		if err := indexw.AddSeries(i, lset, mergedChks...); err != nil {
+		if err := indexw.AddSeries(ref, lset, mergedChks...); err != nil {
 			return errors.Wrap(err, "add series")
 		}
 
@@ -836,39 +832,12 @@ func (c *LeveledCompactor) populateBlock(blocks []BlockReader, meta *BlockMeta, 
 			}
 		}
 
-		for _, l := range lset {
-			valset, ok := values[l.Name]
-			if !ok {
-				valset = stringset{}
-				values[l.Name] = valset
-			}
-			valset.set(l.Value)
-		}
-		postings.Add(i, lset)
-
-		i++
+		ref++
 	}
 	if set.Err() != nil {
 		return errors.Wrap(set.Err(), "iterate compaction set")
 	}
 
-	s := make([]string, 0, 256)
-	for n, v := range values {
-		s = s[:0]
-
-		for x := range v {
-			s = append(s, x)
-		}
-		if err := indexw.WriteLabelIndex([]string{n}, s); err != nil {
-			return errors.Wrap(err, "write label index")
-		}
-	}
-
-	for _, l := range postings.SortedKeys() {
-		if err := indexw.WritePostings(l.Name, l.Value, postings.Get(l.Name, l.Value)); err != nil {
-			return errors.Wrap(err, "write postings")
-		}
-	}
 	return nil
 }
 
@@ -876,15 +845,15 @@ type compactionSeriesSet struct {
 	p          index.Postings
 	index      IndexReader
 	chunks     ChunkReader
-	tombstones TombstoneReader
+	tombstones tombstones.Reader
 
 	l         labels.Labels
 	c         []chunks.Meta
-	intervals Intervals
+	intervals tombstones.Intervals
 	err       error
 }
 
-func newCompactionSeriesSet(i IndexReader, c ChunkReader, t TombstoneReader, p index.Postings) *compactionSeriesSet {
+func newCompactionSeriesSet(i IndexReader, c ChunkReader, t tombstones.Reader, p index.Postings) *compactionSeriesSet {
 	return &compactionSeriesSet{
 		index:      i,
 		chunks:     c,
@@ -914,7 +883,7 @@ func (c *compactionSeriesSet) Next() bool {
 	if len(c.intervals) > 0 {
 		chks := make([]chunks.Meta, 0, len(c.c))
 		for _, chk := range c.c {
-			if !(Interval{chk.MinTime, chk.MaxTime}.isSubrange(c.intervals)) {
+			if !(tombstones.Interval{Mint: chk.MinTime, Maxt: chk.MaxTime}.IsSubrange(c.intervals)) {
 				chks = append(chks, chk)
 			}
 		}
@@ -942,7 +911,7 @@ func (c *compactionSeriesSet) Err() error {
 	return c.p.Err()
 }
 
-func (c *compactionSeriesSet) At() (labels.Labels, []chunks.Meta, Intervals) {
+func (c *compactionSeriesSet) At() (labels.Labels, []chunks.Meta, tombstones.Intervals) {
 	return c.l, c.c, c.intervals
 }
 
@@ -952,7 +921,7 @@ type compactionMerger struct {
 	aok, bok  bool
 	l         labels.Labels
 	c         []chunks.Meta
-	intervals Intervals
+	intervals tombstones.Intervals
 }
 
 func newCompactionMerger(a, b ChunkSeriesSet) (*compactionMerger, error) {
@@ -1008,7 +977,7 @@ func (c *compactionMerger) Next() bool {
 		_, cb, rb := c.b.At()
 
 		for _, r := range rb {
-			ra = ra.add(r)
+			ra = ra.Add(r)
 		}
 
 		c.l = append(c.l[:0], l...)
@@ -1029,6 +998,50 @@ func (c *compactionMerger) Err() error {
 	return c.b.Err()
 }
 
-func (c *compactionMerger) At() (labels.Labels, []chunks.Meta, Intervals) {
+func (c *compactionMerger) At() (labels.Labels, []chunks.Meta, tombstones.Intervals) {
 	return c.l, c.c, c.intervals
+}
+
+func newMergedStringIter(a index.StringIter, b index.StringIter) index.StringIter {
+	return &mergedStringIter{a: a, b: b, aok: a.Next(), bok: b.Next()}
+}
+
+type mergedStringIter struct {
+	a        index.StringIter
+	b        index.StringIter
+	aok, bok bool
+	cur      string
+}
+
+func (m *mergedStringIter) Next() bool {
+	if (!m.aok && !m.bok) || (m.Err() != nil) {
+		return false
+	}
+
+	if !m.aok {
+		m.cur = m.b.At()
+		m.bok = m.b.Next()
+	} else if !m.bok {
+		m.cur = m.a.At()
+		m.aok = m.a.Next()
+	} else if m.b.At() > m.a.At() {
+		m.cur = m.a.At()
+		m.aok = m.a.Next()
+	} else if m.a.At() > m.b.At() {
+		m.cur = m.b.At()
+		m.bok = m.b.Next()
+	} else { // Equal.
+		m.cur = m.b.At()
+		m.aok = m.a.Next()
+		m.bok = m.b.Next()
+	}
+
+	return true
+}
+func (m mergedStringIter) At() string { return m.cur }
+func (m mergedStringIter) Err() error {
+	if m.a.Err() != nil {
+		return m.a.Err()
+	}
+	return m.b.Err()
 }

@@ -1,4 +1,4 @@
-// Copyright 2013 The Prometheus Authors
+// Copyright 2019 The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -13,15 +13,23 @@
 
 package testutil
 
-// ErrorEqual compares Go errors for equality.
-func ErrorEqual(left, right error) bool {
-	if left == right {
-		return true
-	}
+import (
+	"testing"
 
-	if left != nil && right != nil {
-		return left.Error() == right.Error()
-	}
+	"github.com/go-kit/kit/log"
+)
 
-	return false
+type logger struct {
+	t *testing.T
+}
+
+// NewLogger returns a gokit compatible Logger which calls t.Log.
+func NewLogger(t *testing.T) log.Logger {
+	return logger{t: t}
+}
+
+// Log implements log.Logger.
+func (t logger) Log(keyvals ...interface{}) error {
+	t.t.Log(keyvals...)
+	return nil
 }

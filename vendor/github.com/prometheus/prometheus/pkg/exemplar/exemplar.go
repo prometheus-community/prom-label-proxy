@@ -1,4 +1,4 @@
-// Copyright 2017 The Prometheus Authors
+// Copyright 2019 The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -11,9 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build go1.12
+package exemplar
 
-// Package goversion enforces the go version supported by the tsdb module.
-package goversion
+import "github.com/prometheus/prometheus/pkg/labels"
 
-const _SoftwareRequiresGOVERSION1_12 = uint8(0)
+// Exemplar is additional information associated with a time series.
+type Exemplar struct {
+	Labels labels.Labels
+	Value  float64
+	HasTs  bool
+	Ts     int64
+}
