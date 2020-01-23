@@ -64,6 +64,14 @@ func (p *page) full() bool {
 	return pageSize-p.alloc < recordHeaderSize
 }
 
+func (p *page) reset() {
+	for i := range p.buf {
+		p.buf[i] = 0
+	}
+	p.alloc = 0
+	p.flushed = 0
+}
+
 // Segment represents a segment file.
 type Segment struct {
 	*os.File
@@ -169,12 +177,59 @@ type WAL struct {
 	compress    bool
 	snappyBuf   []byte
 
+	metrics *walMetrics
+}
+
+type walMetrics struct {
 	fsyncDuration   prometheus.Summary
 	pageFlushes     prometheus.Counter
 	pageCompletions prometheus.Counter
 	truncateFail    prometheus.Counter
 	truncateTotal   prometheus.Counter
 	currentSegment  prometheus.Gauge
+}
+
+func newWALMetrics(w *WAL, r prometheus.Registerer) *walMetrics {
+	m := &walMetrics{}
+
+	m.fsyncDuration = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "prometheus_tsdb_wal_fsync_duration_seconds",
+		Help:       "Duration of WAL fsync.",
+		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	})
+	m.pageFlushes = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "prometheus_tsdb_wal_page_flushes_total",
+		Help: "Total number of page flushes.",
+	})
+	m.pageCompletions = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "prometheus_tsdb_wal_completed_pages_total",
+		Help: "Total number of completed pages.",
+	})
+	m.truncateFail = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "prometheus_tsdb_wal_truncations_failed_total",
+		Help: "Total number of WAL truncations that failed.",
+	})
+	m.truncateTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "prometheus_tsdb_wal_truncations_total",
+		Help: "Total number of WAL truncations attempted.",
+	})
+	m.currentSegment = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "prometheus_tsdb_wal_segment_current",
+		Help: "WAL segment index that TSDB is currently writing to.",
+	})
+
+	if r != nil {
+		r.MustRegister(
+			m.fsyncDuration,
+			m.pageFlushes,
+			m.pageCompletions,
+			m.truncateFail,
+			m.truncateTotal,
+			m.currentSegment,
+		)
+	}
+
+	return m
 }
 
 // New returns a new WAL over the given directory.
@@ -203,17 +258,18 @@ func NewSize(logger log.Logger, reg prometheus.Registerer, dir string, segmentSi
 		stopc:       make(chan chan struct{}),
 		compress:    compress,
 	}
-	registerMetrics(reg, w)
+	w.metrics = newWALMetrics(w, reg)
 
-	_, j, err := w.Segments()
-	// Index of the Segment we want to open and write to.
-	writeSegmentIndex := 0
+	_, last, err := w.Segments()
 	if err != nil {
 		return nil, errors.Wrap(err, "get segment range")
 	}
+
+	// Index of the Segment we want to open and write to.
+	writeSegmentIndex := 0
 	// If some segments already exist create one with a higher index than the last segment.
-	if j != -1 {
-		writeSegmentIndex = j + 1
+	if last != -1 {
+		writeSegmentIndex = last + 1
 	}
 
 	segment, err := CreateSegment(w.dir, writeSegmentIndex)
@@ -240,39 +296,7 @@ func Open(logger log.Logger, reg prometheus.Registerer, dir string) (*WAL, error
 		logger: logger,
 	}
 
-	registerMetrics(reg, w)
 	return w, nil
-}
-
-func registerMetrics(reg prometheus.Registerer, w *WAL) {
-	w.fsyncDuration = prometheus.NewSummary(prometheus.SummaryOpts{
-		Name:       "prometheus_tsdb_wal_fsync_duration_seconds",
-		Help:       "Duration of WAL fsync.",
-		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
-	})
-	w.pageFlushes = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "prometheus_tsdb_wal_page_flushes_total",
-		Help: "Total number of page flushes.",
-	})
-	w.pageCompletions = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "prometheus_tsdb_wal_completed_pages_total",
-		Help: "Total number of completed pages.",
-	})
-	w.truncateFail = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "prometheus_tsdb_wal_truncations_failed_total",
-		Help: "Total number of WAL truncations that failed.",
-	})
-	w.truncateTotal = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "prometheus_tsdb_wal_truncations_total",
-		Help: "Total number of WAL truncations attempted.",
-	})
-	w.currentSegment = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "prometheus_tsdb_wal_segment_current",
-		Help: "WAL segment index that TSDB is currently writing to.",
-	})
-	if reg != nil {
-		reg.MustRegister(w.fsyncDuration, w.pageFlushes, w.pageCompletions, w.truncateFail, w.truncateTotal, w.currentSegment)
-	}
 }
 
 // CompressionEnabled returns if compression is enabled on this WAL.
@@ -401,7 +425,7 @@ func (w *WAL) Repair(origErr error) error {
 		return errors.Wrap(err, "delete corrupted segment")
 	}
 
-	// Explicitly close the the segment we just repaired to avoid issues with Windows.
+	// Explicitly close the segment we just repaired to avoid issues with Windows.
 	s.Close()
 
 	// We always want to start writing to a new Segment rather than an existing
@@ -467,7 +491,7 @@ func (w *WAL) setSegment(segment *Segment) error {
 		return err
 	}
 	w.donePages = int(stat.Size() / pageSize)
-	w.currentSegment.Set(float64(segment.Index()))
+	w.metrics.currentSegment.Set(float64(segment.Index()))
 	return nil
 }
 
@@ -475,7 +499,7 @@ func (w *WAL) setSegment(segment *Segment) error {
 // the page, the remaining bytes will be set to zero and a new page will be started.
 // If clear is true, this is enforced regardless of how many bytes are left in the page.
 func (w *WAL) flushPage(clear bool) error {
-	w.pageFlushes.Inc()
+	w.metrics.pageFlushes.Inc()
 
 	p := w.page
 	clear = clear || p.full()
@@ -493,13 +517,9 @@ func (w *WAL) flushPage(clear bool) error {
 
 	// We flushed an entire page, prepare a new one.
 	if clear {
-		for i := range p.buf {
-			p.buf[i] = 0
-		}
-		p.alloc = 0
-		p.flushed = 0
+		p.reset()
 		w.donePages++
-		w.pageCompletions.Inc()
+		w.metrics.pageCompletions.Inc()
 	}
 	return nil
 }
@@ -666,10 +686,10 @@ func (w *WAL) Segments() (first, last int, err error) {
 
 // Truncate drops all segments before i.
 func (w *WAL) Truncate(i int) (err error) {
-	w.truncateTotal.Inc()
+	w.metrics.truncateTotal.Inc()
 	defer func() {
 		if err != nil {
-			w.truncateFail.Inc()
+			w.metrics.truncateFail.Inc()
 		}
 	}()
 	refs, err := listSegments(w.dir)
@@ -690,7 +710,7 @@ func (w *WAL) Truncate(i int) (err error) {
 func (w *WAL) fsync(f *Segment) error {
 	start := time.Now()
 	err := f.File.Sync()
-	w.fsyncDuration.Observe(time.Since(start).Seconds())
+	w.metrics.fsyncDuration.Observe(time.Since(start).Seconds())
 	return err
 }
 
@@ -855,4 +875,10 @@ func (r *segmentBufReader) Read(b []byte) (n int, err error) {
 	r.off = 0
 	r.buf.Reset(r.segs[r.cur])
 	return n, nil
+}
+
+// Computing size of the WAL.
+// We do this by adding the sizes of all the files under the WAL dir.
+func (w *WAL) Size() (int64, error) {
+	return fileutil.DirSize(w.Dir())
 }
