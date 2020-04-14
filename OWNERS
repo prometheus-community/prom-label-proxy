@@ -1,3 +1,5 @@
+component: "Monitoring"
+
 reviewers:
 - brancz
 - krasi-georgiev
@@ -7,6 +9,7 @@ reviewers:
 - s-urbaniak
 - simonpasquier
 - squat
+
 approvers:
 - brancz
 - krasi-georgiev
