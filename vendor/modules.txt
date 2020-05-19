@@ -60,7 +60,7 @@ github.com/prometheus/alertmanager/api/v2/models
 github.com/prometheus/alertmanager/pkg/labels
 # github.com/prometheus/common v0.9.1
 github.com/prometheus/common/model
-# github.com/prometheus/prometheus v1.8.2-0.20200106144642-d9613e5c466c => github.com/prometheus/prometheus v0.0.0-20200507164740-ecee9c8abfd1
+# github.com/prometheus/prometheus v1.8.2-0.20200507164740-ecee9c8abfd1
 github.com/prometheus/prometheus/pkg/labels
 github.com/prometheus/prometheus/pkg/value
 github.com/prometheus/prometheus/promql/parser
