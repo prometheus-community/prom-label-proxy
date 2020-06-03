@@ -3,12 +3,12 @@ package injectproxy
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/prometheus/promql/parser"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/promql"
 )
 
 type routes struct {
@@ -105,7 +105,7 @@ func (r *routes) noop(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
-	expr, err := promql.ParseExpr(req.FormValue("query"))
+	expr, err := parser.ParseExpr(req.FormValue("query"))
 	if err != nil {
 		return
 	}

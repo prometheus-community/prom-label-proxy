@@ -38,7 +38,8 @@ const (
 	// MagicTombstone is 4 bytes at the head of a tombstone file.
 	MagicTombstone = 0x0130BA30
 
-	tombstoneFormatV1 = 1
+	tombstoneFormatV1    = 1
+	tombstonesHeaderSize = 5
 )
 
 // The table gets initialized with sync.Once but may still cause a race
@@ -158,7 +159,7 @@ func ReadTombstones(dir string) (Reader, int64, error) {
 		return nil, 0, err
 	}
 
-	if len(b) < 5 {
+	if len(b) < tombstonesHeaderSize {
 		return nil, 0, errors.Wrap(encoding.ErrInvalidSize, "tombstones header")
 	}
 
@@ -199,18 +200,18 @@ func ReadTombstones(dir string) (Reader, int64, error) {
 	return stonesMap, int64(len(b)), nil
 }
 
-type memTombstones struct {
+type MemTombstones struct {
 	intvlGroups map[uint64]Intervals
 	mtx         sync.RWMutex
 }
 
 // NewMemTombstones creates new in memory Tombstone Reader
 // that allows adding new intervals.
-func NewMemTombstones() *memTombstones {
-	return &memTombstones{intvlGroups: make(map[uint64]Intervals)}
+func NewMemTombstones() *MemTombstones {
+	return &MemTombstones{intvlGroups: make(map[uint64]Intervals)}
 }
 
-func NewTestMemTombstones(intervals []Intervals) *memTombstones {
+func NewTestMemTombstones(intervals []Intervals) *MemTombstones {
 	ret := NewMemTombstones()
 	for i, intervalsGroup := range intervals {
 		for _, interval := range intervalsGroup {
@@ -220,13 +221,13 @@ func NewTestMemTombstones(intervals []Intervals) *memTombstones {
 	return ret
 }
 
-func (t *memTombstones) Get(ref uint64) (Intervals, error) {
+func (t *MemTombstones) Get(ref uint64) (Intervals, error) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.intvlGroups[ref], nil
 }
 
-func (t *memTombstones) Iter(f func(uint64, Intervals) error) error {
+func (t *MemTombstones) Iter(f func(uint64, Intervals) error) error {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	for ref, ivs := range t.intvlGroups {
@@ -237,7 +238,7 @@ func (t *memTombstones) Iter(f func(uint64, Intervals) error) error {
 	return nil
 }
 
-func (t *memTombstones) Total() uint64 {
+func (t *MemTombstones) Total() uint64 {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -249,7 +250,7 @@ func (t *memTombstones) Total() uint64 {
 }
 
 // AddInterval to an existing memTombstones.
-func (t *memTombstones) AddInterval(ref uint64, itvs ...Interval) {
+func (t *MemTombstones) AddInterval(ref uint64, itvs ...Interval) {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 	for _, itv := range itvs {
@@ -257,7 +258,7 @@ func (t *memTombstones) AddInterval(ref uint64, itvs ...Interval) {
 	}
 }
 
-func (*memTombstones) Close() error {
+func (*MemTombstones) Close() error {
 	return nil
 }
 
