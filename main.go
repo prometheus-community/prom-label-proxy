@@ -26,7 +26,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/openshift/prom-label-proxy/injectproxy"
+	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 )
 
 func main() {
