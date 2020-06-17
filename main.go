@@ -39,10 +39,17 @@ func main() {
 	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries.")
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
+	if label == "" {
+		log.Fatalf("-label flag cannot be empty")
+	}
 
 	upstreamURL, err := url.Parse(upstream)
 	if err != nil {
 		log.Fatalf("Failed to build parse upstream URL: %v", err)
+	}
+
+	if upstreamURL.Scheme != "http" && upstreamURL.Scheme != "https" {
+		log.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
 	}
 
 	routes := injectproxy.NewRoutes(upstreamURL, label)
@@ -58,7 +65,7 @@ func main() {
 
 	errCh := make(chan error)
 	go func() {
-		log.Printf("Listening insecurely on %v", insecureListenAddress)
+		log.Printf("Listening insecurely on %v", l.Addr())
 		errCh <- srv.Serve(l)
 	}()
 
