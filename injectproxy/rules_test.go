@@ -14,8 +14,10 @@
 package injectproxy
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -23,8 +25,29 @@ import (
 	"testing"
 )
 
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func gzipHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+
+		w.Header().Del("Content-Length")
+		w.Header().Set("Content-Encoding", "gzip")
+		next.ServeHTTP(&gzipResponseWriter{Writer: gz, ResponseWriter: w}, r)
+	})
+}
+
 func validRules() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{
   "status": "success",
   "data": {
@@ -250,6 +273,7 @@ func validRules() http.Handler {
 
 func validAlerts() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{
   "status": "success",
   "data": {
@@ -304,8 +328,9 @@ func validAlerts() http.Handler {
 
 func TestRules(t *testing.T) {
 	for _, tc := range []struct {
-		labelv   string
-		upstream http.Handler
+		labelv     string
+		upstream   http.Handler
+		reqHeaders http.Header
 
 		expCode int
 		expBody []byte
@@ -350,6 +375,37 @@ func TestRules(t *testing.T) {
 			// "namespace" parameter matching no rule.
 			labelv:   "not_present",
 			upstream: validRules(),
+
+			expCode: http.StatusOK,
+			expBody: []byte(`{
+  "status": "success",
+  "data": {
+    "groups": []
+  }
+}`),
+		},
+		{
+			// Gzipped response should be handled when explictly asked by the original client.
+			labelv:   "not_present_gzip_requested",
+			upstream: gzipHandler(validRules()),
+			reqHeaders: map[string][]string{
+				"Accept-Encoding": []string{"gzip"},
+			},
+
+			expCode: http.StatusOK,
+			expBody: []byte(`{
+  "status": "success",
+  "data": {
+    "groups": []
+  }
+}`),
+		},
+		{
+			// When the client doesn't ask explicitly for gzip encoding, the Go
+			// standard library will automatically ask for it and it will
+			// transparently decompress the gzipped response.
+			labelv:   "not_present_gzip_not_requested",
+			upstream: gzipHandler(validRules()),
 
 			expCode: http.StatusOK,
 			expBody: []byte(`{
@@ -614,6 +670,11 @@ func TestRules(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest("GET", u.String(), nil)
+			for k, v := range tc.reqHeaders {
+				for i := range v {
+					req.Header.Add(k, v[i])
+				}
+			}
 			r.ServeHTTP(w, req)
 
 			resp := w.Result()

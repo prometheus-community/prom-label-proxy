@@ -15,6 +15,7 @@ package injectproxy
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -35,14 +36,27 @@ type apiResponse struct {
 
 func getAPIResponse(resp *http.Response) (*apiResponse, error) {
 	defer resp.Body.Close()
+	reader := resp.Body
+
+	if resp.Header.Get("Content-Encoding") == "gzip" && !resp.Uncompressed {
+		var err error
+		reader, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, errors.Wrap(err, "gzip decoding")
+		}
+		defer reader.Close()
+
+		// TODO: recompress the modified response?
+		resp.Header.Del("Content-Encoding")
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	var apir apiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apir); err != nil {
-		return nil, err
+	if err := json.NewDecoder(reader).Decode(&apir); err != nil {
+		return nil, errors.Wrap(err, "JSON decoding")
 	}
 
 	if apir.Status != "success" {
