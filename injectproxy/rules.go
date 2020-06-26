@@ -1,7 +1,21 @@
+// Copyright 2020 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package injectproxy
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -22,14 +36,27 @@ type apiResponse struct {
 
 func getAPIResponse(resp *http.Response) (*apiResponse, error) {
 	defer resp.Body.Close()
+	reader := resp.Body
+
+	if resp.Header.Get("Content-Encoding") == "gzip" && !resp.Uncompressed {
+		var err error
+		reader, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, errors.Wrap(err, "gzip decoding")
+		}
+		defer reader.Close()
+
+		// TODO: recompress the modified response?
+		resp.Header.Del("Content-Encoding")
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	var apir apiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apir); err != nil {
-		return nil, err
+	if err := json.NewDecoder(reader).Decode(&apir); err != nil {
+		return nil, errors.Wrap(err, "JSON decoding")
 	}
 
 	if apir.Status != "success" {

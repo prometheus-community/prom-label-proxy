@@ -1,4 +1,4 @@
-module github.com/openshift/prom-label-proxy
+module github.com/prometheus-community/prom-label-proxy
 
 go 1.13
 
