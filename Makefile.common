@@ -59,7 +59,11 @@ $(warning Some recipes may not work as expected as the current Go runtime is '$(
 		GOVENDOR := $(FIRST_GOPATH)/bin/govendor
 	endif
 endif
-PROMU        := $(FIRST_GOPATH)/bin/promu
+ifeq ($(BUILD_PROMU),false)
+       PROMU        := promu
+else
+       PROMU        := $(FIRST_GOPATH)/bin/promu
+endif
 pkgs          = ./...
 
 ifeq (arm, $(GOHOSTARCH))
@@ -256,6 +260,10 @@ common-docker-manifest:
 	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "$(DOCKER_REPO)/$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 
 .PHONY: promu
+ifeq ($(BUILD_PROMU),false)
+promu:
+	@echo "using installed promu $(shell which promu)"
+else
 promu: $(PROMU)
 
 $(PROMU):
@@ -264,6 +272,7 @@ $(PROMU):
 	mkdir -p $(FIRST_GOPATH)/bin
 	cp $(PROMU_TMP)/promu-$(PROMU_VERSION).$(GO_BUILD_PLATFORM)/promu $(FIRST_GOPATH)/bin/promu
 	rm -r $(PROMU_TMP)
+endif
 
 .PHONY: proto
 proto:
