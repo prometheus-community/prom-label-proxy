@@ -1,5 +1,5 @@
 # FROM directives are overriden by CI system (both Prow CI and OSBS)
-FROM openshift/origin-release:golang-1.13 AS builder
+FROM openshift/origin-release:golang-1.14 AS builder
 
 WORKDIR /go/src/github.com/openshift/prom-label-proxy
 COPY . .
@@ -11,7 +11,8 @@ COPY --from=builder /go/src/github.com/openshift/prom-label-proxy/prom-label-pro
 LABEL io.k8s.display-name="" \
       io.k8s.description="" \
       io.openshift.tags="prometheus" \
-      maintainer="Frederic Branczyk <fbranczy@redhat.com>"
+      summary="" \
+      maintainer="OpenShift Monitoring Team <team-monitoring@redhat.com>"
 
 # doesn't require a root user.
 USER 1001
