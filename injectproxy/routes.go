@@ -123,14 +123,14 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = SetRecursive(expr, []*labels.Matcher{
+	e := NewEnforcer([]*labels.Matcher{
 		{
 			Name:  r.label,
 			Type:  labels.MatchEqual,
 			Value: mustLabelValue(req.Context()),
 		},
-	})
-	if err != nil {
+	}...)
+	if err := e.EnforceNode(expr); err != nil {
 		return
 	}
 
