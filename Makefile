@@ -19,7 +19,7 @@ include Makefile.common
 
 STATICCHECK_IGNORE =
 
-DOCKER_IMAGE_NAME ?= bind-exporter
+DOCKER_IMAGE_NAME ?= prom-label-proxy
 
 .PHONY: run-curl-container
 run-curl-container:
