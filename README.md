@@ -1,3 +1,5 @@
+[![Docker Repository on Quay](https://quay.io/repository/prometheuscommunity/prom-label-proxy/status "Docker Repository on Quay")](https://quay.io/repository/prometheuscommunity/prom-label-proxy)
+
 # prom-label-proxy
 
 The prom-label-proxy can enforce a given label in a given PromQL query, in Prometheus API responses or in Alertmanager API requests.
