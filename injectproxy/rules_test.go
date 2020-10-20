@@ -658,7 +658,10 @@ func TestRules(t *testing.T) {
 		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel)
+			r, err := NewRoutes(m.url, proxyLabel)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			u, err := url.Parse("http://prometheus.example.com/api/v1/rules")
 			if err != nil {
@@ -834,7 +837,10 @@ func TestAlerts(t *testing.T) {
 		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel)
+			r, err := NewRoutes(m.url, proxyLabel)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			u, err := url.Parse("http://prometheus.example.com/api/v1/alerts")
 			if err != nil {

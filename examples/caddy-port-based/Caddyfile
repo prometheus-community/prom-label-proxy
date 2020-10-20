@@ -1,0 +1,13 @@
+:8081 {
+
+rewrite * ?{query}&job=pushgateway
+reverse_proxy 127.0.0.1:8080
+
+}
+
+:8082 {
+
+rewrite * ?{query}&job=prometheus
+reverse_proxy 127.0.0.1:8080
+
+}
