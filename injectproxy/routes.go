@@ -25,15 +25,17 @@ import (
 )
 
 type routes struct {
-	upstream  *url.URL
-	handler   http.Handler
-	label     string
+	upstream *url.URL
+	handler  http.Handler
+	label    string
+
 	mux       *http.ServeMux
 	modifiers map[string]func(*http.Response) error
 }
 
 type options struct {
-	enableLabelAPIs bool
+	enableLabelAPIs       bool
+	nonAPIPathPassthrough bool
 }
 
 type Option interface {
@@ -53,6 +55,13 @@ func WithEnabledLabelsAPI() Option {
 	})
 }
 
+// WithNonAPIPassThrough...
+func WithNonAPIPassThrough() Option {
+	return optionFunc(func(o *options) {
+		o.nonAPIPathPassthrough = true
+	})
+}
+
 func NewRoutes(upstream *url.URL, label string, opts ...Option) *routes {
 	opt := options{}
 	for _, o := range opts {
@@ -67,7 +76,12 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) *routes {
 		label:    label,
 	}
 	mux := http.NewServeMux()
+	if opt.nonAPIPathPassthrough {
+		mux.Handle("/", http.HandlerFunc(r.noop))
+	}
+
 	mux.Handle("/federate", enforceMethods(r.matcher, "GET"))
+
 	mux.Handle("/api/v1/query", enforceMethods(r.query, "GET", "POST"))
 	mux.Handle("/api/v1/query_range", enforceMethods(r.query, "GET", "POST"))
 	mux.Handle("/api/v1/alerts", enforceMethods(r.noop, "GET"))
@@ -84,6 +98,7 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) *routes {
 	mux.Handle("/api/v2/silences", enforceMethods(r.silences, "GET", "POST"))
 	mux.Handle("/api/v2/silences/", enforceMethods(r.silences, "GET", "POST"))
 	mux.Handle("/api/v2/silence/", enforceMethods(r.deleteSilence, "DELETE"))
+	mux.Handle("/api/", http.HandlerFunc(r.notImplemented))
 	r.mux = mux
 	r.modifiers = map[string]func(*http.Response) error{
 		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
@@ -100,6 +115,7 @@ func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	req = req.WithContext(withLabelValue(req.Context(), lvalue))
+
 	// Remove the proxy label from the query parameters.
 	q := req.URL.Query()
 	q.Del(r.label)
@@ -150,6 +166,10 @@ func withLabelValue(ctx context.Context, label string) context.Context {
 
 func (r *routes) noop(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
+}
+
+func (r *routes) notImplemented(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "Not implemented", http.StatusNotImplemented)
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {

@@ -97,7 +97,7 @@ func (m *mockUpstream) Close() {
 
 const proxyLabel = "namespace"
 
-func TestEndpointNotImplemented(t *testing.T) {
+func TestNonAPIEndpointNotFound(t *testing.T) {
 	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Write(okResponse)
 	}))
@@ -111,6 +111,44 @@ func TestEndpointNotImplemented(t *testing.T) {
 	resp := w.Result()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected status code 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestNonAPIEndpointPassthrough(t *testing.T) {
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Write(okResponse)
+	}))
+	defer m.Close()
+	r := NewRoutes(m.url, proxyLabel, WithNonAPIPassThrough())
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "http://prometheus.example.com/graph?namespace=ns1", nil)
+
+	r.ServeHTTP(w, req)
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status code 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAPIEndpointNotImplemented(t *testing.T) {
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Write(okResponse)
+	}))
+	defer m.Close()
+	for _, opts := range [][]Option{nil, {WithNonAPIPassThrough()}} {
+		t.Run(fmt.Sprintf("passthrough=%v", len(opts) == 1), func(t *testing.T) {
+			r := NewRoutes(m.url, proxyLabel, opts...)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "http://prometheus.example.com/api/unknown?namespace=ns1", nil)
+
+			r.ServeHTTP(w, req)
+			resp := w.Result()
+			if resp.StatusCode != http.StatusNotImplemented {
+				t.Fatalf("expected status code 501, got %d", resp.StatusCode)
+			}
+		})
 	}
 }
 
