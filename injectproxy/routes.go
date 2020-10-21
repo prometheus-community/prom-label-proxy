@@ -32,7 +32,33 @@ type routes struct {
 	modifiers map[string]func(*http.Response) error
 }
 
-func NewRoutes(upstream *url.URL, label string) *routes {
+type options struct {
+	enableLabelAPIs bool
+}
+
+type Option interface {
+	apply(*options)
+}
+
+type optionFunc func(*options)
+
+func (f optionFunc) apply(o *options) {
+	f(o)
+}
+
+// WithEnabledLabelsAPI enables proxying to labels API. If false, "501 Not implemented" will be return for those.
+func WithEnabledLabelsAPI() Option {
+	return optionFunc(func(o *options) {
+		o.enableLabelAPIs = true
+	})
+}
+
+func NewRoutes(upstream *url.URL, label string, opts ...Option) *routes {
+	opt := options{}
+	for _, o := range opts {
+		o.apply(&opt)
+	}
+
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
 	r := &routes{
@@ -41,11 +67,20 @@ func NewRoutes(upstream *url.URL, label string) *routes {
 		label:    label,
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/federate", enforceMethods(r.federate, "GET"))
+	mux.Handle("/federate", enforceMethods(r.matcher, "GET"))
 	mux.Handle("/api/v1/query", enforceMethods(r.query, "GET", "POST"))
 	mux.Handle("/api/v1/query_range", enforceMethods(r.query, "GET", "POST"))
 	mux.Handle("/api/v1/alerts", enforceMethods(r.noop, "GET"))
 	mux.Handle("/api/v1/rules", enforceMethods(r.noop, "GET"))
+	mux.Handle("/api/v1/series", enforceMethods(r.matcher, "GET"))
+
+	if opt.enableLabelAPIs {
+		mux.Handle("/api/v1/labels", enforceMethods(r.matcher, "GET"))
+		// Full path is /api/v1/label/<label_name>/values but http mux does not support patterns.
+		// This is fine though as don't care about name for matcher injector.
+		mux.Handle("/api/v1/label/", enforceMethods(r.matcher, "GET"))
+	}
+
 	mux.Handle("/api/v2/silences", enforceMethods(r.silences, "GET", "POST"))
 	mux.Handle("/api/v2/silences/", enforceMethods(r.silences, "GET", "POST"))
 	mux.Handle("/api/v2/silence/", enforceMethods(r.deleteSilence, "DELETE"))
@@ -141,7 +176,9 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
 }
 
-func (r *routes) federate(w http.ResponseWriter, req *http.Request) {
+// matcher ensures the additional match[] is set. Most of non-query Prometheus APIs like: /api/v1/series,
+// /api/v1/label/<name>/values, /api/v1/labels and /federate support multiple matchers. See e.g https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metadata
+func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	matcher := &labels.Matcher{
 		Name:  r.label,
 		Type:  labels.MatchEqual,

@@ -14,7 +14,7 @@ Risks outside the scope of this project:
 
 ## How does this project work?
 
-This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/rules`, `/api/v1/alerts` Prometheus endpoints as well as `/api/v2/silences` Alertmanager endpoint and it ensures that a particular label is enforced in the particular request and response.
+This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values`, `/api/v1/rules`, `/api/v1/alerts` Prometheus endpoints as well as `/api/v2/silences` Alertmanager endpoint and it ensures that a particular label is enforced in the particular request and response.
 
 Once again for clarity: this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or authorize the requesting entity in any way, this has to be built around this project.
 
@@ -40,6 +40,13 @@ http_requests_total{namespace="b"}
 ```
 
 This is enforced for any case, whether a label matcher is specified in the original query or not.
+
+### Metadata endpoints
+
+Similar to query endpoint, for metadata endpoints `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values` the proxy inject the specified label in the `match` selector. 
+
+NOTE: At the moment of creation `/api/v1/labels`, `/api/v1/label/<name>/values` does not support `match[]` so they are disabled by default. Use `-enable-label-apis` flag to enable 
+those (see https://github.com/prometheus/prometheus/issues/6178 for tracking development).
 
 ### Rules endpoint
 

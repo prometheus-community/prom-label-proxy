@@ -114,7 +114,7 @@ func TestEndpointNotImplemented(t *testing.T) {
 	}
 }
 
-func TestFederate(t *testing.T) {
+func TestMatch(t *testing.T) {
 	for _, tc := range []struct {
 		labelv  string
 		matches []string
@@ -137,54 +137,60 @@ func TestFederate(t *testing.T) {
 		{
 			// Many "match" parameters.
 			labelv:   "default",
-			matches:  []string{`name={job="prometheus"}`, `{__name__=~"job:.*"}`},
+			matches:  []string{`{job="prometheus"}`, `{__name__=~"job:.*"}`},
 			expCode:  http.StatusOK,
 			expMatch: `{namespace="default"}`,
 			expBody:  okResponse,
 		},
 	} {
-		t.Run(strings.Join(tc.matches, "&"), func(t *testing.T) {
-			m := newMockUpstream(
-				checkParameterAbsent(
-					proxyLabel,
-					checkQueryParameterHandler("match[]", tc.expMatch),
-				),
-			)
-			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel)
+		for _, u := range []string{
+			"http://prometheus.example.com/federate",
+			"http://prometheus.example.com/api/v1/labels",
+			"http://prometheus.example.com/api/v1/label/some_label/values",
+		} {
+			t.Run(fmt.Sprintf("%s?match[]=%s", u, strings.Join(tc.matches, "&")), func(t *testing.T) {
+				m := newMockUpstream(
+					checkParameterAbsent(
+						proxyLabel,
+						checkQueryParameterHandler("match[]", tc.expMatch),
+					),
+				)
+				defer m.Close()
+				r := NewRoutes(m.url, proxyLabel, WithEnabledLabelsAPI())
 
-			u, err := url.Parse("http://prometheus.example.com/federate")
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			q := u.Query()
-			for _, m := range tc.matches {
-				q.Add("match[]", m)
-			}
-			q.Set(proxyLabel, tc.labelv)
-			u.RawQuery = q.Encode()
+				u, err := url.Parse(u)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				q := u.Query()
+				for _, m := range tc.matches {
+					q.Add("match[]", m)
+				}
+				q.Set(proxyLabel, tc.labelv)
+				u.RawQuery = q.Encode()
 
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", u.String(), nil)
-			r.ServeHTTP(w, req)
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest("GET", u.String(), nil)
+				r.ServeHTTP(w, req)
 
-			resp := w.Result()
-			body, _ := ioutil.ReadAll(resp.Body)
-			defer resp.Body.Close()
+				resp := w.Result()
+				body, _ := ioutil.ReadAll(resp.Body)
+				defer resp.Body.Close()
 
-			if resp.StatusCode != tc.expCode {
-				t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
-				t.Logf("%s", string(body))
-				t.FailNow()
-			}
-			if resp.StatusCode != http.StatusOK {
-				return
-			}
+				if resp.StatusCode != tc.expCode {
+					t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+					t.Logf("%s", string(body))
+					t.FailNow()
+				}
+				if resp.StatusCode != http.StatusOK {
+					return
+				}
 
-			if string(body) != string(tc.expBody) {
-				t.Fatalf("expected body %q, got %q", string(tc.expBody), string(body))
-			}
-		})
+				if string(body) != string(tc.expBody) {
+					t.Fatalf("expected body %q, got %q", string(tc.expBody), string(body))
+				}
+			})
+		}
 	}
 }
 
