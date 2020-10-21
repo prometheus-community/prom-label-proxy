@@ -38,7 +38,7 @@ go get github.com/prometheus-community/prom-label-proxy
 
 ## How does this project work?
 
-This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/rules`, `/api/v1/alerts` Prometheus endpoints as well as `/api/v2/silences` Alertmanager endpoint and it ensures that a particular label is enforced in the particular request and response.
+This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values`, `/api/v1/rules`, `/api/v1/alerts` Prometheus endpoints as well as `/api/v2/silences` Alertmanager endpoint and it ensures that a particular label is enforced in the particular request and response.
 
 Particularly, you can run `prom-label-proxy` with label `tenant` and point to example, demo Prometheus server e.g:
 
@@ -83,6 +83,13 @@ http_requests_total{namespace="b"}
 ```
 
 This is enforced for any case, whether a label matcher is specified in the original query or not.
+
+### Metadata endpoints
+
+Similar to query endpoint, for metadata endpoints `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values` the proxy injects the specified label all the provided `match[]` selectors. 
+
+NOTE: At the moment of creation `/api/v1/labels`, `/api/v1/label/<name>/values` does not support `match[]` so they are disabled by default. Use `-enable-label-apis` flag to enable 
+those (see https://github.com/prometheus/prometheus/issues/6178 for tracking development).
 
 ### Rules endpoint
 

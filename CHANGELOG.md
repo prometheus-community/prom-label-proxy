@@ -1,3 +1,7 @@
+## Unreleased
+
+* [FEATURE] Add support  /api/v1/series, /api/v1/labels and /api/v1/label/<name>/values (Prometheus/Thanos).
+
 ## 0.2.0 / 2020-10-08
 
 * [FEATURE] Add support for /api/v1/rules (Prometheus/Thanos). #16
