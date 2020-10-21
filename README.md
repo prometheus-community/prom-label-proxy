@@ -2,9 +2,10 @@
 
 # prom-label-proxy
 
-The prom-label-proxy can enforce a given label in a given PromQL query, in Prometheus API responses or in Alertmanager API requests. This allows read multi-tenancy for projects like Prometheus, Alertmanager or Thanos.
+The prom-label-proxy can enforce a given label in a given PromQL query, in Prometheus API responses or in Alertmanager API requests. As an example (but not only),
+this allows read multi-tenancy for projects like Prometheus, Alertmanager or Thanos.
 
-This proxy does not perform authentication or authorization, this has to happen before the request reaches this proxy, allowing you to use any auth* system you want. The [kube-rbac-proxy](https://github.com/brancz/kube-rbac-proxy) is an example for such an additional building block.
+This proxy does not perform authentication or authorization, this has to happen before the request reaches this proxy, allowing you to use any authN/authZ system you want. The [kube-rbac-proxy](https://github.com/brancz/kube-rbac-proxy) is an example for such an additional building block.
 
 ### Risks outside the scope of this project:
 
@@ -13,7 +14,7 @@ It's not a goal for this project to solve write tenant isolation for multi-tenan
 * If a tenant controls its scrape target configuration the tenant can set arbitrary labels via its relabelling configuration, thereby being able to pollute other tenant's metrics.
 * If the ingestion configuration [honor_labels](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config) is set for a tenant's target, that target can pollute other tenant's metrics as Prometheus respects any labels exposed by the target.
 
-See [Thanos soft/hard tenancy](https://thanos.io/tip/proposals/201812_thanos-remote-receive.md/#architecture) or [Cortex](https://cortexmetrics.io/) as example solution to that.
+See [Prometheus Operator](https://github.com/prometheus-operator/prometheus-operator) label enforcement, [Thanos soft/hard tenancy](https://thanos.io/tip/proposals/201812_thanos-remote-receive.md/#architecture) or [Cortex](https://cortexmetrics.io/) as example solution to that.
 
 ## Installing `prom-label-proxy`:
 
@@ -39,12 +40,12 @@ go get github.com/prometheus-community/prom-label-proxy
 
 This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/rules`, `/api/v1/alerts` Prometheus endpoints as well as `/api/v2/silences` Alertmanager endpoint and it ensures that a particular label is enforced in the particular request and response.
 
-Particularly, you can run `prom-label-proxy` with label `tenant` and point to example Prometheus server e.g:
+Particularly, you can run `prom-label-proxy` with label `tenant` and point to example, demo Prometheus server e.g:
 
 ```
 prom-label-proxy \
    -label tenant \
-   -upstream http://demo.robustperception.io:9090 \
+   -upstream http://demo.do.prometheus.io:9090 \
    -insecure-listen-address 127.0.0.1:8080
 ```
 
