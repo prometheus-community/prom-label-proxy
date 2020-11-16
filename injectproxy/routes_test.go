@@ -15,6 +15,7 @@ package injectproxy
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 var okResponse = []byte(`ok`)
@@ -41,8 +43,8 @@ func checkParameterAbsent(param string, next http.Handler) http.Handler {
 	})
 }
 
-// checkQueryParameterHandler verifies that the request contains the given parameter key/values.
-func checkQueryParameterHandler(key string, values ...string) http.Handler {
+// checkQueryHandler verifies that the request contains the given parameter key/values.
+func checkQueryHandler(body, key string, values ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		kvs, err := url.ParseQuery(req.URL.RawQuery)
 		if err != nil {
@@ -62,7 +64,17 @@ func checkQueryParameterHandler(key string, values ...string) http.Handler {
 				return
 			}
 		}
+		buf, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			http.Error(w, "failed to read body", http.StatusInternalServerError)
+			return
+		}
+		if string(buf) != body {
+			http.Error(w, fmt.Sprintf("expected body %q, got %q", body, string(buf)), http.StatusInternalServerError)
+			return
+		}
 		w.Write(okResponse)
+		<-time.After(100)
 	})
 }
 
@@ -168,7 +180,7 @@ func TestMatch(t *testing.T) {
 				m := newMockUpstream(
 					checkParameterAbsent(
 						proxyLabel,
-						checkQueryParameterHandler(matchersParam, tc.expMatch...),
+						checkQueryHandler("", matchersParam, tc.expMatch...),
 					),
 				)
 				defer m.Close()
@@ -212,75 +224,150 @@ func TestMatch(t *testing.T) {
 
 func TestQuery(t *testing.T) {
 	for _, tc := range []struct {
-		labelv    string
-		promQuery string
+		name          string
+		labelv        string
+		promQuery     string
+		promQueryBody string
+		method        string
 
-		expCode      int
-		expPromQuery string
-		expBody      []byte
+		expCode          int
+		expPromQuery     string
+		expPromQueryBody string
+		expResponse      []byte
 	}{
 		{
-			// No "namespace" parameter returns an error.
+			name:    `No "namespace" parameter returns an error`,
 			expCode: http.StatusBadRequest,
 		},
 		{
-			// No "query" parameter returns 200 with empty body.
+			name:    `No "namespace" parameter returns an error for POSTs`,
+			expCode: http.StatusBadRequest,
+			method:  http.MethodPost,
+		},
+		{
+			name:    `No "query" parameter returns 200 with empty body`,
 			labelv:  "default",
 			expCode: http.StatusOK,
 		},
 		{
-			// Query without a vector selector.
+			name:    `No "query" parameter returns 200 with empty body for POSTs`,
+			labelv:  "default",
+			expCode: http.StatusOK,
+		},
+		{
+			name:         `Query without a vector selector`,
 			labelv:       "default",
 			promQuery:    "up",
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace="default"}`,
-			expBody:      okResponse,
+			expResponse:  okResponse,
 		},
 		{
-			// Query with a vector selector.
+			name:             `Query without a vector selector in POST body`,
+			labelv:           "default",
+			promQueryBody:    "up",
+			method:           http.MethodPost,
+			expCode:          http.StatusOK,
+			expPromQueryBody: `up{namespace="default"}`,
+			expResponse:      okResponse,
+		},
+		{
+			name:             `Query without a vector selector in POST body or query`,
+			labelv:           "default",
+			promQuery:        "up",
+			promQueryBody:    "up",
+			method:           http.MethodPost,
+			expCode:          http.StatusOK,
+			expPromQuery:     `up{namespace="default"}`,
+			expPromQueryBody: `up{namespace="default"}`,
+			expResponse:      okResponse,
+		},
+		{
+			name:             `Query without a vector selector in POST body or query different`,
+			labelv:           "default",
+			promQuery:        "up",
+			promQueryBody:    "foo",
+			method:           http.MethodPost,
+			expCode:          http.StatusOK,
+			expPromQuery:     `up{namespace="default"}`,
+			expPromQueryBody: `foo{namespace="default"}`,
+			expResponse:      okResponse,
+		},
+		{
+			name:         `Query with a vector selector`,
 			labelv:       "default",
 			promQuery:    `up{namespace="other"}`,
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace="default"}`,
-			expBody:      okResponse,
+			expResponse:  okResponse,
 		},
 		{
-			// Query with a vector selector.
-			labelv:       "default",
-			promQuery:    `up{namespace="default",}`,
-			expCode:      http.StatusOK,
-			expPromQuery: `up{namespace="default"}`,
-			expBody:      okResponse,
+			name:             `Query with a vector selector in POST body`,
+			labelv:           "default",
+			promQueryBody:    `up{namespace="other"}`,
+			method:           http.MethodPost,
+			expCode:          http.StatusOK,
+			expPromQueryBody: `up{namespace="default"}`,
+			expResponse:      okResponse,
 		},
 		{
-			// Query with a scalar.
+			name:         `Query with a scalar`,
 			labelv:       "default",
 			promQuery:    "1",
 			expCode:      http.StatusOK,
 			expPromQuery: `1`,
-			expBody:      okResponse,
+			expResponse:  okResponse,
 		},
 		{
-			// Query with a function.
+			name:             `Query with a scalar in POST body`,
+			labelv:           "default",
+			promQueryBody:    "1",
+			method:           http.MethodPost,
+			expCode:          http.StatusOK,
+			expPromQueryBody: `1`,
+			expResponse:      okResponse,
+		},
+		{
+			name:         `Query with a function`,
 			labelv:       "default",
 			promQuery:    "time()",
 			expCode:      http.StatusOK,
 			expPromQuery: `time()`,
-			expBody:      okResponse,
+			expResponse:  okResponse,
 		},
 		{
-			// An invalid expression returns 200 with empty body.
+			name:             `Query with a function in POST body`,
+			labelv:           "default",
+			promQueryBody:    "time()",
+			method:           http.MethodPost,
+			expCode:          http.StatusOK,
+			expPromQueryBody: `time()`,
+			expResponse:      okResponse,
+		},
+		{
+			name:      `An invalid expression returns 200 with empty body`,
 			labelv:    "default",
 			promQuery: "up +",
 			expCode:   http.StatusOK,
 		},
+		{
+			name:          `An invalid expression in POST body returns 200 with empty body`,
+			labelv:        "default",
+			promQueryBody: "up +",
+			method:        http.MethodPost,
+			expCode:       http.StatusOK,
+		},
 	} {
 		for _, endpoint := range []string{"query", "query_range"} {
-			t.Run(endpoint+"/"+tc.promQuery, func(t *testing.T) {
+			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
+				var expBody string
+				if tc.expPromQueryBody != "" {
+					expBody = url.Values(map[string][]string{"query": {tc.expPromQueryBody}}).Encode()
+				}
 				m := newMockUpstream(
 					checkParameterAbsent(
 						proxyLabel,
-						checkQueryParameterHandler(queryParam, tc.expPromQuery),
+						checkQueryHandler(expBody, queryParam, tc.expPromQuery),
 					),
 				)
 				defer m.Close()
@@ -295,12 +382,20 @@ func TestQuery(t *testing.T) {
 				q.Set(proxyLabel, tc.labelv)
 				u.RawQuery = q.Encode()
 
+				var b io.Reader = nil
+				if tc.promQueryBody != "" {
+					b = strings.NewReader(url.Values(map[string][]string{"query": {tc.promQueryBody}}).Encode())
+				}
 				w := httptest.NewRecorder()
-				req := httptest.NewRequest("GET", u.String(), nil)
+				req := httptest.NewRequest(tc.method, u.String(), b)
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 				r.ServeHTTP(w, req)
 
 				resp := w.Result()
-				body, _ := ioutil.ReadAll(resp.Body)
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
 				defer resp.Body.Close()
 
 				if resp.StatusCode != tc.expCode {
@@ -311,8 +406,8 @@ func TestQuery(t *testing.T) {
 				if resp.StatusCode != http.StatusOK {
 					return
 				}
-				if string(body) != string(tc.expBody) {
-					t.Fatalf("expected body %q, got %q", string(tc.expBody), string(body))
+				if string(body) != string(tc.expResponse) {
+					t.Fatalf("expected response body %q, got %q", string(tc.expResponse), string(body))
 				}
 			})
 		}

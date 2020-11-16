@@ -16,6 +16,7 @@ package injectproxy
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -159,27 +160,64 @@ func (r *routes) noop(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
-	expr, err := parser.ParseExpr(req.FormValue(queryParam))
+	// The `query` can come in the URL query string and/or the POST body.
+	// For this reason, we need to try to enforcing in both places.
+	// Note: a POST request may include some values in the URL query string
+	// and others in the body. If both locations include a `query`, then
+	// enforce in both places.
+	q, f1, err := enforceValues(req.Context(), r.label, req.URL.Query())
 	if err != nil {
 		return
+	}
+	req.URL.RawQuery = q
+
+	var f2 bool
+	// Enforce the query in the POST body if needed.
+	if req.Method == http.MethodPost {
+		if err := req.ParseForm(); err != nil {
+			return
+		}
+		q, f2, err = enforceValues(req.Context(), r.label, req.PostForm)
+		if err != nil {
+			return
+		}
+		req.Body = ioutil.NopCloser(strings.NewReader(q))
+		req.ContentLength = int64(len(q))
+	}
+
+	// If no query was found, return early.
+	if !f1 && !f2 {
+		return
+	}
+
+	r.handler.ServeHTTP(w, req)
+}
+
+func enforceValues(ctx context.Context, name string, v url.Values) (string, bool, error) {
+	// If no values were given or no query is present,
+	// e.g. because the query came in the POST body
+	// but the URL query string was passed, then finish early.
+	if v.Get("query") == "" {
+		return v.Encode(), false, nil
+	}
+	expr, err := parser.ParseExpr(v.Get("query"))
+	if err != nil {
+		return "", true, err
 	}
 
 	e := NewEnforcer([]*labels.Matcher{
 		{
-			Name:  r.label,
+			Name:  name,
 			Type:  labels.MatchEqual,
-			Value: mustLabelValue(req.Context()),
+			Value: mustLabelValue(ctx),
 		},
 	}...)
 	if err := e.EnforceNode(expr); err != nil {
-		return
+		return "", true, err
 	}
 
-	q := req.URL.Query()
-	q.Set(queryParam, expr.String())
-	req.URL.RawQuery = q.Encode()
-
-	r.handler.ServeHTTP(w, req)
+	v.Set(queryParam, expr.String())
+	return v.Encode(), true, nil
 }
 
 // matcher ensures all the provided match[] if any has label injected. If none was provided, single matcher is injected.
