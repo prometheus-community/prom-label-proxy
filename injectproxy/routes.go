@@ -40,7 +40,7 @@ func NewRoutes(upstream *url.URL, label string, header string) *routes {
 		upstream: upstream,
 		handler:  proxy,
 		label:    label,
-		header:  header,
+		header:   header,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/federate", enforceMethods(r.federate, "GET"))
