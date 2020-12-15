@@ -102,7 +102,7 @@ func TestEndpointNotImplemented(t *testing.T) {
 		w.Write(okResponse)
 	}))
 	defer m.Close()
-	r := NewRoutes(m.url, proxyLabel)
+	r := NewRoutes(m.url, proxyLabel, "")
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "http://prometheus.example.com/graph?namespace=ns1", nil)
@@ -151,7 +151,7 @@ func TestFederate(t *testing.T) {
 				),
 			)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel)
+			r := NewRoutes(m.url, proxyLabel, "")
 
 			u, err := url.Parse("http://prometheus.example.com/federate")
 			if err != nil {
@@ -262,7 +262,7 @@ func TestQuery(t *testing.T) {
 					),
 				)
 				defer m.Close()
-				r := NewRoutes(m.url, proxyLabel)
+				r := NewRoutes(m.url, proxyLabel, "")
 
 				u, err := url.Parse("http://prometheus.example.com/api/v1/" + endpoint)
 				if err != nil {
