@@ -28,17 +28,19 @@ type routes struct {
 	upstream  *url.URL
 	handler   http.Handler
 	label     string
+	header    string
 	mux       *http.ServeMux
 	modifiers map[string]func(*http.Response) error
 }
 
-func NewRoutes(upstream *url.URL, label string) *routes {
+func NewRoutes(upstream *url.URL, label string, header string) *routes {
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
 	r := &routes{
 		upstream: upstream,
 		handler:  proxy,
 		label:    label,
+		header:  header,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/federate", enforceMethods(r.federate, "GET"))
@@ -60,6 +62,9 @@ func NewRoutes(upstream *url.URL, label string) *routes {
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	lvalue := req.URL.Query().Get(r.label)
+	if lvalue == "" && r.header != "" {
+		lvalue = req.Header.Get(r.header)
+	}
 	if lvalue == "" {
 		http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
 		return

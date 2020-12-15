@@ -31,12 +31,14 @@ func main() {
 		insecureListenAddress string
 		upstream              string
 		label                 string
+		header                string
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flagset.StringVar(&insecureListenAddress, "insecure-listen-address", "", "The address the prom-label-proxy HTTP server should listen on.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
 	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries.")
+	flagset.StringVar(&header, "header", "", "(Optional) An HTTP header to get the label value from.")
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
 	if label == "" {
@@ -52,7 +54,7 @@ func main() {
 		log.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
 	}
 
-	routes := injectproxy.NewRoutes(upstreamURL, label)
+	routes := injectproxy.NewRoutes(upstreamURL, label, header)
 	mux := http.NewServeMux()
 	mux.Handle("/", routes)
 
