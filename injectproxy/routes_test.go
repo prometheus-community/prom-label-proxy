@@ -272,6 +272,14 @@ func TestQuery(t *testing.T) {
 			expResponse:      okResponse,
 		},
 		{
+			name:             `Tricky: Query without a vector selector in GET body (yes, that's possible)'`,
+			labelv:           "default",
+			promQueryBody:    "up",
+			method:           http.MethodGet,
+			expCode:          http.StatusOK,
+			expPromQueryBody: ``, // We should finish request without forwarding. Form should not parse this value for GET.
+		},
+		{
 			name:             `Query without a vector selector in POST body or query`,
 			labelv:           "default",
 			promQuery:        "up",
