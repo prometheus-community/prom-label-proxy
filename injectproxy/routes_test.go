@@ -469,7 +469,7 @@ func TestHeader(t *testing.T) {
 			m := newMockUpstream(
 				checkParameterAbsent(
 					proxyLabel,
-					checkQueryHandler("query", tc.expPromQuery),
+					checkQueryHandler("", queryParam, tc.expPromQuery),
 				),
 			)
 			defer m.Close()
@@ -480,7 +480,7 @@ func TestHeader(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			q := u.Query()
-			q.Set("query", tc.promQuery)
+			q.Set(queryParam, tc.promQuery)
 			q.Set(proxyLabel, tc.labelv)
 			u.RawQuery = q.Encode()
 
