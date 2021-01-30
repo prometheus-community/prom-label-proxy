@@ -469,7 +469,7 @@ func TestHeader(t *testing.T) {
 			m := newMockUpstream(
 				checkParameterAbsent(
 					proxyLabel,
-					checkQueryParameterHandler("query", tc.expPromQuery),
+					checkQueryHandler("query", tc.expPromQuery),
 				),
 			)
 			defer m.Close()
