@@ -440,7 +440,7 @@ func TestHeader(t *testing.T) {
 		{
 			// Query with only query
 			labelv:       "default",
-			headerv:      "defaulth",
+			headerv:      "",
 			promQuery:    "up",
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace="default"}`,
