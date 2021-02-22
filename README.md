@@ -49,6 +49,16 @@ prom-label-proxy \
    -insecure-listen-address 127.0.0.1:8080
 ```
 
+You may, optionally, get the label value from an HTTP header by using the -header parameter:
+
+```
+prom-label-proxy \
+   -label tenant \
+   -header X-Scope-OrgID \
+   -upstream http://demo.do.prometheus.io:9090 \
+   -insecure-listen-address 127.0.0.1:8080
+```
+
 Accessing demo Prometheus APIs on `127.0.0.1:8080` will now expect `tenant` query parameter to be set in the URL:
 
 ```bash

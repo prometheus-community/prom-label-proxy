@@ -32,11 +32,13 @@ const (
 )
 
 type routes struct {
-	upstream  *url.URL
-	handler   http.Handler
-	label     string
-	mux       *http.ServeMux
-	modifiers map[string]func(*http.Response) error
+	upstream   *url.URL
+	handler    http.Handler
+	label      string
+	labelParam string
+	header     string
+	mux        *http.ServeMux
+	modifiers  map[string]func(*http.Response) error
 }
 
 type options struct {
@@ -60,7 +62,7 @@ func WithEnabledLabelsAPI() Option {
 	})
 }
 
-func NewRoutes(upstream *url.URL, label string, opts ...Option) *routes {
+func NewRoutes(upstream *url.URL, label string, labelParam string, header string, opts ...Option) *routes {
 	opt := options{}
 	for _, o := range opts {
 		o.apply(&opt)
@@ -69,9 +71,11 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) *routes {
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
 	r := &routes{
-		upstream: upstream,
-		handler:  proxy,
-		label:    label,
+		upstream:   upstream,
+		handler:    proxy,
+		label:      label,
+		labelParam: labelParam,
+		header:     header,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/federate", enforceMethods(r.matcher, "GET"))
@@ -101,15 +105,18 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) *routes {
 }
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	lvalue := req.URL.Query().Get(r.label)
+	lvalue := req.URL.Query().Get(r.labelParam)
+	if lvalue == "" && r.header != "" {
+		lvalue = req.Header.Get(r.header)
+	}
 	if lvalue == "" {
-		http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.labelParam), http.StatusBadRequest)
 		return
 	}
 	req = req.WithContext(withLabelValue(req.Context(), lvalue))
 	// Remove the proxy label from the query parameters.
 	q := req.URL.Query()
-	q.Del(r.label)
+	q.Del(r.labelParam)
 	req.URL.RawQuery = q.Encode()
 
 	r.mux.ServeHTTP(w, req)
@@ -151,8 +158,8 @@ func mustLabelValue(ctx context.Context) string {
 	return label
 }
 
-func withLabelValue(ctx context.Context, label string) context.Context {
-	return context.WithValue(ctx, keyLabel, label)
+func withLabelValue(ctx context.Context, lvalue string) context.Context {
+	return context.WithValue(ctx, keyLabel, lvalue)
 }
 
 func (r *routes) noop(w http.ResponseWriter, req *http.Request) {

@@ -108,16 +108,18 @@ func (m *mockUpstream) Close() {
 }
 
 const proxyLabel = "namespace"
+const proxyLabelParam = "ns"
+const proxyHeader = "X-Scope-OrgId"
 
 func TestEndpointNotImplemented(t *testing.T) {
 	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Write(okResponse)
 	}))
 	defer m.Close()
-	r := NewRoutes(m.url, proxyLabel)
+	r := NewRoutes(m.url, proxyLabel, proxyLabelParam, proxyHeader)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "http://prometheus.example.com/graph?namespace=ns1", nil)
+	req := httptest.NewRequest("GET", "http://prometheus.example.com/graph?ns=ns1", nil)
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()
@@ -184,7 +186,7 @@ func TestMatch(t *testing.T) {
 					),
 				)
 				defer m.Close()
-				r := NewRoutes(m.url, proxyLabel, WithEnabledLabelsAPI())
+				r := NewRoutes(m.url, proxyLabel, proxyLabelParam, proxyHeader, WithEnabledLabelsAPI())
 
 				u, err := url.Parse(u)
 				if err != nil {
@@ -194,7 +196,7 @@ func TestMatch(t *testing.T) {
 				for _, m := range tc.matches {
 					q.Add(matchersParam, m)
 				}
-				q.Set(proxyLabel, tc.labelv)
+				q.Set(proxyLabelParam, tc.labelv)
 				u.RawQuery = q.Encode()
 
 				w := httptest.NewRecorder()
@@ -379,7 +381,7 @@ func TestQuery(t *testing.T) {
 					),
 				)
 				defer m.Close()
-				r := NewRoutes(m.url, proxyLabel)
+				r := NewRoutes(m.url, proxyLabel, proxyLabelParam, proxyHeader)
 
 				u, err := url.Parse("http://prometheus.example.com/api/v1/" + endpoint)
 				if err != nil {
@@ -387,7 +389,7 @@ func TestQuery(t *testing.T) {
 				}
 				q := u.Query()
 				q.Set(queryParam, tc.promQuery)
-				q.Set(proxyLabel, tc.labelv)
+				q.Set(proxyLabelParam, tc.labelv)
 				u.RawQuery = q.Encode()
 
 				var b io.Reader = nil
@@ -419,5 +421,92 @@ func TestQuery(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestHeader(t *testing.T) {
+	for _, tc := range []struct {
+		labelv    string
+		headerv   string
+		promQuery string
+
+		expCode      int
+		expPromQuery string
+		expBody      []byte
+	}{
+		{
+			// No "namespace" parameter returns an error.
+			expCode: http.StatusBadRequest,
+		},
+		{
+			// Query with only query
+			labelv:       "default",
+			headerv:      "",
+			promQuery:    "up",
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace="default"}`,
+			expBody:      okResponse,
+		},
+		{
+			// Query with both query and header
+			labelv:       "default",
+			headerv:      "defaulth",
+			promQuery:    "up",
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace="default"}`,
+			expBody:      okResponse,
+		},
+		{
+			// Query with only header
+			labelv:       "",
+			headerv:      "defaulth",
+			promQuery:    "up",
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace="defaulth"}`,
+			expBody:      okResponse,
+		},
+	} {
+		t.Run("query/"+tc.promQuery, func(t *testing.T) {
+			m := newMockUpstream(
+				checkParameterAbsent(
+					proxyLabel,
+					checkQueryHandler("", queryParam, tc.expPromQuery),
+				),
+			)
+			defer m.Close()
+			r := NewRoutes(m.url, proxyLabel, proxyLabelParam, proxyHeader)
+
+			u, err := url.Parse("http://prometheus.example.com/api/v1/query")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			q := u.Query()
+			q.Set(queryParam, tc.promQuery)
+			q.Set(proxyLabelParam, tc.labelv)
+			u.RawQuery = q.Encode()
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", u.String(), nil)
+			if tc.headerv != "" {
+				req.Header.Add(proxyHeader, tc.headerv)
+			}
+			r.ServeHTTP(w, req)
+
+			resp := w.Result()
+			body, _ := ioutil.ReadAll(resp.Body)
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tc.expCode {
+				t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+				t.Logf("%s", string(body))
+				t.FailNow()
+			}
+			if resp.StatusCode != http.StatusOK {
+				return
+			}
+			if string(body) != string(tc.expBody) {
+				t.Fatalf("expected body %q, got %q", string(tc.expBody), string(body))
+			}
+		})
 	}
 }
