@@ -338,7 +338,7 @@ func TestRules(t *testing.T) {
 		{
 			// No "namespace" parameter returns an error.
 			expCode: http.StatusBadRequest,
-			expBody: []byte("Bad request. The \"namespace\" query parameter must be provided.\n"),
+			expBody: []byte("Bad request. The \"ns\" query parameter must be provided.\n"),
 		},
 		{
 			// non 200 status code from upstream is passed as-is.
@@ -658,14 +658,14 @@ func TestRules(t *testing.T) {
 		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel, "")
+			r := NewRoutes(m.url, proxyLabel, proxyLabelParam, "")
 
 			u, err := url.Parse("http://prometheus.example.com/api/v1/rules")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			q := u.Query()
-			q.Set(proxyLabel, tc.labelv)
+			q.Set(proxyLabelParam, tc.labelv)
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
@@ -716,7 +716,7 @@ func TestAlerts(t *testing.T) {
 		{
 			// No "namespace" parameter returns an error.
 			expCode: http.StatusBadRequest,
-			expBody: []byte("Bad request. The \"namespace\" query parameter must be provided.\n"),
+			expBody: []byte("Bad request. The \"ns\" query parameter must be provided.\n"),
 		},
 		{
 			// non 200 status code from upstream is passed as-is.
@@ -834,14 +834,14 @@ func TestAlerts(t *testing.T) {
 		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel, "")
+			r := NewRoutes(m.url, proxyLabel, proxyLabelParam, "")
 
 			u, err := url.Parse("http://prometheus.example.com/api/v1/alerts")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			q := u.Query()
-			q.Set(proxyLabel, tc.labelv)
+			q.Set(proxyLabelParam, tc.labelv)
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()

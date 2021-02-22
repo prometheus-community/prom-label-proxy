@@ -108,6 +108,7 @@ func (m *mockUpstream) Close() {
 }
 
 const proxyLabel = "namespace"
+const proxyLabelParam = "ns"
 const proxyHeader = "X-Scope-OrgId"
 
 func TestEndpointNotImplemented(t *testing.T) {
@@ -115,10 +116,10 @@ func TestEndpointNotImplemented(t *testing.T) {
 		w.Write(okResponse)
 	}))
 	defer m.Close()
-	r := NewRoutes(m.url, proxyLabel, proxyHeader)
+	r := NewRoutes(m.url, proxyLabel, proxyLabelParam, proxyHeader)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "http://prometheus.example.com/graph?namespace=ns1", nil)
+	req := httptest.NewRequest("GET", "http://prometheus.example.com/graph?ns=ns1", nil)
 
 	r.ServeHTTP(w, req)
 	resp := w.Result()
@@ -185,7 +186,7 @@ func TestMatch(t *testing.T) {
 					),
 				)
 				defer m.Close()
-				r := NewRoutes(m.url, proxyLabel, proxyHeader, WithEnabledLabelsAPI())
+				r := NewRoutes(m.url, proxyLabel, proxyLabelParam, proxyHeader, WithEnabledLabelsAPI())
 
 				u, err := url.Parse(u)
 				if err != nil {
@@ -195,7 +196,7 @@ func TestMatch(t *testing.T) {
 				for _, m := range tc.matches {
 					q.Add(matchersParam, m)
 				}
-				q.Set(proxyLabel, tc.labelv)
+				q.Set(proxyLabelParam, tc.labelv)
 				u.RawQuery = q.Encode()
 
 				w := httptest.NewRecorder()
@@ -380,7 +381,7 @@ func TestQuery(t *testing.T) {
 					),
 				)
 				defer m.Close()
-				r := NewRoutes(m.url, proxyLabel, proxyHeader)
+				r := NewRoutes(m.url, proxyLabel, proxyLabelParam, proxyHeader)
 
 				u, err := url.Parse("http://prometheus.example.com/api/v1/" + endpoint)
 				if err != nil {
@@ -388,7 +389,7 @@ func TestQuery(t *testing.T) {
 				}
 				q := u.Query()
 				q.Set(queryParam, tc.promQuery)
-				q.Set(proxyLabel, tc.labelv)
+				q.Set(proxyLabelParam, tc.labelv)
 				u.RawQuery = q.Encode()
 
 				var b io.Reader = nil
@@ -473,7 +474,7 @@ func TestHeader(t *testing.T) {
 				),
 			)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel, proxyHeader)
+			r := NewRoutes(m.url, proxyLabel, proxyLabelParam, proxyHeader)
 
 			u, err := url.Parse("http://prometheus.example.com/api/v1/query")
 			if err != nil {
@@ -481,7 +482,7 @@ func TestHeader(t *testing.T) {
 			}
 			q := u.Query()
 			q.Set(queryParam, tc.promQuery)
-			q.Set(proxyLabel, tc.labelv)
+			q.Set(proxyLabelParam, tc.labelv)
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()

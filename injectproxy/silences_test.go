@@ -73,7 +73,7 @@ func TestListSilences(t *testing.T) {
 		t.Run(strings.Join(tc.filters, "&"), func(t *testing.T) {
 			m := newMockUpstream(checkQueryHandler("", "filter", tc.expFilters...))
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel, "")
+			r := NewRoutes(m.url, proxyLabel, proxyLabelParam, "")
 
 			u, err := url.Parse("http://alertmanager.example.com/api/v2/silences")
 			if err != nil {
@@ -83,7 +83,7 @@ func TestListSilences(t *testing.T) {
 			for _, m := range tc.filters {
 				q.Add("filter", m)
 			}
-			q.Set(proxyLabel, tc.labelv)
+			q.Set(proxyLabelParam, tc.labelv)
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
@@ -297,14 +297,14 @@ func TestDeleteSilence(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel, "")
+			r := NewRoutes(m.url, proxyLabel, proxyLabelParam, "")
 
 			u, err := url.Parse(fmt.Sprintf("http://alertmanager.example.com/api/v2/silence/" + tc.ID))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			q := u.Query()
-			q.Set(proxyLabel, tc.labelv)
+			q.Set(proxyLabelParam, tc.labelv)
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
@@ -489,14 +489,14 @@ func TestUpdateSilence(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel, "")
+			r := NewRoutes(m.url, proxyLabel, proxyLabelParam, "")
 
 			u, err := url.Parse("http://alertmanager.example.com/api/v2/silences/")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			q := u.Query()
-			q.Set(proxyLabel, tc.labelv)
+			q.Set(proxyLabelParam, tc.labelv)
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
