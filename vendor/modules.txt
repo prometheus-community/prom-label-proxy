@@ -6,6 +6,8 @@ github.com/PuerkitoBio/urlesc
 github.com/asaskevich/govalidator
 # github.com/cespare/xxhash v1.1.0
 github.com/cespare/xxhash
+# github.com/efficientgo/tools/core v0.0.0-20210201224146-3d78f4d30648
+github.com/efficientgo/tools/core/pkg/merrors
 # github.com/go-kit/kit v0.10.0
 github.com/go-kit/kit/log
 github.com/go-kit/kit/log/level

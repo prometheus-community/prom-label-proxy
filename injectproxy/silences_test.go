@@ -73,7 +73,10 @@ func TestListSilences(t *testing.T) {
 		t.Run(strings.Join(tc.filters, "&"), func(t *testing.T) {
 			m := newMockUpstream(checkQueryHandler("", "filter", tc.expFilters...))
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel)
+			r, err := NewRoutes(m.url, proxyLabel)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			u, err := url.Parse("http://alertmanager.example.com/api/v2/silences")
 			if err != nil {
@@ -297,7 +300,10 @@ func TestDeleteSilence(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel)
+			r, err := NewRoutes(m.url, proxyLabel)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			u, err := url.Parse(fmt.Sprintf("http://alertmanager.example.com/api/v2/silence/" + tc.ID))
 			if err != nil {
@@ -489,7 +495,10 @@ func TestUpdateSilence(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r := NewRoutes(m.url, proxyLabel)
+			r, err := NewRoutes(m.url, proxyLabel)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			u, err := url.Parse("http://alertmanager.example.com/api/v2/silences/")
 			if err != nil {
