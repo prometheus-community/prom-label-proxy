@@ -41,7 +41,7 @@ func main() {
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
 	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries.")
 	flagset.StringVar(&labelParam, "query-param", "", "The HTTP query parameter from which to get the label.")
-	flagset.StringVar(&header, "header", "", "(Optional) An HTTP header to get the label value from.")
+	flagset.StringVar(&header, "header", "", "The HTTP header to get the label value from.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values."+
 		"NOTE: Enable with care. Selection of matcher is still in development, see https://github.com/thanos-io/thanos/issues/3351 and https://github.com/prometheus/prometheus/issues/6178. If enabled and"+
 		"any labels endpoint does not support selectors, injected matcher will be silently dropped.")
@@ -53,7 +53,7 @@ func main() {
 	}
 
 	if labelParam == "" && header == "" {
-		log.Fatalf("at least one of -query-param and -header must be given")
+		log.Fatalf("at least one of -query-param or -header must be given")
 	}
 
 	upstreamURL, err := url.Parse(upstream)
