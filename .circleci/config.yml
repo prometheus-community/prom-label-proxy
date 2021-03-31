@@ -1,58 +1,52 @@
----
 version: 2.1
-
 orbs:
-  prometheus: prometheus/prometheus@0.8.0
-
+  prometheus: prometheus/prometheus@0.11.0
 executors:
   # Whenever the Go version is updated here, .promu.yml should
   # also be updated.
   golang:
     docker:
-    - image: circleci/golang:1.15
-
+      - image: circleci/golang:1.15
 jobs:
   test:
     executor: golang
-
     steps:
-    - prometheus/setup_environment
-    - run: make
-    - prometheus/store_artifact:
-        file: prom-label-proxy
-    - store_test_results:
-        path: test-results
-
+      - prometheus/setup_environment
+      - run: make
+      - prometheus/store_artifact:
+          file: prom-label-proxy
+      - store_test_results:
+          path: test-results
 workflows:
   version: 2
   prom-label-proxy:
     jobs:
-    - test:
-        filters:
-          tags:
-            only: /.*/
-    - prometheus/build:
-        name: build
-        filters:
-          tags:
-            only: /.*/
-    - prometheus/publish_master:
-        docker_hub_organization: ""  # Don't publish to DockerHub.
-        quay_io_organization: prometheuscommunity
-        requires:
-        - test
-        - build
-        filters:
-          branches:
-            only: master
-    - prometheus/publish_release:
-        docker_hub_organization: ""  # Don't publish to DockerHub.
-        quay_io_organization: prometheuscommunity
-        requires:
-        - test
-        - build
-        filters:
-          tags:
-            only: /^v.*/
-          branches:
-            ignore: /.*/
+      - test:
+          filters:
+            tags:
+              only: /.*/
+      - prometheus/build:
+          name: build
+          filters:
+            tags:
+              only: /.*/
+      - prometheus/publish_master:
+          docker_hub_organization: "" # Don't publish to DockerHub.
+          quay_io_organization: prometheuscommunity
+          requires:
+            - test
+            - build
+          filters:
+            branches:
+              only: master
+      - prometheus/publish_release:
+          docker_hub_organization: "" # Don't publish to DockerHub.
+          quay_io_organization: prometheuscommunity
+          requires:
+            - test
+            - build
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
