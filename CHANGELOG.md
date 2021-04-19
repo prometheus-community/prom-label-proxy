@@ -1,8 +1,8 @@
-## Unreleased
+## 0.3.0 / 2021-04-16
 
-* [FEATURE] Add support /api/v1/series, /api/v1/labels and /api/v1/label/<name>/values (Prometheus/Thanos).
-* [FEATURE] Add -passthrough-paths flag (empty by default), which allows
- exposing chosen resources from upstream without enforcing (e.g Prometheus UI).
+* [FEATURE] Add support for /api/v1/series, /api/v1/labels and /api/v1/label/<name>/values endpoints (Prometheus/Thanos). #49
+* [FEATURE] Add `-passthrough-paths` flag (empty by default), which allows exposing chosen resources from upstream without enforcing (e.g Prometheus UI). #48
+* [ENHANCEMENT] Add support for queries via HTTP POST. #53
 
 ## 0.2.0 / 2020-10-08
 
