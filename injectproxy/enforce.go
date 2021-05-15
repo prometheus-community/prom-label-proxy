@@ -21,7 +21,7 @@ import (
 )
 
 type Enforcer struct {
-	labelMatchers map[string]*labels.Matcher
+	LabelMatchers map[string]*labels.Matcher
 }
 
 func NewEnforcer(ms ...*labels.Matcher) *Enforcer {
@@ -32,7 +32,7 @@ func NewEnforcer(ms ...*labels.Matcher) *Enforcer {
 	}
 
 	return &Enforcer{
-		labelMatchers: entries,
+		LabelMatchers: entries,
 	}
 }
 
@@ -97,12 +97,12 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 	case *parser.MatrixSelector:
 		// inject labelselector
 		if vs, ok := n.VectorSelector.(*parser.VectorSelector); ok {
-			vs.LabelMatchers = ms.enforceMatchers(vs.LabelMatchers)
+			vs.LabelMatchers = ms.EnforceMatchers(vs.LabelMatchers)
 		}
 
 	case *parser.VectorSelector:
 		// inject labelselector
-		n.LabelMatchers = ms.enforceMatchers(n.LabelMatchers)
+		n.LabelMatchers = ms.EnforceMatchers(n.LabelMatchers)
 
 	default:
 		panic(fmt.Errorf("parser.Walk: unhandled node type %T", n))
@@ -111,18 +111,18 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 	return nil
 }
 
-func (ms Enforcer) enforceMatchers(targets []*labels.Matcher) []*labels.Matcher {
+func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) []*labels.Matcher {
 	var res []*labels.Matcher
 
 	for _, target := range targets {
-		if _, ok := ms.labelMatchers[target.Name]; ok {
+		if _, ok := ms.LabelMatchers[target.Name]; ok {
 			continue
 		}
 
 		res = append(res, target)
 	}
 
-	for _, enforcedMatcher := range ms.labelMatchers {
+	for _, enforcedMatcher := range ms.LabelMatchers {
 		res = append(res, enforcedMatcher)
 	}
 
