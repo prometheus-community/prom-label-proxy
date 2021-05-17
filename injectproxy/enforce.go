@@ -21,7 +21,7 @@ import (
 )
 
 type Enforcer struct {
-	LabelMatchers map[string]*labels.Matcher
+	labelMatchers map[string]*labels.Matcher
 }
 
 func NewEnforcer(ms ...*labels.Matcher) *Enforcer {
@@ -32,7 +32,7 @@ func NewEnforcer(ms ...*labels.Matcher) *Enforcer {
 	}
 
 	return &Enforcer{
-		LabelMatchers: entries,
+		labelMatchers: entries,
 	}
 }
 
@@ -111,18 +111,20 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 	return nil
 }
 
+// EnforceMatchers replaces similar matcher present in
+// target label matchers or appends if not present.
 func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) []*labels.Matcher {
 	var res []*labels.Matcher
 
 	for _, target := range targets {
-		if _, ok := ms.LabelMatchers[target.Name]; ok {
+		if _, ok := ms.labelMatchers[target.Name]; ok {
 			continue
 		}
 
 		res = append(res, target)
 	}
 
-	for _, enforcedMatcher := range ms.LabelMatchers {
+	for _, enforcedMatcher := range ms.labelMatchers {
 		res = append(res, enforcedMatcher)
 	}
 
