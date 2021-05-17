@@ -97,12 +97,12 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 	case *parser.MatrixSelector:
 		// inject labelselector
 		if vs, ok := n.VectorSelector.(*parser.VectorSelector); ok {
-			vs.LabelMatchers = ms.enforceMatchers(vs.LabelMatchers)
+			vs.LabelMatchers = ms.EnforceMatchers(vs.LabelMatchers)
 		}
 
 	case *parser.VectorSelector:
 		// inject labelselector
-		n.LabelMatchers = ms.enforceMatchers(n.LabelMatchers)
+		n.LabelMatchers = ms.EnforceMatchers(n.LabelMatchers)
 
 	default:
 		panic(fmt.Errorf("parser.Walk: unhandled node type %T", n))
@@ -111,7 +111,9 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 	return nil
 }
 
-func (ms Enforcer) enforceMatchers(targets []*labels.Matcher) []*labels.Matcher {
+// EnforceMatchers replaces similar matcher present in
+// target label matchers or appends if not present.
+func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) []*labels.Matcher {
 	var res []*labels.Matcher
 
 	for _, target := range targets {
