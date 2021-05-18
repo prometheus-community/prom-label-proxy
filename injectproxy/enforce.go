@@ -14,6 +14,7 @@
 package injectproxy
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -21,10 +22,11 @@ import (
 )
 
 type Enforcer struct {
-	labelMatchers map[string]*labels.Matcher
+	labelMatchers  map[string]*labels.Matcher
+	errorOnReplace bool
 }
 
-func NewEnforcer(ms ...*labels.Matcher) *Enforcer {
+func NewEnforcer(errorOnReplace bool, ms ...*labels.Matcher) *Enforcer {
 	entries := make(map[string]*labels.Matcher)
 
 	for _, matcher := range ms {
@@ -32,9 +34,12 @@ func NewEnforcer(ms ...*labels.Matcher) *Enforcer {
 	}
 
 	return &Enforcer{
-		labelMatchers: entries,
+		labelMatchers:  entries,
+		errorOnReplace: errorOnReplace,
 	}
 }
+
+var ErrIllegalLabelMatcher = errors.New("Label matcher value conflicts with injected value")
 
 // EnforceNode walks the given node recursively
 // and enforces the given label enforcer on it.
@@ -97,12 +102,20 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 	case *parser.MatrixSelector:
 		// inject labelselector
 		if vs, ok := n.VectorSelector.(*parser.VectorSelector); ok {
-			vs.LabelMatchers = ms.EnforceMatchers(vs.LabelMatchers)
+			var err error
+			vs.LabelMatchers, err = ms.EnforceMatchers(vs.LabelMatchers)
+			if err != nil {
+				return err
+			}
 		}
 
 	case *parser.VectorSelector:
 		// inject labelselector
-		n.LabelMatchers = ms.EnforceMatchers(n.LabelMatchers)
+		var err error
+		n.LabelMatchers, err = ms.EnforceMatchers(n.LabelMatchers)
+		if err != nil {
+			return err
+		}
 
 	default:
 		panic(fmt.Errorf("parser.Walk: unhandled node type %T", n))
@@ -111,13 +124,18 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 	return nil
 }
 
-// EnforceMatchers replaces similar matcher present in
-// target label matchers or appends if not present.
-func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) []*labels.Matcher {
+// EnforceMatchers appends the configured label matcher if not present.
+// If the label matcher that is to be injected is present (by labelname) but
+// different (either by match type or value) an error is returned.
+func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.Matcher, error) {
 	var res []*labels.Matcher
 
 	for _, target := range targets {
-		if _, ok := ms.labelMatchers[target.Name]; ok {
+		if matcher, ok := ms.labelMatchers[target.Name]; ok {
+			// matcher.String() returns something like "labelfoo=value"
+			if ms.errorOnReplace && matcher.String() != target.String() {
+				return res, ErrIllegalLabelMatcher
+			}
 			continue
 		}
 
@@ -128,5 +146,5 @@ func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) []*labels.Matcher 
 		res = append(res, enforcedMatcher)
 	}
 
-	return res
+	return res, nil
 }
