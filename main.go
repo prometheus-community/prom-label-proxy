@@ -34,6 +34,7 @@ func main() {
 		label                  string
 		enableLabelAPIs        bool
 		unsafePassthroughPaths string // Comma-delimited string.
+		errorOnReplace         bool
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -48,6 +49,7 @@ func main() {
 	flagset.StringVar(&unsafePassthroughPaths, "unsafe-passthrough-paths", "", "Comma delimited allow list of exact HTTP path segments should be allowed to hit upstream URL without any enforcement."+
 		"This option is checked after Prometheus APIs, you can cannot override enforced API to be not enforced with this option. Use carefully as it can easily cause a data leak if the provided path is an important"+
 		"API like targets or configuration. NOTE: \"all\" matching paths like \"/\" or \"\" and regex are not allowed.")
+	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
@@ -70,6 +72,9 @@ func main() {
 	}
 	if len(unsafePassthroughPaths) > 0 {
 		opts = append(opts, injectproxy.WithPassthroughPaths(strings.Split(unsafePassthroughPaths, ",")))
+	}
+	if errorOnReplace {
+		opts = append(opts, injectproxy.WithErrorOnReplace())
 	}
 	routes, err := injectproxy.NewRoutes(upstreamURL, label, opts...)
 	if err != nil {

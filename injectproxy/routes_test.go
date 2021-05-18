@@ -324,6 +324,7 @@ func TestQuery(t *testing.T) {
 		expPromQuery     string
 		expPromQueryBody string
 		expResponse      []byte
+		errorOnReplace   bool
 	}{
 		{
 			name:    `No "namespace" parameter returns an error`,
@@ -409,6 +410,23 @@ func TestQuery(t *testing.T) {
 			expResponse:      okResponse,
 		},
 		{
+			name:           `Query with a vector selector and errorOnReplace`,
+			labelv:         "default",
+			promQuery:      `up{namespace="other"}`,
+			errorOnReplace: true,
+			expCode:        http.StatusBadRequest,
+			expResponse:    nil,
+		},
+		{
+			name:           `Query with a vector selector in POST body and errorOnReplace`,
+			labelv:         "default",
+			promQueryBody:  `up{namespace="other"}`,
+			method:         http.MethodPost,
+			errorOnReplace: true,
+			expCode:        http.StatusBadRequest,
+			expResponse:    nil,
+		},
+		{
 			name:         `Query with a scalar`,
 			labelv:       "default",
 			promQuery:    "1",
@@ -469,7 +487,11 @@ func TestQuery(t *testing.T) {
 					),
 				)
 				defer m.Close()
-				r, err := NewRoutes(m.url, proxyLabel)
+				var opts []Option
+				if tc.errorOnReplace {
+					opts = append(opts, WithErrorOnReplace())
+				}
+				r, err := NewRoutes(m.url, proxyLabel, opts...)
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
