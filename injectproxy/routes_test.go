@@ -43,7 +43,23 @@ func checkParameterAbsent(param string, next http.Handler) http.Handler {
 	})
 }
 
-// checkQueryHandler verifies that the request contains the given parameter key/values.
+func checkFormParameterAbsent(param string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		err := req.ParseForm()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			return
+		}
+		kvs := req.Form
+		if len(kvs[param]) != 0 {
+			http.Error(w, fmt.Sprintf("unexpected Form parameter %q", param), http.StatusInternalServerError)
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
+}
+
+// checkQueryHandler verifies that the request form contains the given parameter key/values.
 func checkQueryHandler(body, key string, values ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		kvs, err := url.ParseQuery(req.URL.RawQuery)
@@ -72,6 +88,33 @@ func checkQueryHandler(body, key string, values ...string) http.Handler {
 		if string(buf) != body {
 			http.Error(w, fmt.Sprintf("expected body %q, got %q", body, string(buf)), http.StatusInternalServerError)
 			return
+		}
+		w.Write(okResponse)
+		<-time.After(100)
+	})
+}
+
+// checkFormHandler verifies that the request Form contains the given parameter key/values.
+func checkFormHandler(key string, values ...string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		err := req.ParseForm()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			return
+		}
+		kvs := req.Form
+		// Verify that the client provides the parameter only once.
+		if len(kvs[key]) != len(values) {
+			http.Error(w, fmt.Sprintf("expected %d values of parameter %q, got %d", len(values), key, len(kvs[key])), http.StatusInternalServerError)
+			return
+		}
+		sort.Strings(values)
+		sort.Strings(kvs[key])
+		for i := range values {
+			if kvs[key][i] != values[i] {
+				http.Error(w, fmt.Sprintf("expected parameter %q with value %q, got %q", key, values[i], kvs[key][i]), http.StatusInternalServerError)
+				return
+			}
 		}
 		w.Write(okResponse)
 		<-time.After(100)
@@ -289,6 +332,103 @@ func TestMatch(t *testing.T) {
 
 				w := httptest.NewRecorder()
 				req := httptest.NewRequest("GET", u.String(), nil)
+				r.ServeHTTP(w, req)
+
+				resp := w.Result()
+				body, _ := ioutil.ReadAll(resp.Body)
+				defer resp.Body.Close()
+
+				if resp.StatusCode != tc.expCode {
+					t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+					t.Logf("%s", string(body))
+					t.FailNow()
+				}
+				if resp.StatusCode != http.StatusOK {
+					return
+				}
+
+				if string(body) != string(tc.expBody) {
+					t.Fatalf("expected body %q, got %q", string(tc.expBody), string(body))
+				}
+			})
+		}
+	}
+}
+
+func TestMatchWithPost(t *testing.T) {
+	for _, tc := range []struct {
+		labelv  string
+		matches []string
+
+		expCode  int
+		expMatch []string
+		expBody  []byte
+	}{
+		{
+			// No "namespace" parameter returns an error.
+			expCode: http.StatusBadRequest,
+		},
+		{
+			// No "match" parameter.
+			labelv:   "default",
+			expCode:  http.StatusOK,
+			expMatch: []string{`{namespace="default"}`},
+			expBody:  okResponse,
+		},
+		{
+			// Single "match" parameters.
+			labelv:   "default",
+			matches:  []string{`{job="prometheus",__name__=~"job:.*"}`},
+			expCode:  http.StatusOK,
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
+			expBody:  okResponse,
+		},
+		{
+			// Single "match" parameters with label dup name.
+			labelv:   "default",
+			matches:  []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
+			expCode:  http.StatusOK,
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default",namespace="default"}`},
+			expBody:  okResponse,
+		},
+		{
+			// Many "match" parameters.
+			labelv:   "default",
+			matches:  []string{`{job="prometheus"}`, `{__name__=~"job:.*"}`},
+			expCode:  http.StatusOK,
+			expMatch: []string{`{job="prometheus",namespace="default"}`, `{__name__=~"job:.*",namespace="default"}`},
+			expBody:  okResponse,
+		},
+	} {
+		for _, u := range []string{
+			"http://prometheus.example.com/api/v1/labels",
+		} {
+			t.Run(fmt.Sprintf("%s?match[]=%s", u, strings.Join(tc.matches, "&")), func(t *testing.T) {
+				m := newMockUpstream(
+					checkFormParameterAbsent(
+						proxyLabel,
+						checkFormHandler(matchersParam, tc.expMatch...),
+					),
+				)
+				defer m.Close()
+				r, err := NewRoutes(m.url, proxyLabel, WithEnabledLabelsAPI())
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				u, err := url.Parse(u)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				q := url.Values{}
+				for _, m := range tc.matches {
+					q.Add(matchersParam, m)
+				}
+				q.Set(proxyLabel, tc.labelv)
+
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodPost, u.String(), strings.NewReader(q.Encode()))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 				r.ServeHTTP(w, req)
 
 				resp := w.Result()
