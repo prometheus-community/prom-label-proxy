@@ -18,23 +18,37 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 )
 
+type Samples interface {
+	Get(i int) Sample
+	Len() int
+}
+
 type Sample interface {
 	T() int64
 	V() float64
 }
 
+type SampleSlice []Sample
+
+func (s SampleSlice) Get(i int) Sample { return s[i] }
+func (s SampleSlice) Len() int         { return len(s) }
+
 func ChunkFromSamples(s []Sample) chunks.Meta {
+	return ChunkFromSamplesGeneric(SampleSlice(s))
+}
+
+func ChunkFromSamplesGeneric(s Samples) chunks.Meta {
 	mint, maxt := int64(0), int64(0)
 
-	if len(s) > 0 {
-		mint, maxt = s[0].T(), s[len(s)-1].T()
+	if s.Len() > 0 {
+		mint, maxt = s.Get(0).T(), s.Get(s.Len()-1).T()
 	}
 
 	c := chunkenc.NewXORChunk()
 	ca, _ := c.Appender()
 
-	for _, s := range s {
-		ca.Append(s.T(), s.V())
+	for i := 0; i < s.Len(); i++ {
+		ca.Append(s.Get(i).T(), s.Get(i).V())
 	}
 	return chunks.Meta{
 		MinTime: mint,
@@ -50,4 +64,16 @@ func PopulatedChunk(numSamples int, minTime int64) chunks.Meta {
 		samples[i] = sample{minTime + int64(i*1000), 1.0}
 	}
 	return ChunkFromSamples(samples)
+}
+
+// GenerateSamples starting at start and counting up numSamples.
+func GenerateSamples(start int, numSamples int) []Sample {
+	samples := make([]Sample, 0, numSamples)
+	for i := start; i < start+numSamples; i++ {
+		samples = append(samples, sample{
+			t: int64(i),
+			v: float64(i),
+		})
+	}
+	return samples
 }
