@@ -23,14 +23,14 @@ import (
 	"encoding/json"
 	"strconv"
 
-	strfmt "github.com/go-openapi/strfmt"
-
 	"github.com/go-openapi/errors"
+	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
 	"github.com/go-openapi/validate"
 )
 
 // ClusterStatus cluster status
+//
 // swagger:model clusterStatus
 type ClusterStatus struct {
 
@@ -38,7 +38,6 @@ type ClusterStatus struct {
 	Name string `json:"name,omitempty"`
 
 	// peers
-	// Minimum: 0
 	Peers []*PeerStatus `json:"peers"`
 
 	// status
@@ -116,7 +115,7 @@ const (
 
 // prop value enum
 func (m *ClusterStatus) validateStatusEnum(path, location string, value string) error {
-	if err := validate.Enum(path, location, value, clusterStatusTypeStatusPropEnum); err != nil {
+	if err := validate.EnumCase(path, location, value, clusterStatusTypeStatusPropEnum, true); err != nil {
 		return err
 	}
 	return nil
