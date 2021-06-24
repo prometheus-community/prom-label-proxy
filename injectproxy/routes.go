@@ -138,7 +138,7 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 
 	if opt.enableLabelAPIs {
 		errs.Add(
-			mux.Handle("/api/v1/labels", r.enforceLabel(enforceMethods(r.matcher, "GET"))),
+			mux.Handle("/api/v1/labels", r.enforceLabel(enforceMethods(r.matcher, "GET", "POST"))),
 			// Full path is /api/v1/label/<label_name>/values but http mux does not support patterns.
 			// This is fine though as we don't care about name for matcher injector.
 			mux.Handle("/api/v1/label/", r.enforceLabel(enforceMethods(r.matcher, "GET"))),
@@ -186,7 +186,7 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 
 func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		lvalue := req.URL.Query().Get(r.label)
+		lvalue := req.FormValue(r.label)
 		if lvalue == "" {
 			http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
 			return
@@ -195,8 +195,23 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 
 		// Remove the proxy label from the query parameters.
 		q := req.URL.Query()
-		q.Del(r.label)
+		if q.Get(r.label) != "" {
+			q.Del(r.label)
+		}
 		req.URL.RawQuery = q.Encode()
+		// Remove the proxy label from the form.
+		if req.Form.Get(r.label) != "" {
+			req.Form.Del(r.label)
+		}
+		// Remove the proxy label from the PostForm.
+		if req.PostForm.Get(r.label) != "" {
+			req.PostForm.Del(r.label)
+			newBody := req.PostForm.Encode()
+			// We are replacing request body, close previous one (req.FormValue ensures it is read fully and not nil).
+			_ = req.Body.Close()
+			req.Body = ioutil.NopCloser(strings.NewReader(newBody))
+			req.ContentLength = int64(len(newBody))
+		}
 
 		h.ServeHTTP(w, req)
 	})
@@ -321,8 +336,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		Type:  labels.MatchEqual,
 		Value: mustLabelValue(req.Context()),
 	}
-
-	q := req.URL.Query()
+	q := req.Form
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
@@ -338,7 +352,15 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		q[matchersParam] = matchers
 	}
 
-	req.URL.RawQuery = q.Encode()
+	if req.Method == http.MethodPost {
+		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
+		_ = req.Body.Close()
+		newBody := q.Encode()
+		req.Body = ioutil.NopCloser(strings.NewReader(newBody))
+		req.ContentLength = int64(len(newBody))
+	} else {
+		req.URL.RawQuery = q.Encode()
+	}
 	r.handler.ServeHTTP(w, req)
 }
 
