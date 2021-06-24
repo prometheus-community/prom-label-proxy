@@ -34,17 +34,20 @@ const (
 )
 
 type routes struct {
-	upstream *url.URL
-	handler  http.Handler
-	label    string
-
-	mux       *http.ServeMux
-	modifiers map[string]func(*http.Response) error
+	upstream   *url.URL
+	handler    http.Handler
+	label      string
+	queryParam string
+	header     string
+	mux        *http.ServeMux
+	modifiers  map[string]func(*http.Response) error
 }
 
 type options struct {
 	enableLabelAPIs bool
 	pasthroughPaths []string
+	queryParam      string
+	headerName      string
 }
 
 type Option interface {
@@ -61,6 +64,22 @@ func (f optionFunc) apply(o *options) {
 func WithEnabledLabelsAPI() Option {
 	return optionFunc(func(o *options) {
 		o.enableLabelAPIs = true
+	})
+}
+
+// WithValueFromQuery fetches the label value from the query parameters
+func WithValueFromQuery(paramName string) Option {
+	return optionFunc(func(o *options) {
+		o.queryParam = paramName
+		o.headerName = ""
+	})
+}
+
+// WithValueFromHeader fetches the label value from an HTTP header
+func WithValueFromHeader(headerName string) Option {
+	return optionFunc(func(o *options) {
+		o.headerName = headerName
+		o.queryParam = ""
 	})
 }
 
@@ -122,9 +141,20 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 		o.apply(&opt)
 	}
 
+	if opt.queryParam == "" && opt.headerName == "" {
+		// fallback to old behaviour
+		opt.queryParam = label
+	}
+
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
-	r := &routes{upstream: upstream, handler: proxy, label: label}
+	r := &routes{
+		upstream:   upstream,
+		handler:    proxy,
+		label:      label,
+		queryParam: opt.queryParam,
+		header:     opt.headerName,
+	}
 	mux := newStrictMux()
 
 	errs := merrors.New(
@@ -186,10 +216,19 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 
 func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		lvalue := req.URL.Query().Get(r.label)
-		if lvalue == "" {
-			http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
-			return
+		var lvalue string
+		if r.queryParam != "" {
+			lvalue = req.URL.Query().Get(r.queryParam)
+			if lvalue == "" {
+				http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.queryParam), http.StatusBadRequest)
+				return
+			}
+		} else {
+			lvalue = req.Header.Get(r.header)
+			if lvalue == "" {
+				http.Error(w, fmt.Sprintf("Bad request. The Header %q must be provided.", r.header), http.StatusBadRequest)
+				return
+			}
 		}
 		req = req.WithContext(withLabelValue(req.Context(), lvalue))
 
@@ -242,8 +281,8 @@ func mustLabelValue(ctx context.Context) string {
 	return label
 }
 
-func withLabelValue(ctx context.Context, label string) context.Context {
-	return context.WithValue(ctx, keyLabel, label)
+func withLabelValue(ctx context.Context, lvalue string) context.Context {
+	return context.WithValue(ctx, keyLabel, lvalue)
 }
 
 func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {

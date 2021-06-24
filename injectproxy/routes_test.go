@@ -514,3 +514,173 @@ func TestQuery(t *testing.T) {
 		}
 	}
 }
+
+func TestUsingCustomQueryParameter(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		labelv        string
+		promQuery     string
+		promQueryBody string
+		method        string
+
+		expCode          int
+		expPromQuery     string
+		expPromQueryBody string
+		expResponse      []byte
+	}{
+		{
+			name:    `No "foobar" parameter returns an error`,
+			expCode: http.StatusBadRequest,
+		},
+		{
+			name:         `Query without a vector selector`,
+			labelv:       "default",
+			promQuery:    "up",
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace="default"}`,
+			expResponse:  okResponse,
+		},
+	} {
+		for _, endpoint := range []string{"query", "query_range"} {
+			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
+				var expBody string
+				if tc.expPromQueryBody != "" {
+					expBody = url.Values(map[string][]string{"query": {tc.expPromQueryBody}}).Encode()
+				}
+				m := newMockUpstream(
+					checkParameterAbsent(
+						proxyLabel,
+						checkQueryHandler(expBody, queryParam, tc.expPromQuery),
+					),
+				)
+				defer m.Close()
+				r, err := NewRoutes(m.url, proxyLabel, WithValueFromQuery("foobar"))
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				u, err := url.Parse("http://prometheus.example.com/api/v1/" + endpoint)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				q := u.Query()
+				q.Set(queryParam, tc.promQuery)
+				q.Set("foobar", tc.labelv)
+				u.RawQuery = q.Encode()
+
+				var b io.Reader = nil
+				if tc.promQueryBody != "" {
+					b = strings.NewReader(url.Values(map[string][]string{"query": {tc.promQueryBody}}).Encode())
+				}
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(tc.method, u.String(), b)
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				r.ServeHTTP(w, req)
+
+				resp := w.Result()
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode != tc.expCode {
+					t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+					t.Logf("%s", string(body))
+					t.FailNow()
+				}
+				if resp.StatusCode != http.StatusOK {
+					return
+				}
+				if string(body) != string(tc.expResponse) {
+					t.Fatalf("expected response body %q, got %q", string(tc.expResponse), string(body))
+				}
+			})
+		}
+	}
+}
+
+func TestUsingCustomHTTPHeader(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		labelv        string
+		promQuery     string
+		promQueryBody string
+		method        string
+
+		expCode          int
+		expPromQuery     string
+		expPromQueryBody string
+		expResponse      []byte
+	}{
+		{
+			name:    `No "X-Namespace" header returns an error`,
+			expCode: http.StatusBadRequest,
+		},
+		{
+			name:         `Query without a vector selector`,
+			labelv:       "default",
+			promQuery:    "up",
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace="default"}`,
+			expResponse:  okResponse,
+		},
+	} {
+		for _, endpoint := range []string{"query", "query_range"} {
+			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
+				var expBody string
+				if tc.expPromQueryBody != "" {
+					expBody = url.Values(map[string][]string{"query": {tc.expPromQueryBody}}).Encode()
+				}
+				m := newMockUpstream(
+					checkParameterAbsent(
+						proxyLabel,
+						checkQueryHandler(expBody, queryParam, tc.expPromQuery),
+					),
+				)
+				defer m.Close()
+				r, err := NewRoutes(m.url, proxyLabel, WithValueFromHeader("x-namespace"))
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				u, err := url.Parse("http://prometheus.example.com/api/v1/" + endpoint)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				q := u.Query()
+				q.Set(queryParam, tc.promQuery)
+				u.RawQuery = q.Encode()
+
+				var b io.Reader = nil
+				if tc.promQueryBody != "" {
+					b = strings.NewReader(url.Values(map[string][]string{"query": {tc.promQueryBody}}).Encode())
+				}
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(tc.method, u.String(), b)
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				req.Header.Set("X-Namespace", tc.labelv)
+				r.ServeHTTP(w, req)
+
+				resp := w.Result()
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode != tc.expCode {
+					t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+					t.Logf("%s", string(body))
+					t.FailNow()
+				}
+				if resp.StatusCode != http.StatusOK {
+					return
+				}
+				if string(body) != string(tc.expResponse) {
+					t.Fatalf("expected response body %q, got %q", string(tc.expResponse), string(body))
+				}
+			})
+		}
+	}
+}

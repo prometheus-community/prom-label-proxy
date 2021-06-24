@@ -66,7 +66,7 @@ func (r *routes) listSilences(w http.ResponseWriter, req *http.Request) {
 	}
 
 	q["filter"] = modified
-	q.Del(r.label)
+	q.Del(r.queryParam)
 	req.URL.RawQuery = q.Encode()
 
 	r.handler.ServeHTTP(w, req)
