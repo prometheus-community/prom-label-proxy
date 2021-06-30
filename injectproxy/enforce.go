@@ -39,7 +39,7 @@ func NewEnforcer(errorOnReplace bool, ms ...*labels.Matcher) *Enforcer {
 	}
 }
 
-var ErrIllegalLabelMatcher = errors.New("Label matcher value conflicts with injected value")
+var ErrIllegalLabelMatcher = errors.New("label matcher value conflicts with injected value")
 
 // EnforceNode walks the given node recursively
 // and enforces the given label enforcer on it.
