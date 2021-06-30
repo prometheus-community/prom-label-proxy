@@ -69,10 +69,12 @@ var tests = []struct {
 	enforcer   *Enforcer
 	check      checkFunc
 }{
+	// first check correct label insertion
 	{
-		name:       "expressions",
-		expression: `round(metric1{label="baz",pod="foo",namespace="bar"},3)`,
+		name:       "expressions add label",
+		expression: `round(metric1{label="baz"},3)`,
 		enforcer: NewEnforcer(
+			false,
 			&labels.Matcher{
 				Name:  "namespace",
 				Type:  labels.MatchEqual,
@@ -91,9 +93,10 @@ var tests = []struct {
 	},
 
 	{
-		name:       "aggregate",
-		expression: `sum by (pod) (metric1{label="baz",pod="foo",namespace="bar"})`,
+		name:       "aggregate add label",
+		expression: `sum by (pod) (metric1{label="baz"})`,
 		enforcer: NewEnforcer(
+			false,
 			&labels.Matcher{
 				Name:  "namespace",
 				Type:  labels.MatchEqual,
@@ -112,9 +115,10 @@ var tests = []struct {
 	},
 
 	{
-		name:       "binary expression",
-		expression: `metric1{pod="baz"} + sum by (pod)(metric2{label="baz",pod="foo",namespace="bar"})`,
+		name:       "binary expression add label",
+		expression: `metric1{} + sum by (pod)(metric2{label="baz"})`,
 		enforcer: NewEnforcer(
+			false,
 			&labels.Matcher{
 				Name:  "namespace",
 				Type:  labels.MatchEqual,
@@ -133,9 +137,10 @@ var tests = []struct {
 	},
 
 	{
-		name:       "binary expression with vector matching",
-		expression: `metric1{pod="baz"} + on(pod,namespace) sum by (pod) (metric2{label="baz",pod="foo",namespace="bar"})`,
+		name:       "binary expression with vector matching add label",
+		expression: `metric1{} + on(pod,namespace) sum by (pod) (metric2{label="baz"})`,
 		enforcer: NewEnforcer(
+			false,
 			&labels.Matcher{
 				Name:  "namespace",
 				Type:  labels.MatchEqual,
@@ -149,6 +154,176 @@ var tests = []struct {
 		),
 		check: checks(
 			hasError(nil),
+			hasExpression(`metric1{namespace="NS",pod="POD"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
+		),
+	},
+	// then check error return when a query would be silently altered, i.e. a label
+	// matcher would be changed
+	{
+		name:       "expressions error on non-matching label value",
+		expression: `round(metric1{label="baz",pod="POD",namespace="bar"},3)`,
+		enforcer: NewEnforcer(
+			true,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasError(ErrIllegalLabelMatcher),
+		),
+	},
+
+	{
+		name:       "aggregate error on non-matching label value",
+		expression: `sum by (pod) (metric1{label="baz",pod="foo",namespace="bar"})`,
+		enforcer: NewEnforcer(
+			true,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasError(ErrIllegalLabelMatcher),
+		),
+	},
+
+	{
+		name:       "binary expression error on non-matching label value",
+		expression: `metric1{pod="baz"} + sum by (pod)(metric2{label="baz",pod="foo",namespace="bar"})`,
+		enforcer: NewEnforcer(
+			true,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasError(ErrIllegalLabelMatcher),
+		),
+	},
+
+	{
+		name:       "binary expression with vector matching error on non-matching label value",
+		expression: `metric1{pod="baz"} + on(pod,namespace) sum by (pod) (metric2{label="baz",pod="foo",namespace="bar"})`,
+		enforcer: NewEnforcer(
+			true,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasError(ErrIllegalLabelMatcher),
+		),
+	},
+	// and lastly check that passing the label matcher we would inject
+	// doesn't return an error
+	{
+		name:       "expressions unchanged with matching label value",
+		expression: `round(metric1{label="baz",pod="POD",namespace="NS"},3)`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasExpression(`round(metric1{label="baz",namespace="NS",pod="POD"}, 3)`),
+		),
+	},
+
+	{
+		name:       "aggregate unchanged with matching label value",
+		expression: `sum by (pod) (metric1{label="baz",pod="POD",namespace="NS"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasExpression(`sum by(pod) (metric1{label="baz",namespace="NS",pod="POD"})`),
+		),
+	},
+
+	{
+		name:       "binary expression unchanged with matching label value",
+		expression: `metric1{pod="POD"} + sum by (pod)(metric2{label="baz",namespace="NS",pod="POD"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasExpression(`metric1{namespace="NS",pod="POD"} + sum by(pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
+		),
+	},
+
+	{
+		name:       "binary expression with vector matching unchanged with matching label value",
+		expression: `metric1{pod="POD"} + on(pod,namespace) sum by (pod) (metric2{label="baz",pod="POD",namespace="NS"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
 			hasExpression(`metric1{namespace="NS",pod="POD"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
