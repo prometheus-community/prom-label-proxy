@@ -54,6 +54,15 @@ func hasError(want error) checkFunc {
 	}
 }
 
+func hasIllegalLabelMatcherError() checkFunc {
+	return func(_ string, got error) error {
+		if _, ok := got.(IllegalLabelMatcherError); ok {
+			return nil
+		}
+		return fmt.Errorf("want error of type IllegalLabelMatcherError, got %v", got)
+	}
+}
+
 func hasExpression(want string) checkFunc {
 	return func(got string, _ error) error {
 		if want != got {
@@ -176,7 +185,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasError(ErrIllegalLabelMatcher),
+			hasIllegalLabelMatcherError(),
 		),
 	},
 
@@ -197,7 +206,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasError(ErrIllegalLabelMatcher),
+			hasIllegalLabelMatcherError(),
 		),
 	},
 
@@ -218,7 +227,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasError(ErrIllegalLabelMatcher),
+			hasIllegalLabelMatcherError(),
 		),
 	},
 
@@ -239,7 +248,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasError(ErrIllegalLabelMatcher),
+			hasIllegalLabelMatcherError(),
 		),
 	},
 	// and lastly check that passing the label matcher we would inject

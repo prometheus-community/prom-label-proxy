@@ -275,7 +275,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	// enforce in both places.
 	q, found1, err := enforceQueryValues(e, req.URL.Query())
 	if err != nil {
-		if err == ErrIllegalLabelMatcher {
+		if _, ok := err.(IllegalLabelMatcherError); ok {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 		return
@@ -290,7 +290,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		}
 		q, found2, err = enforceQueryValues(e, req.PostForm)
 		if err != nil {
-			if err == ErrIllegalLabelMatcher {
+			if _, ok := err.(IllegalLabelMatcherError); ok {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 			}
 			return
