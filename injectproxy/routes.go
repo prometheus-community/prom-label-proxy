@@ -38,13 +38,15 @@ type routes struct {
 	handler  http.Handler
 	label    string
 
-	mux       *http.ServeMux
-	modifiers map[string]func(*http.Response) error
+	mux            *http.ServeMux
+	modifiers      map[string]func(*http.Response) error
+	errorOnReplace bool
 }
 
 type options struct {
 	enableLabelAPIs bool
 	pasthroughPaths []string
+	errorOnReplace  bool
 }
 
 type Option interface {
@@ -70,6 +72,14 @@ func WithEnabledLabelsAPI() Option {
 func WithPassthroughPaths(paths []string) Option {
 	return optionFunc(func(o *options) {
 		o.pasthroughPaths = paths
+	})
+}
+
+// ErrorOnReplace causes the proxy to return 403 if a label matcher we want to
+// inject is present in the query already and matches something different
+func WithErrorOnReplace() Option {
+	return optionFunc(func(o *options) {
+		o.errorOnReplace = true
 	})
 }
 
@@ -124,7 +134,7 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
-	r := &routes{upstream: upstream, handler: proxy, label: label}
+	r := &routes{upstream: upstream, handler: proxy, label: label, errorOnReplace: opt.errorOnReplace}
 	mux := newStrictMux()
 
 	errs := merrors.New(
@@ -251,11 +261,12 @@ func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
-	e := NewEnforcer([]*labels.Matcher{{
-		Name:  r.label,
-		Type:  labels.MatchEqual,
-		Value: mustLabelValue(req.Context()),
-	}}...)
+	e := NewEnforcer(r.errorOnReplace,
+		[]*labels.Matcher{{
+			Name:  r.label,
+			Type:  labels.MatchEqual,
+			Value: mustLabelValue(req.Context()),
+		}}...)
 
 	// The `query` can come in the URL query string and/or the POST body.
 	// For this reason, we need to try to enforcing in both places.
@@ -264,6 +275,9 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	// enforce in both places.
 	q, found1, err := enforceQueryValues(e, req.URL.Query())
 	if err != nil {
+		if _, ok := err.(IllegalLabelMatcherError); ok {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
 		return
 	}
 	req.URL.RawQuery = q
@@ -276,6 +290,9 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		}
 		q, found2, err = enforceQueryValues(e, req.PostForm)
 		if err != nil {
+			if _, ok := err.(IllegalLabelMatcherError); ok {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
 			return
 		}
 		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
