@@ -473,8 +473,16 @@ func TestQuery(t *testing.T) {
 			method:        http.MethodPost,
 			expCode:       http.StatusOK,
 		},
+		{
+			name:         `Binary expression`,
+			labelv:       "default",
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
+			expResponse:  okResponse,
+		},
 	} {
-		for _, endpoint := range []string{"query", "query_range"} {
+		for _, endpoint := range []string{"query", "query_range", "query_exemplars"} {
 			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
 				var expBody string
 				if tc.expPromQueryBody != "" {
