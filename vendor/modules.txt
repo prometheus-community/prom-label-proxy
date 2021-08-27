@@ -24,7 +24,7 @@ github.com/go-openapi/jsonpointer
 github.com/go-openapi/jsonreference
 # github.com/go-openapi/loads v0.20.2
 github.com/go-openapi/loads
-# github.com/go-openapi/runtime v0.19.28
+# github.com/go-openapi/runtime v0.19.29
 github.com/go-openapi/runtime
 github.com/go-openapi/runtime/client
 github.com/go-openapi/runtime/logger
@@ -60,7 +60,7 @@ github.com/opentracing/opentracing-go/ext
 github.com/opentracing/opentracing-go/log
 # github.com/pkg/errors v0.9.1
 github.com/pkg/errors
-# github.com/prometheus/alertmanager v0.22.2 => github.com/prometheus/alertmanager v0.22.1-0.20210623090652-e3fb99cc2d24
+# github.com/prometheus/alertmanager v0.23.0
 github.com/prometheus/alertmanager/api/v2/client
 github.com/prometheus/alertmanager/api/v2/client/alert
 github.com/prometheus/alertmanager/api/v2/client/alertgroup
@@ -69,9 +69,9 @@ github.com/prometheus/alertmanager/api/v2/client/receiver
 github.com/prometheus/alertmanager/api/v2/client/silence
 github.com/prometheus/alertmanager/api/v2/models
 github.com/prometheus/alertmanager/pkg/labels
-# github.com/prometheus/common v0.29.0
+# github.com/prometheus/common v0.30.0
 github.com/prometheus/common/model
-# github.com/prometheus/prometheus v1.8.2-0.20210621150501-ff58416a0b02
+# github.com/prometheus/prometheus v1.8.2-0.20210811141203-dcb07e8eac34
 github.com/prometheus/prometheus/pkg/exemplar
 github.com/prometheus/prometheus/pkg/labels
 github.com/prometheus/prometheus/pkg/timestamp
@@ -92,11 +92,11 @@ go.mongodb.org/mongo-driver/bson/bsonrw
 go.mongodb.org/mongo-driver/bson/bsontype
 go.mongodb.org/mongo-driver/bson/primitive
 go.mongodb.org/mongo-driver/x/bsonx/bsoncore
-# go.uber.org/atomic v1.8.0
+# go.uber.org/atomic v1.9.0
 go.uber.org/atomic
-# golang.org/x/net v0.0.0-20210610132358-84b48f89b13b
+# golang.org/x/net v0.0.0-20210726213435-c6fcb2dbf985
 golang.org/x/net/idna
-# golang.org/x/sys v0.0.0-20210611083646-a4fc73990273
+# golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 # golang.org/x/text v0.3.6
