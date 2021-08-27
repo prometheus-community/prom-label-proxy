@@ -44,9 +44,9 @@ type routes struct {
 }
 
 type options struct {
-	enableLabelAPIs bool
-	pasthroughPaths []string
-	errorOnReplace  bool
+	enableLabelAPIs  bool
+	passthroughPaths []string
+	errorOnReplace   bool
 }
 
 type Option interface {
@@ -71,7 +71,7 @@ func WithEnabledLabelsAPI() Option {
 // NOTE: Passthrough "all" paths like "/" or "" and regex are not allowed.
 func WithPassthroughPaths(paths []string) Option {
 	return optionFunc(func(o *options) {
-		o.pasthroughPaths = paths
+		o.passthroughPaths = paths
 	})
 }
 
@@ -166,21 +166,21 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 	}
 
 	// Validate paths.
-	for _, path := range opt.pasthroughPaths {
+	for _, path := range opt.passthroughPaths {
 		u, err := url.Parse(fmt.Sprintf("http://example.com%v", path))
 		if err != nil {
-			return nil, fmt.Errorf("path %v is not a valid URI path, got %v", path, opt.pasthroughPaths)
+			return nil, fmt.Errorf("path %q is not a valid URI path, got %v", path, opt.passthroughPaths)
 		}
 		if u.Path != path {
-			return nil, fmt.Errorf("path %v is not a valid URI path, got %v", path, opt.pasthroughPaths)
+			return nil, fmt.Errorf("path %q is not a valid URI path, got %v", path, opt.passthroughPaths)
 		}
 		if u.Path == "" || u.Path == "/" {
-			return nil, fmt.Errorf("path %v is not allowed, got %v", u.Path, opt.pasthroughPaths)
+			return nil, fmt.Errorf("path %q is not allowed, got %v", u.Path, opt.passthroughPaths)
 		}
 	}
 
 	// Register optional passthrough paths.
-	for _, path := range opt.pasthroughPaths {
+	for _, path := range opt.passthroughPaths {
 		if err := mux.Handle(path, http.HandlerFunc(r.passthrough)); err != nil {
 			return nil, err
 		}
