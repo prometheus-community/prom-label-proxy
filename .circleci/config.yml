@@ -6,7 +6,7 @@ executors:
   # also be updated.
   golang:
     docker:
-      - image: circleci/golang:1.15
+      - image: circleci/golang:1.17
 jobs:
   test:
     executor: golang
