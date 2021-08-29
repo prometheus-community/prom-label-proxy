@@ -102,7 +102,7 @@ func checkFormHandler(key string, values ...string) http.Handler {
 			http.Error(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
 			return
 		}
-		kvs := req.Form
+		kvs := req.PostForm
 		// Verify that the client provides the parameter only once.
 		if len(kvs[key]) != len(values) {
 			http.Error(w, fmt.Sprintf("expected %d values of parameter %q, got %d", len(values), key, len(kvs[key])), http.StatusInternalServerError)

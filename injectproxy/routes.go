@@ -354,7 +354,26 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		Type:  labels.MatchEqual,
 		Value: mustLabelValue(req.Context()),
 	}
-	q := req.Form
+	q := req.URL.Query()
+	if err := injectMatcher(q, matcher); err != nil {
+		return
+	}
+	req.URL.RawQuery = q.Encode()
+	if req.Method == http.MethodPost {
+		q = req.PostForm
+		if err := injectMatcher(q, matcher); err != nil {
+			return
+		}
+		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
+		_ = req.Body.Close()
+		newBody := q.Encode()
+		req.Body = ioutil.NopCloser(strings.NewReader(newBody))
+		req.ContentLength = int64(len(newBody))
+	}
+	r.handler.ServeHTTP(w, req)
+}
+
+func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
@@ -363,23 +382,13 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		for i, m := range matchers {
 			ms, err := parser.ParseMetricSelector(m)
 			if err != nil {
-				return
+				return err
 			}
 			matchers[i] = matchersToString(append(ms, matcher)...)
 		}
 		q[matchersParam] = matchers
 	}
-
-	if req.Method == http.MethodPost {
-		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
-		_ = req.Body.Close()
-		newBody := q.Encode()
-		req.Body = ioutil.NopCloser(strings.NewReader(newBody))
-		req.ContentLength = int64(len(newBody))
-	} else {
-		req.URL.RawQuery = q.Encode()
-	}
-	r.handler.ServeHTTP(w, req)
+	return nil
 }
 
 func matchersToString(ms ...*labels.Matcher) string {
