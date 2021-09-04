@@ -210,10 +210,6 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 			q.Del(r.label)
 		}
 		req.URL.RawQuery = q.Encode()
-		// Remove the proxy label from the form.
-		if req.Form.Get(r.label) != "" {
-			req.Form.Del(r.label)
-		}
 		// Remove the proxy label from the PostForm.
 		if req.PostForm.Get(r.label) != "" {
 			req.PostForm.Del(r.label)
