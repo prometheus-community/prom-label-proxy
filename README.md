@@ -7,7 +7,7 @@ this allows read multi-tenancy for projects like Prometheus, Alertmanager or Tha
 
 This proxy does not perform authentication or authorization, this has to happen before the request reaches this proxy, allowing you to use any authN/authZ system you want. The [kube-rbac-proxy](https://github.com/brancz/kube-rbac-proxy) is an example for such an additional building block.
 
-### Risks outside the scope of this project:
+### Risks outside the scope of this project
 
 It's not a goal for this project to solve write tenant isolation for multi-tenant Prometheus:
 
@@ -16,9 +16,9 @@ It's not a goal for this project to solve write tenant isolation for multi-tenan
 
 See [Prometheus Operator](https://github.com/prometheus-operator/prometheus-operator) label enforcement, [Thanos soft/hard tenancy](https://thanos.io/tip/proposals/201812_thanos-remote-receive.md/#architecture) or [Cortex](https://cortexmetrics.io/) as example solution to that.
 
-## Installing `prom-label-proxy`:
+## Installing `prom-label-proxy`
 
-### Docker 
+### Docker
 
 We publish docker images for each release, see:
 
@@ -38,7 +38,22 @@ go get github.com/prometheus-community/prom-label-proxy
 
 ## How does this project work?
 
-This application proxies the `/federate`, `/api/v1/query`, `/api/v1/query_range`, `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values`, `/api/v1/rules`, `/api/v1/alerts` Prometheus endpoints as well as `/api/v2/silences` Alertmanager endpoint and it ensures that a particular label is enforced in the particular request and response.
+This application proxies the following endpoints and it ensures that a particular label is enforced in the particular request and response:
+
+* `/federate` for GET method (Prometheus)
+* `/api/v1/query_exemplars` for GET and POST methods (Prometheus)
+* `/api/v1/query` for GET and POST methods (Prometheus/Thanos)
+* `/api/v1/query_range` for GET and POST methods (Prometheus/Thanos)
+* `/api/v1/series` for GET method (Prometheus/Thanos)
+* `/api/v1/rules` for GET method (Prometheus/Thanos)
+* `/api/v1/alerts` for GET method (Prometheus/Thanos)
+* `/api/v2/silences` for GET and POST methods (Alertmanager)
+* `/api/v2/silence/` for DELETE (Alertmanager)
+
+When started with the `-enable-label-apis` flag, the application can also proxy the following endpoints:
+
+* `/api/v1/labels` for GET and POST methods (Prometheus/Thanos)
+* `/api/v1/label/<name>/values` for GET method (Prometheus/Thanos)
 
 Particularly, you can run `prom-label-proxy` with label `tenant` and point to example, demo Prometheus server e.g:
 
@@ -55,7 +70,7 @@ Accessing demo Prometheus APIs on `127.0.0.1:8080` will now expect `tenant` quer
 ➜  ~ curl http://127.0.0.1:8080/api/v1/query\?query="up"
 Bad request. The "tenant" query parameter must be provided.
 ➜  ~ curl http://127.0.0.1:8080/api/v1/query\?query="up"\&tenant\="something"
-{"status":"success","data":{"resultType":"vector","result":[]}}%   
+{"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
 
 Once again for clarity: **this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or
@@ -86,9 +101,9 @@ This is enforced for any case, whether a label matcher is specified in the origi
 
 ### Metadata endpoints
 
-Similar to query endpoint, for metadata endpoints `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values` the proxy injects the specified label all the provided `match[]` selectors. 
+Similar to query endpoint, for metadata endpoints `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values` the proxy injects the specified label all the provided `match[]` selectors.
 
-NOTE: At the moment of creation `/api/v1/labels`, `/api/v1/label/<name>/values` does not support `match[]` so they are disabled by default. Use `-enable-label-apis` flag to enable 
+NOTE: At the moment of creation `/api/v1/labels`, `/api/v1/label/<name>/values` does not support `match[]` so they are disabled by default. Use `-enable-label-apis` flag to enable
 those (see https://github.com/prometheus/prometheus/issues/6178 for tracking development).
 
 ### Rules endpoint
