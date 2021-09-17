@@ -211,6 +211,10 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 		}
 		req.URL.RawQuery = q.Encode()
 		// Remove the proxy label from the PostForm.
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
+			return
+		}
 		if req.PostForm.Get(r.label) != "" {
 			req.PostForm.Del(r.label)
 			newBody := req.PostForm.Encode()
@@ -297,9 +301,6 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	var found2 bool
 	// Enforce the query in the POST body if needed.
 	if req.Method == http.MethodPost {
-		if err := req.ParseForm(); err != nil {
-			return
-		}
 		q, found2, err = enforceQueryValues(e, req.PostForm)
 		if err != nil {
 			if _, ok := err.(IllegalLabelMatcherError); ok {
