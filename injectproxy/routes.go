@@ -211,13 +211,19 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 		}
 		req.URL.RawQuery = q.Encode()
 		// Remove the proxy label from the PostForm.
-		if req.PostForm.Get(r.label) != "" {
-			req.PostForm.Del(r.label)
-			newBody := req.PostForm.Encode()
-			// We are replacing request body, close previous one (req.FormValue ensures it is read fully and not nil).
-			_ = req.Body.Close()
-			req.Body = ioutil.NopCloser(strings.NewReader(newBody))
-			req.ContentLength = int64(len(newBody))
+		if req.Method == http.MethodPost {
+			if err := req.ParseForm(); err != nil {
+				http.Error(w, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
+				return
+			}
+			if req.PostForm.Get(r.label) != "" {
+				req.PostForm.Del(r.label)
+				newBody := req.PostForm.Encode()
+				// We are replacing request body, close previous one (req.FormValue ensures it is read fully and not nil).
+				_ = req.Body.Close()
+				req.Body = ioutil.NopCloser(strings.NewReader(newBody))
+				req.ContentLength = int64(len(newBody))
+			}
 		}
 
 		h.ServeHTTP(w, req)
@@ -356,6 +362,9 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	}
 	req.URL.RawQuery = q.Encode()
 	if req.Method == http.MethodPost {
+		if err := req.ParseForm(); err != nil {
+			return
+		}
 		q = req.PostForm
 		if err := injectMatcher(q, matcher); err != nil {
 			return
