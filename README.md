@@ -41,7 +41,7 @@ go get github.com/prometheus-community/prom-label-proxy
 This application proxies the following endpoints and it ensures that a particular label is enforced in the particular request and response:
 
 * `/federate` for GET method (Prometheus)
-* `/api/v1/query_exemplars` for GET and POST methods (Prometheus)
+* `/api/v1/query_exemplars` for GET and POST methods (Prometheus/Thanos)
 * `/api/v1/query` for GET and POST methods (Prometheus/Thanos)
 * `/api/v1/query_range` for GET and POST methods (Prometheus/Thanos)
 * `/api/v1/series` for GET method (Prometheus/Thanos)
@@ -103,8 +103,9 @@ This is enforced for any case, whether a label matcher is specified in the origi
 
 Similar to query endpoint, for metadata endpoints `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values` the proxy injects the specified label all the provided `match[]` selectors.
 
-NOTE: At the moment of creation `/api/v1/labels`, `/api/v1/label/<name>/values` does not support `match[]` so they are disabled by default. Use `-enable-label-apis` flag to enable
-those (see https://github.com/prometheus/prometheus/issues/6178 for tracking development).
+NOTE: When the `/api/v1/labels` and `/api/v1/label/<name>/values` endpoints were added to `prom-label-proxy`, the Prometheus and Thanos endpoints didn't support the `match[]` parameter hence the `prom-label-proxy` labels endpoints are disabled by default. Use the `-enable-label-apis` flag to enable with care. Ensure that the upstream endpoints support label selectors:
+* Prometheus >= [2.24.0](https://github.com/prometheus/prometheus/releases/tag/v2.24.0)
+* Thanos >= [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) at least, >= [0.23.0](https://github.com/thanos-io/thanos/releases/tag/v0.23.0) recommended for better performances.
 
 ### Rules endpoint
 

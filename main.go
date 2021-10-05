@@ -43,12 +43,12 @@ func main() {
 	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries. "+
 		"This label will be also required as the URL parameter to get the value to be injected. For example: -label=tenant will"+
 		" make it required for this proxy to have URL in form of: <URL>?tenant=abc&other_params...")
-	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values."+
-		"NOTE: Enable with care. Selection of matcher is still in development, see https://github.com/thanos-io/thanos/issues/3351 and https://github.com/prometheus/prometheus/issues/6178. If enabled and"+
-		"any labels endpoint does not support selectors, injected matcher will be silently dropped.")
-	flagset.StringVar(&unsafePassthroughPaths, "unsafe-passthrough-paths", "", "Comma delimited allow list of exact HTTP path segments should be allowed to hit upstream URL without any enforcement."+
-		"This option is checked after Prometheus APIs, you can cannot override enforced API to be not enforced with this option. Use carefully as it can easily cause a data leak if the provided path is an important"+
-		"API like targets or configuration. NOTE: \"all\" matching paths like \"/\" or \"\" and regex are not allowed.")
+	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
+		"NOTE: Enable with care because filtering by matcher is not implemented in older versions of Prometheus (>= v2.24.0 required) and Thanos (>= v0.18.0 required, >= v0.23.0 recommended). If enabled and "+
+		"any labels endpoint does not support selectors, the injected matcher will have no effect.")
+	flagset.StringVar(&unsafePassthroughPaths, "unsafe-passthrough-paths", "", "Comma delimited allow list of exact HTTP path segments that should be allowed to hit upstream URL without any enforcement. "+
+		"This option is checked after Prometheus APIs, you cannot override enforced API endpoints to be not enforced with this option. Use carefully as it can easily cause a data leak if the provided path is an important "+
+		"API (like /api/v1/configuration) which isn't enforced by prom-label-proxy. NOTE: \"all\" matching paths like \"/\" or \"\" and regex are not allowed.")
 	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
 
 	//nolint: errcheck // Parse() will exit on error.
