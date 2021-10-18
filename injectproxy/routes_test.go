@@ -89,6 +89,7 @@ func checkQueryHandler(body, key string, values ...string) http.Handler {
 			http.Error(w, fmt.Sprintf("expected body %q, got %q", body, string(buf)), http.StatusInternalServerError)
 			return
 		}
+
 		w.Write(okResponse)
 		<-time.After(100)
 	})
@@ -446,6 +447,222 @@ func TestMatchWithPost(t *testing.T) {
 
 				if string(body) != string(tc.expBody) {
 					t.Fatalf("expected body %q, got %q", string(tc.expBody), string(body))
+				}
+			})
+		}
+	}
+}
+
+func TestSeries(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		labelv      string
+		promQuery   string
+		expResponse []byte
+		expCode     int
+		expMatch    []string
+		expBody     []byte
+	}{
+		{
+			name:    `No "namespace" parameter returns an error`,
+			expCode: http.StatusBadRequest,
+		},
+		{
+			name:    `No "namespace" parameter returns an error for POSTs`,
+			expCode: http.StatusBadRequest,
+		},
+		{
+			name:        `No "match[]" parameter returns 200 with empty body`,
+			labelv:      "default",
+			expMatch:    []string{`{namespace="default"}`},
+			expResponse: okResponse,
+			expCode:     http.StatusOK,
+		},
+		{
+			name:        `No "match[]" parameter returns 200 with empty body for POSTs`,
+			labelv:      "default",
+			expMatch:    []string{`{namespace="default"}`},
+			expResponse: okResponse,
+			expCode:     http.StatusOK,
+		},
+		{
+			name:        `Series`,
+			labelv:      "default",
+			promQuery:   "up",
+			expCode:     http.StatusOK,
+			expMatch:    []string{`{__name__="up",namespace="default"}`},
+			expResponse: okResponse,
+		},
+		{
+			name:        `Series with labels`,
+			labelv:      "default",
+			promQuery:   `up{instance="localhost:9090"}`,
+			expCode:     http.StatusOK,
+			expMatch:    []string{`{instance="localhost:9090",__name__="up",namespace="default"}`},
+			expResponse: okResponse,
+		},
+	} {
+		for _, endpoint := range []string{"series"} {
+			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
+				m := newMockUpstream(
+					checkParameterAbsent(
+						proxyLabel,
+						checkQueryHandler("", matchersParam, tc.expMatch...),
+					),
+				)
+				defer m.Close()
+				var opts []Option
+				r, err := NewRoutes(m.url, proxyLabel, opts...)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				u, err := url.Parse("http://prometheus.example.com/api/v1/" + endpoint)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				q := u.Query()
+				if tc.promQuery != "" {
+					q.Add(matchersParam, tc.promQuery)
+				}
+				q.Set(proxyLabel, tc.labelv)
+				u.RawQuery = q.Encode()
+
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest("GET", u.String(), nil)
+				r.ServeHTTP(w, req)
+
+				resp := w.Result()
+
+				body, err := ioutil.ReadAll(resp.Body)
+
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode != tc.expCode {
+					t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+					t.Logf("%s", string(body))
+					t.FailNow()
+				}
+				if resp.StatusCode != http.StatusOK {
+					return
+				}
+				if string(body) != string(tc.expResponse) {
+					t.Fatalf("expected response body %q, got %q", string(tc.expResponse), string(body))
+				}
+			})
+		}
+	}
+}
+
+func TestSeriesWithPost(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		labelv        string
+		promQueryBody string
+		expResponse   []byte
+		method        string
+		expCode       int
+		expMatch      []string
+		expBody       []byte
+	}{
+		{
+			name:    `No "namespace" parameter returns an error`,
+			expCode: http.StatusBadRequest,
+		},
+		{
+			name:    `No "namespace" parameter returns an error for POSTs`,
+			expCode: http.StatusBadRequest,
+			method:  http.MethodPost,
+		},
+		{
+			name:        `No "match[]" parameter returns 200 with empty body`,
+			labelv:      "default",
+			method:      http.MethodPost,
+			expMatch:    []string{`{namespace="default"}`},
+			expResponse: okResponse,
+			expCode:     http.StatusOK,
+		},
+		{
+			name:        `No "match[]" parameter returns 200 with empty body for POSTs`,
+			method:      http.MethodPost,
+			labelv:      "default",
+			expMatch:    []string{`{namespace="default"}`},
+			expResponse: okResponse,
+			expCode:     http.StatusOK,
+		},
+		{
+			name:          `Series POST`,
+			labelv:        "default",
+			promQueryBody: "up",
+			method:        http.MethodPost,
+			expCode:       http.StatusOK,
+			expMatch:      []string{`{__name__="up",namespace="default"}`},
+			expResponse:   okResponse,
+		},
+		{
+			name:          `Series with labels POST`,
+			labelv:        "default",
+			promQueryBody: `up{instance="localhost:9090"}`,
+			method:        http.MethodPost,
+			expCode:       http.StatusOK,
+			expMatch:      []string{`{instance="localhost:9090",__name__="up",namespace="default"}`},
+			expResponse:   okResponse,
+		},
+	} {
+		for _, endpoint := range []string{"series"} {
+			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
+				m := newMockUpstream(
+					checkParameterAbsent(
+						proxyLabel,
+						checkFormHandler(matchersParam, tc.expMatch...),
+					),
+				)
+				defer m.Close()
+				var opts []Option
+				r, err := NewRoutes(m.url, proxyLabel, opts...)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				u, err := url.Parse("http://prometheus.example.com/api/v1/" + endpoint)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				q := u.Query()
+				q.Set(proxyLabel, tc.labelv)
+				u.RawQuery = q.Encode()
+
+				var b io.Reader = nil
+				if tc.promQueryBody != "" {
+					b = strings.NewReader(url.Values(map[string][]string{"match[]": {tc.promQueryBody}}).Encode())
+				}
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(tc.method, u.String(), b)
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				r.ServeHTTP(w, req)
+
+				resp := w.Result()
+
+				body, err := ioutil.ReadAll(resp.Body)
+
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode != tc.expCode {
+					t.Logf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
+					t.Logf("%s", string(body))
+					t.FailNow()
+				}
+				if resp.StatusCode != http.StatusOK {
+					return
+				}
+				if string(body) != string(tc.expResponse) {
+					t.Fatalf("expected response body %q, got %q", string(tc.expResponse), string(body))
 				}
 			})
 		}
