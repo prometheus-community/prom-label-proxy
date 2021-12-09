@@ -35,7 +35,7 @@ import (
 func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "GET":
-		r.listSilences(w, req)
+		r.enforceFilterParameter(w, req)
 	case "POST":
 		r.postSilence(w, req)
 	default:
@@ -43,7 +43,7 @@ func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (r *routes) listSilences(w http.ResponseWriter, req *http.Request) {
+func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request) {
 	var (
 		q               = req.URL.Query()
 		proxyLabelMatch = labels.Matcher{

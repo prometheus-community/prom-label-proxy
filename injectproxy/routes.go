@@ -159,6 +159,7 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 	errs.Add(
 		mux.Handle("/api/v2/silences", r.enforceLabel(enforceMethods(r.silences, "GET", "POST"))),
 		mux.Handle("/api/v2/silence/", r.enforceLabel(enforceMethods(r.deleteSilence, "DELETE"))),
+		mux.Handle("/api/v2/alerts/groups", r.enforceLabel(enforceMethods(r.enforceFilterParameter, "GET"))),
 	)
 
 	if err := errs.Err(); err != nil {
