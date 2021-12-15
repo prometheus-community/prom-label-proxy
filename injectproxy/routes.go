@@ -24,7 +24,7 @@ import (
 
 	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
