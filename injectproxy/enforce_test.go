@@ -72,6 +72,14 @@ func hasExpression(want string) checkFunc {
 	}
 }
 
+func newMatcher(matchType labels.MatchType, name string, value string) *labels.Matcher {
+	matcher, err := labels.NewMatcher(matchType, name, value)
+	if err != nil {
+		panic(err)
+	}
+	return matcher
+}
+
 var tests = []struct {
 	name       string
 	expression string
@@ -102,6 +110,50 @@ var tests = []struct {
 	},
 
 	{
+		name:       "expressions add not equal and regexp label",
+		expression: `round(metric1{label="baz"},3)`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchNotEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasError(nil),
+			hasExpression(`round(metric1{label="baz",namespace!="NS",pod=~"POD1|POD2"}, 3)`),
+		),
+	},
+
+	{
+		name:       "expressions add equal and not regexp label",
+		expression: `round(metric1{label="baz"},3)`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchNotRegexp,
+				Value: "NS1|NS2",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasError(nil),
+			hasExpression(`round(metric1{label="baz",namespace!~"NS1|NS2",pod="POD"}, 3)`),
+		),
+	},
+
+	{
 		name:       "aggregate add label",
 		expression: `sum by (pod) (metric1{label="baz"})`,
 		enforcer: NewEnforcer(
@@ -120,6 +172,50 @@ var tests = []struct {
 		check: checks(
 			hasError(nil),
 			hasExpression(`sum by(pod) (metric1{label="baz",namespace="NS",pod="POD"})`),
+		),
+	},
+
+	{
+		name:       "aggregate add not equal and regexp label",
+		expression: `sum by (pod) (metric1{label="baz"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchRegexp,
+				Value: "NS1|NS2",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasError(nil),
+			hasExpression(`sum by(pod) (metric1{label="baz",namespace=~"NS1|NS2",pod!="POD"})`),
+		),
+	},
+
+	{
+		name:       "aggregate add equal and not regexp label",
+		expression: `sum by (pod) (metric1{label="baz"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasError(nil),
+			hasExpression(`sum by(pod) (metric1{label="baz",namespace="NS",pod!~"POD1|POD2"})`),
 		),
 	},
 
@@ -146,6 +242,50 @@ var tests = []struct {
 	},
 
 	{
+		name:       "binary expression add not equal and regexp label",
+		expression: `metric1{} + sum by (pod)(metric2{label="baz"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchNotEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasError(nil),
+			hasExpression(`metric1{namespace!="NS",pod=~"POD1|POD2"} + sum by(pod) (metric2{label="baz",namespace!="NS",pod=~"POD1|POD2"})`),
+		),
+	},
+
+	{
+		name:       "binary expression add equal and not regexp label",
+		expression: `metric1{} + sum by (pod)(metric2{label="baz"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasError(nil),
+			hasExpression(`metric1{namespace="NS",pod!~"POD1|POD2"} + sum by(pod) (metric2{label="baz",namespace="NS",pod!~"POD1|POD2"})`),
+		),
+	},
+
+	{
 		name:       "binary expression with vector matching add label",
 		expression: `metric1{} + on(pod,namespace) sum by (pod) (metric2{label="baz"})`,
 		enforcer: NewEnforcer(
@@ -164,6 +304,50 @@ var tests = []struct {
 		check: checks(
 			hasError(nil),
 			hasExpression(`metric1{namespace="NS",pod="POD"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
+		),
+	},
+
+	{
+		name:       "binary expression with vector matching add not equal and regexp label",
+		expression: `metric1{} + on(pod,namespace) sum by (pod) (metric2{label="baz"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchRegexp,
+				Value: "NS1|NS2",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasError(nil),
+			hasExpression(`metric1{namespace=~"NS1|NS2",pod!="POD"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace=~"NS1|NS2",pod!="POD"})`),
+		),
+	},
+
+	{
+		name:       "binary expression with vector matching add equal and not regexp label",
+		expression: `metric1{} + on(pod,namespace) sum by (pod) (metric2{label="baz"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasError(nil),
+			hasExpression(`metric1{namespace="NS",pod!~"POD1|POD2"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace="NS",pod!~"POD1|POD2"})`),
 		),
 	},
 	// then check error return when a query would be silently altered, i.e. a label
@@ -275,6 +459,74 @@ var tests = []struct {
 	},
 
 	{
+		name:       "expressions unchanged with matching not equal and regexp label value",
+		expression: `round(metric1{label="baz",pod=~"POD1|POD2",namespace!="NS"},3)`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchNotEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasExpression(`round(metric1{label="baz",namespace!="NS",pod=~"POD1|POD2"}, 3)`),
+		),
+	},
+
+	{
+		name:       "expressions unchanged with value matching regexp label value",
+		expression: `round(metric1{label="baz",pod="POD1",namespace="NS3"},3)`,
+		enforcer: NewEnforcer(
+			false,
+			newMatcher(labels.MatchNotRegexp, "namespace", "NS1|NS2"),
+			newMatcher(labels.MatchRegexp, "pod", "POD1|POD2"),
+		),
+		check: checks(
+			hasExpression(`round(metric1{label="baz",namespace="NS3",pod="POD1"}, 3)`),
+		),
+	},
+
+	{
+		name:       "expressions changed with value not matching regexp label value",
+		expression: `round(metric1{label="baz",pod="POD3",namespace="NS1"},3)`,
+		enforcer: NewEnforcer(
+			false,
+			newMatcher(labels.MatchNotRegexp, "namespace", "NS1|NS2"),
+			newMatcher(labels.MatchRegexp, "pod", "POD1|POD2"),
+		),
+		check: checks(
+			hasExpression(`round(metric1{label="baz",namespace!~"NS1|NS2",pod=~"POD1|POD2"}, 3)`),
+		),
+	},
+
+	{
+		name:       "expressions unchanged with matching equal and not regexp label value",
+		expression: `round(metric1{label="baz",pod!~"POD1|POD2",namespace="NS"},3)`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasExpression(`round(metric1{label="baz",namespace="NS",pod!~"POD1|POD2"}, 3)`),
+		),
+	},
+
+	{
 		name:       "aggregate unchanged with matching label value",
 		expression: `sum by (pod) (metric1{label="baz",pod="POD",namespace="NS"})`,
 		enforcer: NewEnforcer(
@@ -292,6 +544,48 @@ var tests = []struct {
 		),
 		check: checks(
 			hasExpression(`sum by(pod) (metric1{label="baz",namespace="NS",pod="POD"})`),
+		),
+	},
+
+	{
+		name:       "aggregate unchanged with matching not equal and regexp label value",
+		expression: `sum by (pod) (metric1{label="baz",pod!="POD",namespace=~"NS1|NS2"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchRegexp,
+				Value: "NS1|NS2",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotEqual,
+				Value: "POD",
+			},
+		),
+		check: checks(
+			hasExpression(`sum by(pod) (metric1{label="baz",namespace=~"NS1|NS2",pod!="POD"})`),
+		),
+	},
+
+	{
+		name:       "aggregate unchanged with matching equal and not regexp label value",
+		expression: `sum by (pod) (metric1{label="baz",pod!~"POD1|POD2",namespace="NS"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasExpression(`sum by(pod) (metric1{label="baz",namespace="NS",pod!~"POD1|POD2"})`),
 		),
 	},
 
@@ -317,6 +611,48 @@ var tests = []struct {
 	},
 
 	{
+		name:       "binary expression unchanged with matching not equal and regexp label value",
+		expression: `metric1{pod=~"POD1|POD2"} + sum by (pod)(metric2{label="baz",namespace!="NS",pod=~"POD1|POD2"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchNotEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasExpression(`metric1{namespace!="NS",pod=~"POD1|POD2"} + sum by(pod) (metric2{label="baz",namespace!="NS",pod=~"POD1|POD2"})`),
+		),
+	},
+
+	{
+		name:       "binary expression unchanged with matching equal and not regexp label value",
+		expression: `metric1{pod!~"POD"} + sum by (pod)(metric2{label="baz",namespace="NS",pod!~"POD1|POD2"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasExpression(`metric1{namespace="NS",pod!~"POD1|POD2"} + sum by(pod) (metric2{label="baz",namespace="NS",pod!~"POD1|POD2"})`),
+		),
+	},
+
+	{
 		name:       "binary expression with vector matching unchanged with matching label value",
 		expression: `metric1{pod="POD"} + on(pod,namespace) sum by (pod) (metric2{label="baz",pod="POD",namespace="NS"})`,
 		enforcer: NewEnforcer(
@@ -334,6 +670,48 @@ var tests = []struct {
 		),
 		check: checks(
 			hasExpression(`metric1{namespace="NS",pod="POD"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
+		),
+	},
+
+	{
+		name:       "binary expression with vector matching unchanged with matching not equal and regexp label value",
+		expression: `metric1{pod=~"POD1|POD2"} + on(pod,namespace) sum by (pod) (metric2{label="baz",pod=~"POD1|POD2",namespace!="NS"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchNotEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasExpression(`metric1{namespace!="NS",pod=~"POD1|POD2"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace!="NS",pod=~"POD1|POD2"})`),
+		),
+	},
+
+	{
+		name:       "binary expression with vector matching unchanged with matching equal and not regexp label value",
+		expression: `metric1{pod!~"POD"} + on(pod,namespace) sum by (pod) (metric2{label="baz",pod!~"POD1|POD2",namespace="NS"})`,
+		enforcer: NewEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+			&labels.Matcher{
+				Name:  "pod",
+				Type:  labels.MatchNotRegexp,
+				Value: "POD1|POD2",
+			},
+		),
+		check: checks(
+			hasExpression(`metric1{namespace="NS",pod!~"POD1|POD2"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace="NS",pod!~"POD1|POD2"})`),
 		),
 	},
 }

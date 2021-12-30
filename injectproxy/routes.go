@@ -198,17 +198,46 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 
 func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		queryLabel := r.label
 		lvalue := req.FormValue(r.label)
+		matcherType := labels.MatchEqual
+		if strings.HasPrefix(lvalue, "~") {
+			matcherType = labels.MatchRegexp
+			lvalue = strings.TrimPrefix(lvalue, "~")
+		}
+		if lvalue == "" {
+			queryLabel = r.label + "!"
+			lvalue = req.FormValue(queryLabel)
+			matcherType = labels.MatchNotEqual
+			if lvalue == "" {
+				queryLabel = r.label + "!~"
+				for k, v := range req.Form {
+					if strings.HasPrefix(k, queryLabel) {
+						if v[0] == "" {
+							lvalue = strings.TrimPrefix(k, queryLabel)
+							queryLabel = k
+							matcherType = labels.MatchNotRegexp
+						}
+					}
+				}
+			}
+		}
+
 		if lvalue == "" {
 			http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
 			return
 		}
-		req = req.WithContext(withLabelValue(req.Context(), lvalue))
+		matcher := &labels.Matcher{
+			Name:  r.label,
+			Type:  matcherType,
+			Value: strings.Trim(lvalue, "\""),
+		}
+		req = req.WithContext(withLabelMatcher(req.Context(), matcher))
 
 		// Remove the proxy label from the query parameters.
 		q := req.URL.Query()
-		if q.Get(r.label) != "" {
-			q.Del(r.label)
+		if q.Get(queryLabel) != "" {
+			q.Del(queryLabel)
 		}
 		req.URL.RawQuery = q.Encode()
 		// Remove the proxy label from the PostForm.
@@ -260,19 +289,19 @@ type ctxKey int
 
 const keyLabel ctxKey = iota
 
-func mustLabelValue(ctx context.Context) string {
-	label, ok := ctx.Value(keyLabel).(string)
+func mustLabelMatcher(ctx context.Context) *labels.Matcher {
+	matcher, ok := ctx.Value(keyLabel).(*labels.Matcher)
 	if !ok {
 		panic(fmt.Sprintf("can't find the %q value in the context", keyLabel))
 	}
-	if label == "" {
+	if matcher.Name == "" {
 		panic(fmt.Sprintf("empty %q value in the context", keyLabel))
 	}
-	return label
+	return matcher
 }
 
-func withLabelValue(ctx context.Context, label string) context.Context {
-	return context.WithValue(ctx, keyLabel, label)
+func withLabelMatcher(ctx context.Context, matcher *labels.Matcher) context.Context {
+	return context.WithValue(ctx, keyLabel, matcher)
 }
 
 func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
@@ -280,12 +309,11 @@ func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
+	matcher := mustLabelMatcher(req.Context())
 	e := NewEnforcer(r.errorOnReplace,
-		[]*labels.Matcher{{
-			Name:  r.label,
-			Type:  labels.MatchEqual,
-			Value: mustLabelValue(req.Context()),
-		}}...)
+		[]*labels.Matcher{
+			matcher,
+		}...)
 
 	// The `query` can come in the URL query string and/or the POST body.
 	// For this reason, we need to try to enforcing in both places.
@@ -352,11 +380,7 @@ func enforceQueryValues(e *Enforcer, v url.Values) (values string, noQuery bool,
 // This works for non-query Prometheus APIs like: /api/v1/series, /api/v1/label/<name>/values, /api/v1/labels and /federate support multiple matchers.
 // See e.g https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metadata
 func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
-	matcher := &labels.Matcher{
-		Name:  r.label,
-		Type:  labels.MatchEqual,
-		Value: mustLabelValue(req.Context()),
-	}
+	matcher := mustLabelMatcher(req.Context())
 	q := req.URL.Query()
 
 	if err := injectMatcher(q, matcher); err != nil {

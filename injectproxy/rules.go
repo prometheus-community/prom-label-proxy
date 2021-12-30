@@ -175,7 +175,7 @@ func modifyAPIResponse(f func(string, *apiResponse) (interface{}, error)) func(*
 			return errors.Wrap(err, "can't decode API response")
 		}
 
-		v, err := f(mustLabelValue(resp.Request.Context()), apir)
+		v, err := f(mustLabelMatcher(resp.Request.Context()).Value, apir)
 		if err != nil {
 			return err
 		}

@@ -140,12 +140,22 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 // otherwise the label matcher is silently replaced.
 func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.Matcher, error) {
 	var res []*labels.Matcher
+	labelMatchers := make(map[string]*labels.Matcher)
+	for k, v := range ms.labelMatchers {
+		labelMatchers[k] = v
+	}
 
 	for _, target := range targets {
-		if matcher, ok := ms.labelMatchers[target.Name]; ok {
+		if matcher, ok := labelMatchers[target.Name]; ok {
 			// matcher.String() returns something like "labelfoo=value"
 			if ms.errorOnReplace && matcher.String() != target.String() {
 				return res, newIllegalLabelMatcherError(matcher.String(), target.String())
+			}
+			if target.Type == labels.MatchEqual {
+				if labelMatchers[target.Name].Matches(target.Value) {
+					delete(labelMatchers, target.Name)
+					res = append(res, target)
+				}
 			}
 			continue
 		}
@@ -153,7 +163,7 @@ func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.Matcher
 		res = append(res, target)
 	}
 
-	for _, enforcedMatcher := range ms.labelMatchers {
+	for _, enforcedMatcher := range labelMatchers {
 		res = append(res, enforcedMatcher)
 	}
 

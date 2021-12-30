@@ -46,12 +46,8 @@ func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request) {
 	var (
 		q               = req.URL.Query()
-		proxyLabelMatch = labels.Matcher{
-			Type:  labels.MatchEqual,
-			Name:  r.label,
-			Value: mustLabelValue(req.Context()),
-		}
-		modified = []string{proxyLabelMatch.String()}
+		proxyLabelMatch = mustLabelMatcher(req.Context())
+		modified        = []string{proxyLabelMatch.String()}
 	)
 	for _, filter := range q["filter"] {
 		m, err := labels.ParseMatcher(filter)
@@ -75,7 +71,7 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 	var (
 		sil    models.PostableSilence
-		lvalue = mustLabelValue(req.Context())
+		lvalue = mustLabelMatcher(req.Context()).Value
 	)
 	if err := json.NewDecoder(req.Body).Decode(&sil); err != nil {
 		http.Error(w, fmt.Sprintf("bad request: can't decode: %v", err), http.StatusBadRequest)
@@ -143,7 +139,7 @@ func (r *routes) deleteSilence(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if !hasMatcherForLabel(sil.Matchers, r.label, mustLabelValue(req.Context())) {
+	if !hasMatcherForLabel(sil.Matchers, r.label, mustLabelMatcher(req.Context()).Value) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
