@@ -283,7 +283,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	e := NewEnforcer(r.errorOnReplace,
 		[]*labels.Matcher{{
 			Name:  r.label,
-			Type:  labels.MatchEqual,
+			Type:  labels.MatchRegexp,
 			Value: mustLabelValue(req.Context()),
 		}}...)
 
@@ -354,7 +354,7 @@ func enforceQueryValues(e *Enforcer, v url.Values) (values string, noQuery bool,
 func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	matcher := &labels.Matcher{
 		Name:  r.label,
-		Type:  labels.MatchEqual,
+		Type:  labels.MatchRegexp,
 		Value: mustLabelValue(req.Context()),
 	}
 	q := req.URL.Query()
