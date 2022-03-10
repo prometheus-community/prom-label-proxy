@@ -818,17 +818,17 @@ func TestQuery(t *testing.T) {
 			expResponse:      okResponse,
 		},
 		{
-			name:      `An invalid expression returns 200 with empty body`,
+			name:      `An invalid expression returns 400 with error response`,
 			labelv:    "default",
 			promQuery: "up +",
-			expCode:   http.StatusOK,
+			expCode:   http.StatusBadRequest,
 		},
 		{
-			name:          `An invalid expression in POST body returns 200 with empty body`,
+			name:          `An invalid expression in POST body returns 400 with error response`,
 			labelv:        "default",
 			promQueryBody: "up +",
 			method:        http.MethodPost,
-			expCode:       http.StatusOK,
+			expCode:       http.StatusBadRequest,
 		},
 		{
 			name:         `Binary expression`,
