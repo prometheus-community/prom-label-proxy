@@ -15,6 +15,7 @@ package injectproxy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -160,6 +161,12 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 		mux.Handle("/api/v2/silences", r.enforceLabel(enforceMethods(r.silences, "GET", "POST"))),
 		mux.Handle("/api/v2/silence/", r.enforceLabel(enforceMethods(r.deleteSilence, "DELETE"))),
 		mux.Handle("/api/v2/alerts/groups", r.enforceLabel(enforceMethods(r.enforceFilterParameter, "GET"))),
+	)
+
+	errs.Add(
+		mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		})),
 	)
 
 	if err := errs.Err(); err != nil {
