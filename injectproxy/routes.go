@@ -207,7 +207,7 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		lvalue := req.FormValue(r.label)
 		if lvalue == "" {
-			http.Error(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
+			prometheusAPIError(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
 			return
 		}
 		req = req.WithContext(withLabelValue(req.Context(), lvalue))
@@ -221,7 +221,7 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 		// Remove the proxy label from the PostForm.
 		if req.Method == http.MethodPost {
 			if err := req.ParseForm(); err != nil {
-				http.Error(w, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
+				prometheusAPIError(w, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
 				return
 			}
 			if req.PostForm.Get(r.label) != "" {
@@ -303,11 +303,11 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		switch err.(type) {
 		case IllegalLabelMatcherError:
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 		case queryParseError:
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 		case enforceLabelError:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			prometheusAPIError(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
@@ -317,17 +317,17 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	// Enforce the query in the POST body if needed.
 	if req.Method == http.MethodPost {
 		if err := req.ParseForm(); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 		}
 		q, found2, err = enforceQueryValues(e, req.PostForm)
 		if err != nil {
 			switch err.(type) {
 			case IllegalLabelMatcherError:
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 			case queryParseError:
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 			case enforceLabelError:
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				prometheusAPIError(w, err.Error(), http.StatusInternalServerError)
 			}
 			return
 		}
