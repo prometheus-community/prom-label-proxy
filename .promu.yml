@@ -6,7 +6,7 @@ repository:
 build:
     binaries:
         - name: prom-label-proxy
-    flags: -mod=vendor -tags 'netgo'
+    flags: -tags 'netgo'
     ldflags: |
         -X github.com/prometheus/common/version.Version={{.Version}}
         -X github.com/prometheus/common/version.Revision={{.Revision}}
