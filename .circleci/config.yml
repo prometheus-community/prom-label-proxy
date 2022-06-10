@@ -1,3 +1,4 @@
+---
 version: 2.1
 orbs:
   prometheus: prometheus/prometheus@0.16.0
@@ -31,7 +32,7 @@ workflows:
             tags:
               only: /.*/
       - prometheus/publish_master:
-          docker_hub_organization: "" # Don't publish to DockerHub.
+          docker_hub_organization: ""  # Don't publish to DockerHub.
           quay_io_organization: prometheuscommunity
           requires:
             - test
@@ -40,7 +41,7 @@ workflows:
             branches:
               only: master
       - prometheus/publish_release:
-          docker_hub_organization: "" # Don't publish to DockerHub.
+          docker_hub_organization: ""  # Don't publish to DockerHub.
           quay_io_organization: prometheuscommunity
           requires:
             - test

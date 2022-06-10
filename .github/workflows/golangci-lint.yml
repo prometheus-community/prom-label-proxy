@@ -1,5 +1,6 @@
+---
 name: golangci-lint
-on:
+on: # yamllint disable-line
   push:
     paths:
       - "go.sum"
