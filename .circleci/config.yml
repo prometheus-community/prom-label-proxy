@@ -1,12 +1,13 @@
+---
 version: 2.1
 orbs:
-  prometheus: prometheus/prometheus@0.11.0
+  prometheus: prometheus/prometheus@0.16.0
 executors:
   # Whenever the Go version is updated here, .promu.yml should
   # also be updated.
   golang:
     docker:
-      - image: circleci/golang:1.17
+      - image: quay.io/prometheus/golang-builder:1.18-base
 jobs:
   test:
     executor: golang
@@ -31,7 +32,7 @@ workflows:
             tags:
               only: /.*/
       - prometheus/publish_master:
-          docker_hub_organization: "" # Don't publish to DockerHub.
+          docker_hub_organization: ""  # Don't publish to DockerHub.
           quay_io_organization: prometheuscommunity
           requires:
             - test
@@ -40,7 +41,7 @@ workflows:
             branches:
               only: master
       - prometheus/publish_release:
-          docker_hub_organization: "" # Don't publish to DockerHub.
+          docker_hub_organization: ""  # Don't publish to DockerHub.
           quay_io_organization: prometheuscommunity
           requires:
             - test
