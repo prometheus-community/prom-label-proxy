@@ -698,6 +698,21 @@ func TestQuery(t *testing.T) {
 			method:  http.MethodPost,
 		},
 		{
+			labelv:               "default",
+			secondLabelv:         "",
+			forceAddSecondLabelv: true,
+			name:                 `One of the "namespace" parameters empty returns an error`,
+			expCode:              http.StatusBadRequest,
+		},
+		{
+			labelv:               "default",
+			secondLabelv:         "",
+			forceAddSecondLabelv: true,
+			name:                 `One of the "namespace" parameters empty returns an error for POSTs`,
+			expCode:              http.StatusBadRequest,
+			method:               http.MethodPost,
+		},
+		{
 			name:    `No "query" parameter returns 200 with empty body`,
 			labelv:  "default",
 			expCode: http.StatusOK,
