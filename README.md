@@ -50,6 +50,7 @@ This application proxies the following endpoints and it ensures that a particula
 * `/api/v2/silences` for GET and POST methods (Alertmanager)
 * `/api/v2/silence/` for DELETE (Alertmanager)
 * `/api/v2/alerts/groups` for GET (Alertmanager)
+* `/api/v2/alerts` for GET (Alertmanager)
 
 When started with the `-enable-label-apis` flag, the application can also proxy the following endpoints:
 
