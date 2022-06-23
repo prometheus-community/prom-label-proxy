@@ -75,7 +75,7 @@ The "tenant" query parameter must be provided.
 {"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
 
-You can also provide a static value for the tenancy label. For example, running `prom-label-proxy` with
+You can also provide a static value for a label. For example, running `prom-label-proxy` with
 ```
 prom-label-proxy \
    -label tenant \
