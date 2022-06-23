@@ -266,7 +266,7 @@ func (r *routes) getLabelValue(req *http.Request) (string, error) {
 	}
 
 	if r.labelValue == "" && formValue == "" {
-		return "", fmt.Errorf("bad request. The %q query parameter must be provided", r.label)
+		return "", fmt.Errorf("the %q query parameter must be provided", r.label)
 	}
 
 	if r.labelValue != "" {
