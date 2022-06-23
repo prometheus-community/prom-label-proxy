@@ -32,6 +32,7 @@ func main() {
 		insecureListenAddress  string
 		upstream               string
 		label                  string
+		labelValue             string
 		enableLabelAPIs        bool
 		unsafePassthroughPaths string // Comma-delimited string.
 		errorOnReplace         bool
@@ -43,6 +44,8 @@ func main() {
 	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries. "+
 		"This label will be also required as the URL parameter to get the value to be injected. For example: -label=tenant will"+
 		" make it required for this proxy to have URL in form of: <URL>?tenant=abc&other_params...")
+	flagset.StringVar(&labelValue, "label-value", "", "A fixed label value to enforce in all proxied PromQL queries. "+
+		"When this flag is not set, the label value will be taken from the URL parameter defined by the label flag.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
 		"NOTE: Enable with care because filtering by matcher is not implemented in older versions of Prometheus (>= v2.24.0 required) and Thanos (>= v0.18.0 required, >= v0.23.0 recommended). If enabled and "+
 		"any labels endpoint does not support selectors, the injected matcher will have no effect.")
@@ -76,6 +79,10 @@ func main() {
 	if errorOnReplace {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
 	}
+	if labelValue != "" {
+		opts = append(opts, injectproxy.WithLabelValue(labelValue))
+	}
+
 	routes, err := injectproxy.NewRoutes(upstreamURL, label, opts...)
 	if err != nil {
 		log.Fatalf("Failed to create injectproxy Routes: %v", err)

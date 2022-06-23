@@ -35,9 +35,10 @@ const (
 )
 
 type routes struct {
-	upstream *url.URL
-	handler  http.Handler
-	label    string
+	upstream   *url.URL
+	handler    http.Handler
+	label      string
+	labelValue string
 
 	mux            *http.ServeMux
 	modifiers      map[string]func(*http.Response) error
@@ -45,6 +46,7 @@ type routes struct {
 }
 
 type options struct {
+	labelValue       string
 	enableLabelAPIs  bool
 	passthroughPaths []string
 	errorOnReplace   bool
@@ -81,6 +83,14 @@ func WithPassthroughPaths(paths []string) Option {
 func WithErrorOnReplace() Option {
 	return optionFunc(func(o *options) {
 		o.errorOnReplace = true
+	})
+}
+
+// WithLabelValue enforces a specific value for the multi-tenancy label.
+// If not specified, the value has to be provided as a URL parameter.
+func WithLabelValue(value string) Option {
+	return optionFunc(func(o *options) {
+		o.labelValue = value
 	})
 }
 
@@ -135,7 +145,13 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
-	r := &routes{upstream: upstream, handler: proxy, label: label, errorOnReplace: opt.errorOnReplace}
+	r := &routes{
+		upstream:       upstream,
+		handler:        proxy,
+		label:          label,
+		labelValue:     opt.labelValue,
+		errorOnReplace: opt.errorOnReplace,
+	}
 	mux := newStrictMux()
 
 	errs := merrors.New(
@@ -206,11 +222,12 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 
 func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		lvalue := req.FormValue(r.label)
-		if lvalue == "" {
-			prometheusAPIError(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
+		lvalue, err := r.getLabelValue(req)
+		if err != nil {
+			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
+
 		req = req.WithContext(withLabelValue(req.Context(), lvalue))
 
 		// Remove the proxy label from the query parameters.
@@ -237,6 +254,26 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 
 		h.ServeHTTP(w, req)
 	})
+}
+
+// getLabelValue returns the statically set label value, or the label value
+// sent through a URL parameter.
+// It returns an error when either the value is found in both places, or is not found at all.
+func (r *routes) getLabelValue(req *http.Request) (string, error) {
+	formValue := req.FormValue(r.label)
+	if r.labelValue != "" && formValue != "" {
+		return "", fmt.Errorf("a static value for the %s label has already been specified", r.label)
+	}
+
+	if r.labelValue == "" && formValue == "" {
+		return "", fmt.Errorf("the %q query parameter must be provided", r.label)
+	}
+
+	if r.labelValue != "" {
+		return r.labelValue, nil
+	}
+
+	return formValue, nil
 }
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -451,4 +488,14 @@ func (e enforceLabelError) Error() string {
 
 func newEnforceLabelError(err error) enforceLabelError {
 	return enforceLabelError{msg: fmt.Sprintf("error enforcing label %q", err.Error())}
+}
+
+// humanFriendlyErrorMessage returns an error message with a capitalized first letter
+// and a punctuation at the end.
+func humanFriendlyErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	errMsg := err.Error()
+	return fmt.Sprintf("%s%s.", strings.ToUpper(errMsg[:1]), errMsg[1:])
 }

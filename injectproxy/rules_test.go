@@ -338,7 +338,7 @@ func TestRules(t *testing.T) {
 		{
 			// No "namespace" parameter returns an error.
 			expCode: http.StatusBadRequest,
-			expBody: []byte(`{"error":"Bad request. The \"namespace\" query parameter must be provided.","errorType":"prom-label-proxy","status":"error"}` + "\n"),
+			expBody: []byte(`{"error":"The \"namespace\" query parameter must be provided.","errorType":"prom-label-proxy","status":"error"}` + "\n"),
 		},
 		{
 			// non 200 status code from upstream is passed as-is.
@@ -719,7 +719,7 @@ func TestAlerts(t *testing.T) {
 		{
 			// No "namespace" parameter returns an error.
 			expCode: http.StatusBadRequest,
-			expBody: []byte(`{"error":"Bad request. The \"namespace\" query parameter must be provided.","errorType":"prom-label-proxy","status":"error"}` + "\n"),
+			expBody: []byte(`{"error":"The \"namespace\" query parameter must be provided.","errorType":"prom-label-proxy","status":"error"}` + "\n"),
 		},
 		{
 			// non 200 status code from upstream is passed as-is.

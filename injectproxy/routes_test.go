@@ -671,11 +671,12 @@ func TestSeriesWithPost(t *testing.T) {
 
 func TestQuery(t *testing.T) {
 	for _, tc := range []struct {
-		name          string
-		labelv        string
-		promQuery     string
-		promQueryBody string
-		method        string
+		name           string
+		labelv         string
+		staticLabelVal string
+		promQuery      string
+		promQueryBody  string
+		method         string
 
 		expCode          int
 		expPromQuery     string
@@ -838,6 +839,21 @@ func TestQuery(t *testing.T) {
 			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
 			expResponse:  okResponse,
 		},
+		{
+			name:           `Static label value`,
+			staticLabelVal: "default",
+			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:        http.StatusOK,
+			expPromQuery:   `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
+			expResponse:    okResponse,
+		},
+		{
+			name:           `Static label value with URL query parameter`,
+			staticLabelVal: "default",
+			labelv:         "other-default",
+			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:        http.StatusBadRequest,
+		},
 	} {
 		for _, endpoint := range []string{"query", "query_range", "query_exemplars"} {
 			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
@@ -845,17 +861,21 @@ func TestQuery(t *testing.T) {
 				if tc.expPromQueryBody != "" {
 					expBody = url.Values(map[string][]string{"query": {tc.expPromQueryBody}}).Encode()
 				}
-				m := newMockUpstream(
-					checkParameterAbsent(
-						proxyLabel,
-						checkQueryHandler(expBody, queryParam, tc.expPromQuery),
-					),
-				)
+
+				mockHandler := checkQueryHandler(expBody, queryParam, tc.expPromQuery)
+				if tc.staticLabelVal == "" {
+					mockHandler = checkParameterAbsent(proxyLabel, mockHandler)
+				}
+				m := newMockUpstream(mockHandler)
 				defer m.Close()
 				var opts []Option
 				if tc.errorOnReplace {
 					opts = append(opts, WithErrorOnReplace())
 				}
+				if tc.staticLabelVal != "" {
+					opts = append(opts, WithLabelValue(tc.staticLabelVal))
+				}
+
 				r, err := NewRoutes(m.url, proxyLabel, opts...)
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
