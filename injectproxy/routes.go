@@ -224,14 +224,10 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		lvalue, err := r.getLabelValue(req)
 		if err != nil {
-			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
 
-		if lvalue == "" {
-			prometheusAPIError(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
-			return
-		}
 		req = req.WithContext(withLabelValue(req.Context(), lvalue))
 
 		// Remove the proxy label from the query parameters.
@@ -260,10 +256,17 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 	})
 }
 
+// getLabelValue returns the statically set label value, or the label value
+// sent through a URL parameter.
+// It returns an error when either the value is found in both places, or is not found at all.
 func (r *routes) getLabelValue(req *http.Request) (string, error) {
 	formValue := req.FormValue(r.label)
 	if r.labelValue != "" && formValue != "" {
 		return "", fmt.Errorf("a static value for the %s label has already been specified", r.label)
+	}
+
+	if r.labelValue == "" && formValue == "" {
+		return "", fmt.Errorf("bad request. The %q query parameter must be provided", r.label)
 	}
 
 	if r.labelValue != "" {
@@ -485,4 +488,14 @@ func (e enforceLabelError) Error() string {
 
 func newEnforceLabelError(err error) enforceLabelError {
 	return enforceLabelError{msg: fmt.Sprintf("error enforcing label %q", err.Error())}
+}
+
+// humanFriendlyErrorMessage returns an error message with a capitalized first letter
+// and a punctuation at the end.
+func humanFriendlyErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	errMsg := err.Error()
+	return fmt.Sprintf("%s%s.", strings.ToUpper(errMsg[:1]), errMsg[1:])
 }
