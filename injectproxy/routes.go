@@ -35,9 +35,10 @@ const (
 )
 
 type routes struct {
-	upstream *url.URL
-	handler  http.Handler
-	label    string
+	upstream   *url.URL
+	handler    http.Handler
+	label      string
+	labelValue string
 
 	mux            *http.ServeMux
 	modifiers      map[string]func(*http.Response) error
@@ -45,6 +46,7 @@ type routes struct {
 }
 
 type options struct {
+	labelValue       string
 	enableLabelAPIs  bool
 	passthroughPaths []string
 	errorOnReplace   bool
@@ -81,6 +83,14 @@ func WithPassthroughPaths(paths []string) Option {
 func WithErrorOnReplace() Option {
 	return optionFunc(func(o *options) {
 		o.errorOnReplace = true
+	})
+}
+
+// WithLabelValue enforces a specific value for the multi-tenancy label.
+// If not specified, the value has to be provided as a URL parameter.
+func WithLabelValue(value string) Option {
+	return optionFunc(func(o *options) {
+		o.labelValue = value
 	})
 }
 
@@ -135,7 +145,13 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
-	r := &routes{upstream: upstream, handler: proxy, label: label, errorOnReplace: opt.errorOnReplace}
+	r := &routes{
+		upstream:       upstream,
+		handler:        proxy,
+		label:          label,
+		labelValue:     opt.labelValue,
+		errorOnReplace: opt.errorOnReplace,
+	}
 	mux := newStrictMux()
 
 	errs := merrors.New(
@@ -206,7 +222,12 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 
 func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		lvalue := req.FormValue(r.label)
+		lvalue, err := r.getLabelValue(req)
+		if err != nil {
+			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		if lvalue == "" {
 			prometheusAPIError(w, fmt.Sprintf("Bad request. The %q query parameter must be provided.", r.label), http.StatusBadRequest)
 			return
@@ -237,6 +258,19 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 
 		h.ServeHTTP(w, req)
 	})
+}
+
+func (r *routes) getLabelValue(req *http.Request) (string, error) {
+	formValue := req.FormValue(r.label)
+	if r.labelValue != "" && formValue != "" {
+		return "", fmt.Errorf("a static value for the %s label has already been specified", r.label)
+	}
+
+	if r.labelValue != "" {
+		return r.labelValue, nil
+	}
+
+	return formValue, nil
 }
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
