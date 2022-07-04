@@ -524,7 +524,9 @@ func TestSeries(t *testing.T) {
 				if tc.promQuery != "" {
 					q.Add(matchersParam, tc.promQuery)
 				}
-				q.Set(proxyLabel, tc.labelv)
+				if tc.labelv != "" {
+					q.Set(proxyLabel, tc.labelv)
+				}
 				u.RawQuery = q.Encode()
 
 				w := httptest.NewRecorder()
@@ -672,6 +674,7 @@ func TestQuery(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
 		labelv         string
+		headers        http.Header
 		staticLabelVal string
 		promQuery      string
 		promQueryBody  string
@@ -853,6 +856,21 @@ func TestQuery(t *testing.T) {
 			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:        http.StatusBadRequest,
 		},
+		{
+			name:         `http header label value`,
+			headers:      http.Header{"x-prom-label-proxy-" + proxyLabel: []string{"default"}},
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
+			expResponse:  okResponse,
+		},
+		{
+			name:      `Static label value with http header label value`,
+			headers:   http.Header{"x-prom-label-proxy-" + proxyLabel: []string{"default"}},
+			labelv:    "other-default",
+			promQuery: `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:   http.StatusBadRequest,
+		},
 	} {
 		for _, endpoint := range []string{"query", "query_range", "query_exemplars"} {
 			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
@@ -862,7 +880,7 @@ func TestQuery(t *testing.T) {
 				}
 
 				mockHandler := checkQueryHandler(expBody, queryParam, tc.expPromQuery)
-				if tc.staticLabelVal == "" {
+				if (tc.staticLabelVal == "") != (tc.headers == nil) {
 					mockHandler = checkParameterAbsent(proxyLabel, mockHandler)
 				}
 				m := newMockUpstream(mockHandler)
@@ -886,7 +904,9 @@ func TestQuery(t *testing.T) {
 				}
 				q := u.Query()
 				q.Set(queryParam, tc.promQuery)
-				q.Set(proxyLabel, tc.labelv)
+				if tc.labelv != "" {
+					q.Set(proxyLabel, tc.labelv)
+				}
 				u.RawQuery = q.Encode()
 
 				var b io.Reader = nil
@@ -895,6 +915,9 @@ func TestQuery(t *testing.T) {
 				}
 				w := httptest.NewRecorder()
 				req := httptest.NewRequest(tc.method, u.String(), b)
+				if tc.headers != nil {
+					req.Header = tc.headers
+				}
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 				r.ServeHTTP(w, req)
 

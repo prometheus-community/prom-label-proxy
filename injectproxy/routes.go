@@ -34,6 +34,7 @@ import (
 const (
 	queryParam    = "query"
 	matchersParam = "match[]"
+	headerPrefix  = "x-prom-label-proxy-"
 )
 
 type routes struct {
@@ -293,23 +294,40 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 }
 
 // getLabelValue returns the statically set label value, or the label value
-// sent through a URL parameter.
+// sent through a URL parameter or http request header.
 // It returns an error when either the value is found in both places, or is not found at all.
 func (r *routes) getLabelValue(req *http.Request) (string, error) {
+	headerValue, ok := req.Header[headerPrefix+r.label]
 	formValue := req.FormValue(r.label)
-	if r.labelValue != "" && formValue != "" {
-		return "", fmt.Errorf("a static value for the %s label has already been specified", r.label)
-	}
 
-	if r.labelValue == "" && formValue == "" {
-		return "", fmt.Errorf("the %q query parameter must be provided", r.label)
-	}
+	if ok {
+		if r.labelValue != "" && headerValue[0] != "" {
+			return "", fmt.Errorf("a static value for the %s label has already been specified", r.label)
+		}
+		if formValue != "" && headerValue[0] != "" {
+			return "", fmt.Errorf("a value for the %s label has already been specified though an http header", r.label)
+		}
 
-	if r.labelValue != "" {
-		return r.labelValue, nil
-	}
+		if r.labelValue != "" {
+			return r.labelValue, nil
+		}
 
-	return formValue, nil
+		return headerValue[0], nil
+	} else {
+		if r.labelValue != "" && formValue != "" {
+			return "", fmt.Errorf("a static value for the %s label has already been specified", r.label)
+		}
+
+		if r.labelValue == "" && formValue == "" {
+			return "", fmt.Errorf("the %q query parameter must be provided", r.label)
+		}
+
+		if r.labelValue != "" {
+			return r.labelValue, nil
+		}
+
+		return formValue, nil
+	}
 }
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
