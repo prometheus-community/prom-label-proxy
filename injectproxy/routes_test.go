@@ -934,7 +934,7 @@ func TestQuery(t *testing.T) {
 			staticLabelVal: "default",
 			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:        http.StatusOK,
-			expPromQuery:   `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
+			expPromQuery:   `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
 			expResponse:    okResponse,
 		},
 		{
