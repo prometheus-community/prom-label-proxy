@@ -25,6 +25,7 @@ import (
 
 	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 )
@@ -184,6 +185,7 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 		mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		})),
+		mux.Handle("/metrics", promhttp.Handler()),
 	)
 
 	if err := errs.Err(); err != nil {
