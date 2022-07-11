@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -33,6 +34,23 @@ import (
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 )
 
+type arrayFlags []string
+
+// String is the method to format the flag's value, part of the flag.Value interface.
+// The String method's output will be used in diagnostics.
+func (i *arrayFlags) String() string {
+	return fmt.Sprint(*i)
+}
+
+// Set is the method to set the flag value, part of the flag.Value interface.
+func (i *arrayFlags) Set(value string) error {
+	if value == "" {
+		return errors.New("empty value cannot be provided to -label-value")
+	}
+	*i = append(*i, value)
+	return nil
+}
+
 func main() {
 	var (
 		insecureListenAddress  string
@@ -41,7 +59,7 @@ func main() {
 		queryParam             string
 		headerName             string
 		label                  string
-		labelValue             string
+		labelValue             arrayFlags
 		enableLabelAPIs        bool
 		unsafePassthroughPaths string // Comma-delimited string.
 		errorOnReplace         bool
