@@ -116,6 +116,19 @@ prom-label-proxy \
 
 Now prom-label-proxy enforces the `tenant="prometheus"` label in all requests.
 
+You can provide multiple static values for a label. For example, running `prom-label-proxy` with
+```
+prom-label-proxy \
+   -label tenant \
+   -label-value prometheus \
+   -label-value alertmanager \
+   -upstream http://demo.do.prometheus.io:9090 \
+   -insecure-listen-address 127.0.0.1:8080
+```
+will enforce `tenant=~"prometheus|alertmanager"` in all requests.
+
+In this mode, sending the label value as a query parameter will result in the request getting rejected as a 400 Bad Request.
+
 Once again for clarity: **this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or
 authorize the requesting entity in any way, this has to be built around this project.**
 
