@@ -31,7 +31,7 @@ workflows:
           filters:
             tags:
               only: /.*/
-      - prometheus/publish_master:
+      - prometheus/publish_main:
           docker_hub_organization: ""  # Don't publish to DockerHub.
           quay_io_organization: prometheuscommunity
           requires:
@@ -39,7 +39,7 @@ workflows:
             - build
           filters:
             branches:
-              only: master
+              only: main
       - prometheus/publish_release:
           docker_hub_organization: ""  # Don't publish to DockerHub.
           quay_io_organization: prometheuscommunity
