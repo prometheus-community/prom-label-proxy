@@ -6,6 +6,8 @@ require (
 	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
 	github.com/go-openapi/runtime v0.24.0
 	github.com/go-openapi/strfmt v0.21.2
+	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a
+	github.com/oklog/run v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/alertmanager v0.24.0
 	github.com/prometheus/client_golang v1.12.1
