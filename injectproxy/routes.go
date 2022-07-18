@@ -176,7 +176,7 @@ type HTTPFormEnforcer struct {
 // ExtractLabel implements the ExtractLabeler interface.
 func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		labelValue, err := hff.getLabelValue(r)
+		labelValue, err := hff.getLabelValues(r)
 		if err != nil {
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
@@ -203,17 +203,25 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			}
 		}
 
-		next.ServeHTTP(w, r.WithContext(WithLabelValue(r.Context(), labelValue)))
+		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValue)))
 	})
 }
 
-func (hff HTTPFormEnforcer) getLabelValue(r *http.Request) (string, error) {
-	formValue := r.FormValue(hff.ParameterName)
-	if formValue == "" {
-		return "", fmt.Errorf("the %q query parameter must be provided", hff.ParameterName)
+func (hff HTTPFormEnforcer) getLabelValues(r *http.Request) ([]string, error) {
+	formValues := r.Form[hff.ParameterName]
+
+	if len(formValues) == 0 {
+		return nil, fmt.Errorf("the %q query parameter must be provided", hff.ParameterName)
 	}
 
-	return formValue, nil
+	// Check if every value is non-empty
+	for i := range formValues {
+		if formValues[i] == "" {
+			return nil, fmt.Errorf("the %q query parameter must be provided", hff.ParameterName)
+		}
+	}
+
+	return formValues, nil
 }
 
 // HTTPHeaderEnforcer enforces a label value extracted from the HTTP headers.
@@ -230,31 +238,31 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r.WithContext(WithLabelValue(r.Context(), labelValue)))
+		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValue)))
 	})
 }
 
-func (hhe HTTPHeaderEnforcer) getLabelValue(r *http.Request) (string, error) {
+func (hhe HTTPHeaderEnforcer) getLabelValue(r *http.Request) ([]string, error) {
 	headerValues := r.Header[hhe.Name]
 
 	if len(headerValues) == 0 {
-		return "", fmt.Errorf("missing HTTP header %q", hhe.Name)
+		return []string{}, fmt.Errorf("missing HTTP header %q", hhe.Name)
 	}
 
 	if len(headerValues) > 1 {
-		return "", fmt.Errorf("multiple values for the http header %q", hhe.Name)
+		return []string{}, fmt.Errorf("multiple values for the http header %q", hhe.Name)
 	}
 
-	return headerValues[0], nil
+	return headerValues, nil
 }
 
 // StaticLabelEnforcer enforces a static label value.
-type StaticLabelEnforcer string
+type StaticLabelEnforcer []string
 
 // ExtractLabel implements the ExtractLabeler interface.
 func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next(w, r.WithContext(WithLabelValue(r.Context(), string(sle))))
+		next(w, r.WithContext(WithLabelValues(r.Context(), sle)))
 	})
 }
 
@@ -389,8 +397,8 @@ func MustLabelValue(ctx context.Context) string {
 }
 
 // WithLabelValue stores a label in the given context.
-func WithLabelValue(ctx context.Context, label string) context.Context {
-	return context.WithValue(ctx, keyLabel, label)
+func WithLabelValues(ctx context.Context, labels []string) context.Context {
+	return context.WithValue(ctx, keyLabel, labels)
 }
 
 func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
