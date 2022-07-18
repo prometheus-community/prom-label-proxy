@@ -1010,6 +1010,7 @@ func TestQuery(t *testing.T) {
 						q.Add(proxyLabel, lv)
 					}
 				}
+
 				u.RawQuery = q.Encode()
 
 				var b io.Reader = nil
