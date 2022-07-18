@@ -673,11 +673,11 @@ func TestSeriesWithPost(t *testing.T) {
 func TestQuery(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
-		labelv         string
+		labelv         []string
 		headers        http.Header
 		headerName     string
 		queryParam     string
-		staticLabelVal string
+		staticLabelVal []string
 		promQuery      string
 		promQueryBody  string
 		method         string
@@ -698,33 +698,29 @@ func TestQuery(t *testing.T) {
 			method:  http.MethodPost,
 		},
 		{
-			labelv:               "default",
-			secondLabelv:         "",
-			forceAddSecondLabelv: true,
-			name:                 `One of the "namespace" parameters empty returns an error`,
-			expCode:              http.StatusBadRequest,
+			labelv:  []string{"default", ""},
+			name:    `One of the "namespace" parameters empty returns an error`,
+			expCode: http.StatusBadRequest,
 		},
 		{
-			labelv:               "default",
-			secondLabelv:         "",
-			forceAddSecondLabelv: true,
-			name:                 `One of the "namespace" parameters empty returns an error for POSTs`,
-			expCode:              http.StatusBadRequest,
-			method:               http.MethodPost,
+			labelv:  []string{"default", ""},
+			name:    `One of the "namespace" parameters empty returns an error for POSTs`,
+			expCode: http.StatusBadRequest,
+			method:  http.MethodPost,
 		},
 		{
 			name:    `No "query" parameter returns 200 with empty body`,
-			labelv:  "default",
+			labelv:  []string{"default"},
 			expCode: http.StatusOK,
 		},
 		{
 			name:    `No "query" parameter returns 200 with empty body for POSTs`,
-			labelv:  "default",
+			labelv:  []string{"default"},
 			expCode: http.StatusOK,
 		},
 		{
 			name:         `Query without a vector selector`,
-			labelv:       "default",
+			labelv:       []string{"default"},
 			promQuery:    "up",
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace=~"default"}`,
@@ -732,8 +728,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:         `Query without a vector selector with multiple label values`,
-			labelv:       "default",
-			secondLabelv: "second",
+			labelv:       []string{"default", "second"},
 			promQuery:    "up",
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace=~"default|second"}`,
@@ -741,7 +736,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query without a vector selector in POST body`,
-			labelv:           "default",
+			labelv:           []string{"default"},
 			promQueryBody:    "up",
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
@@ -750,8 +745,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query without a vector selector in POST body with multiple label values`,
-			labelv:           "default",
-			secondLabelv:     "second",
+			labelv:           []string{"default", "second"},
 			promQueryBody:    "up",
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
@@ -760,7 +754,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Tricky: Query without a vector selector in GET body (yes, that's possible)'`,
-			labelv:           "default",
+			labelv:           []string{"default"},
 			promQueryBody:    "up",
 			method:           http.MethodGet,
 			expCode:          http.StatusOK,
@@ -768,7 +762,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query without a vector selector in POST body or query`,
-			labelv:           "default",
+			labelv:           []string{"default"},
 			promQuery:        "up",
 			promQueryBody:    "up",
 			method:           http.MethodPost,
@@ -779,8 +773,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query without a vector selector in POST body or query with multiple label values`,
-			labelv:           "default",
-			secondLabelv:     "second",
+			labelv:           []string{"default", "second"},
 			promQuery:        "up",
 			promQueryBody:    "up",
 			method:           http.MethodPost,
@@ -791,7 +784,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query without a vector selector in POST body or query different`,
-			labelv:           "default",
+			labelv:           []string{"default"},
 			promQuery:        "up",
 			promQueryBody:    "foo",
 			method:           http.MethodPost,
@@ -802,8 +795,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query without a vector selector in POST body or query different with multiple label values`,
-			labelv:           "default",
-			secondLabelv:     "second",
+			labelv:           []string{"default", "second"},
 			promQuery:        "up",
 			promQueryBody:    "foo",
 			method:           http.MethodPost,
@@ -814,7 +806,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:         `Query with a vector selector`,
-			labelv:       "default",
+			labelv:       []string{"default"},
 			promQuery:    `up{namespace="other"}`,
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace=~"default"}`,
@@ -822,8 +814,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:         `Query with a vector selector with multiple label values`,
-			labelv:       "default",
-			secondLabelv: "second",
+			labelv:       []string{"default", "second"},
 			promQuery:    `up{namespace="other"}`,
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace=~"default|second"}`,
@@ -831,7 +822,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query with a vector selector in POST body`,
-			labelv:           "default",
+			labelv:           []string{"default"},
 			promQueryBody:    `up{namespace="other"}`,
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
@@ -840,8 +831,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query with a vector selector in POST body with multiple label values`,
-			labelv:           "default",
-			secondLabelv:     "second",
+			labelv:           []string{"default", "second"},
 			promQueryBody:    `up{namespace="other"}`,
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
@@ -850,7 +840,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:           `Query with a vector selector and errorOnReplace`,
-			labelv:         "default",
+			labelv:         []string{"default"},
 			promQuery:      `up{namespace="other"}`,
 			errorOnReplace: true,
 			expCode:        http.StatusBadRequest,
@@ -858,7 +848,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:           `Query with a vector selector in POST body and errorOnReplace`,
-			labelv:         "default",
+			labelv:         []string{"default"},
 			promQueryBody:  `up{namespace="other"}`,
 			method:         http.MethodPost,
 			errorOnReplace: true,
@@ -867,7 +857,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:         `Query with a scalar`,
-			labelv:       "default",
+			labelv:       []string{"default"},
 			promQuery:    "1",
 			expCode:      http.StatusOK,
 			expPromQuery: `1`,
@@ -875,7 +865,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query with a scalar in POST body`,
-			labelv:           "default",
+			labelv:           []string{"default"},
 			promQueryBody:    "1",
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
@@ -884,7 +874,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:         `Query with a function`,
-			labelv:       "default",
+			labelv:       []string{"default"},
 			promQuery:    "time()",
 			expCode:      http.StatusOK,
 			expPromQuery: `time()`,
@@ -892,7 +882,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:             `Query with a function in POST body`,
-			labelv:           "default",
+			labelv:           []string{"default"},
 			promQueryBody:    "time()",
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
@@ -901,20 +891,20 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:      `An invalid expression returns 400 with error response`,
-			labelv:    "default",
+			labelv:    []string{"default"},
 			promQuery: "up +",
 			expCode:   http.StatusBadRequest,
 		},
 		{
 			name:          `An invalid expression in POST body returns 400 with error response`,
-			labelv:        "default",
+			labelv:        []string{"default"},
 			promQueryBody: "up +",
 			method:        http.MethodPost,
 			expCode:       http.StatusBadRequest,
 		},
 		{
 			name:         `Binary expression`,
-			labelv:       "default",
+			labelv:       []string{"default"},
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
 			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
@@ -922,8 +912,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:         `Binary expression with multiple label values`,
-			labelv:       "default",
-			secondLabelv: "second",
+			labelv:       []string{"default", "second"},
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
 			expPromQuery: `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
@@ -931,7 +920,7 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			name:           `Static label value`,
-			staticLabelVal: "default",
+			staticLabelVal: []string{"default"},
 			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:        http.StatusOK,
 			expPromQuery:   `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
@@ -949,11 +938,26 @@ func TestQuery(t *testing.T) {
 		{
 			name:         `query param label value`,
 			queryParam:   "namespace2",
-			labelv:       "default",
+			labelv:       []string{"default"},
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
 			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
 			expResponse:  okResponse,
+		},
+		{
+			name:           `Multipe static label value`,
+			staticLabelVal: []string{"default", "second"},
+			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:        http.StatusOK,
+			expPromQuery:   `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
+			expResponse:    okResponse,
+		},
+		{
+			name:           `Static label value with URL query parameter`,
+			staticLabelVal: []string{"default"},
+			labelv:         []string{"other-default"},
+			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:        http.StatusBadRequest,
 		},
 	} {
 		for _, endpoint := range []string{"query", "query_range", "query_exemplars"} {
@@ -964,7 +968,7 @@ func TestQuery(t *testing.T) {
 				}
 
 				mockHandler := checkQueryHandler(expBody, queryParam, tc.expPromQuery)
-				if (tc.staticLabelVal == "") != (tc.headers == nil) {
+				if (len(tc.staticLabelVal) == 0) != (tc.headers == nil) {
 					mockHandler = checkParameterAbsent(proxyLabel, mockHandler)
 				}
 				m := newMockUpstream(mockHandler)
@@ -976,7 +980,7 @@ func TestQuery(t *testing.T) {
 				}
 
 				var labelEnforcer ExtractLabeler
-				if tc.staticLabelVal != "" {
+				if len(tc.staticLabelVal) > 0 {
 					labelEnforcer = StaticLabelEnforcer(tc.staticLabelVal)
 				} else if tc.headerName != "" {
 					labelEnforcer = HTTPHeaderEnforcer{Name: tc.headerName}
@@ -997,10 +1001,14 @@ func TestQuery(t *testing.T) {
 				}
 				q := u.Query()
 				q.Set(queryParam, tc.promQuery)
-				if tc.queryParam != "" && tc.labelv != "" {
-					q.Set(tc.queryParam, tc.labelv)
-				} else if tc.staticLabelVal == "" && tc.headerName == "" && tc.labelv != "" {
-					q.Set(proxyLabel, tc.labelv)
+				if tc.queryParam != "" {
+					for _, lv := range tc.labelv {
+						q.Add(tc.queryParam, lv)
+					}
+				} else if len(tc.staticLabelVal) > 0 && tc.headerName == "" {
+					for _, lv := range tc.labelv {
+						q.Add(proxyLabel, lv)
+					}
 				}
 				u.RawQuery = q.Encode()
 
