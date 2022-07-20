@@ -24,8 +24,9 @@ import (
 	"strings"
 
 	"github.com/efficientgo/tools/core/pkg/merrors"
+	"github.com/metalmatze/signal/server/signalhttp"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 )
@@ -41,7 +42,7 @@ type routes struct {
 	label      string
 	labelValue string
 
-	mux            *http.ServeMux
+	mux            http.Handler
 	modifiers      map[string]func(*http.Response) error
 	errorOnReplace bool
 }
@@ -51,6 +52,7 @@ type options struct {
 	enableLabelAPIs  bool
 	passthroughPaths []string
 	errorOnReplace   bool
+	registerer       prometheus.Registerer
 }
 
 type Option interface {
@@ -61,6 +63,13 @@ type optionFunc func(*options)
 
 func (f optionFunc) apply(o *options) {
 	f(o)
+}
+
+// WithPrometheusRegistry configures the proxy to use the given registerer.
+func WithPrometheusRegistry(reg prometheus.Registerer) Option {
+	return optionFunc(func(o *options) {
+		o.registerer = reg
+	})
 }
 
 // WithEnabledLabelsAPI enables proxying to labels API. If false, "501 Not implemented" will be return for those.
@@ -95,17 +104,22 @@ func WithLabelValue(value string) Option {
 	})
 }
 
-// strictMux is a mux that wraps standard HTTP handler with safer handler that allows safe user provided handler registrations.
-type strictMux struct {
-	seen map[string]struct{}
-
-	m *http.ServeMux
+// mux abstracts away the behavior we expect from the http.ServeMux type in this package.
+type mux interface {
+	http.Handler
+	Handle(string, http.Handler)
 }
 
-func newStrictMux() *strictMux {
+// strictMux is a mux that wraps standard HTTP handler with safer handler that allows safe user provided handler registrations.
+type strictMux struct {
+	mux
+	seen map[string]struct{}
+}
+
+func newStrictMux(m mux) *strictMux {
 	return &strictMux{
-		seen: map[string]struct{}{},
-		m:    http.NewServeMux(),
+		m,
+		map[string]struct{}{},
 	}
 
 }
@@ -131,17 +145,38 @@ func (s *strictMux) Handle(pattern string, handler http.Handler) error {
 		}
 	}
 
-	s.m.Handle(sanitized, handler)
-	s.m.Handle(sanitized+"/", handler)
+	s.mux.Handle(sanitized, handler)
+	s.mux.Handle(sanitized+"/", handler)
 	s.seen[sanitized] = struct{}{}
 
 	return nil
+}
+
+// instrumentedMux wraps a mux and instruments it.
+type instrumentedMux struct {
+	mux
+	i signalhttp.HandlerInstrumenter
+}
+
+func newInstrumentedMux(m mux, r prometheus.Registerer) *instrumentedMux {
+	return &instrumentedMux{
+		m,
+		signalhttp.NewHandlerInstrumenter(r, []string{"handler"}),
+	}
+}
+
+// Handle implements the mux interface.
+func (i *instrumentedMux) Handle(pattern string, handler http.Handler) {
+	i.mux.Handle(pattern, i.i.NewHandler(prometheus.Labels{"handler": pattern}, handler))
 }
 
 func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error) {
 	opt := options{}
 	for _, o := range opts {
 		o.apply(&opt)
+	}
+	if opt.registerer == nil {
+		opt.registerer = prometheus.NewRegistry()
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
@@ -153,7 +188,7 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 		labelValue:     opt.labelValue,
 		errorOnReplace: opt.errorOnReplace,
 	}
-	mux := newStrictMux()
+	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
 
 	errs := merrors.New(
 		mux.Handle("/federate", r.enforceLabel(enforceMethods(r.matcher, "GET"))),
@@ -185,7 +220,6 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 		mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		})),
-		mux.Handle("/metrics", promhttp.Handler()),
 	)
 
 	if err := errs.Err(); err != nil {
@@ -213,7 +247,7 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 		}
 	}
 
-	r.mux = mux.m
+	r.mux = mux
 	r.modifiers = map[string]func(*http.Response) error{
 		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
 		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),

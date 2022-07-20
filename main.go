@@ -14,15 +14,21 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"os/signal"
 	"strings"
 	"syscall"
+
+	"github.com/metalmatze/signal/internalserver"
+	"github.com/oklog/run"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 )
@@ -30,6 +36,7 @@ import (
 func main() {
 	var (
 		insecureListenAddress  string
+		internalListenAddress  string
 		upstream               string
 		label                  string
 		labelValue             string
@@ -40,6 +47,7 @@ func main() {
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flagset.StringVar(&insecureListenAddress, "insecure-listen-address", "", "The address the prom-label-proxy HTTP server should listen on.")
+	flagset.StringVar(&internalListenAddress, "internal-listen-address", "", "The address the internal prom-label-proxy HTTP server should listen on to expose metrics about itself.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
 	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries. "+
 		"This label will be also required as the URL parameter to get the value to be injected. For example: -label=tenant will"+
@@ -69,7 +77,13 @@ func main() {
 		log.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
 	}
 
-	var opts []injectproxy.Option
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	)
+
+	opts := []injectproxy.Option{injectproxy.WithPrometheusRegistry(reg)}
 	if enableLabelAPIs {
 		opts = append(opts, injectproxy.WithEnabledLabelsAPI())
 	}
@@ -83,38 +97,71 @@ func main() {
 		opts = append(opts, injectproxy.WithLabelValue(labelValue))
 	}
 
-	routes, err := injectproxy.NewRoutes(upstreamURL, label, opts...)
-	if err != nil {
-		log.Fatalf("Failed to create injectproxy Routes: %v", err)
-	}
+	var g run.Group
 
-	mux := http.NewServeMux()
-	mux.Handle("/", routes)
-
-	srv := &http.Server{Handler: mux}
-
-	l, err := net.Listen("tcp", insecureListenAddress)
-	if err != nil {
-		log.Fatalf("Failed to listen on insecure address: %v", err)
-	}
-
-	errCh := make(chan error)
-	go func() {
-		log.Printf("Listening insecurely on %v", l.Addr())
-		errCh <- srv.Serve(l)
-	}()
-
-	term := make(chan os.Signal, 1)
-	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
-
-	select {
-	case <-term:
-		log.Print("Received SIGTERM, exiting gracefully...")
-		srv.Close()
-	case err := <-errCh:
-		if err != http.ErrServerClosed {
-			log.Printf("Server stopped with %v", err)
+	{
+		// Run the insecure HTTP server.
+		routes, err := injectproxy.NewRoutes(upstreamURL, label, opts...)
+		if err != nil {
+			log.Fatalf("Failed to create injectproxy Routes: %v", err)
 		}
-		os.Exit(1)
+
+		mux := http.NewServeMux()
+		mux.Handle("/", routes)
+
+		l, err := net.Listen("tcp", insecureListenAddress)
+		if err != nil {
+			log.Fatalf("Failed to listen on insecure address: %v", err)
+		}
+
+		srv := &http.Server{Handler: mux}
+
+		g.Add(func() error {
+			log.Printf("Listening insecurely on %v", l.Addr())
+			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
+				log.Printf("Server stopped with %v", err)
+				return err
+			}
+			return nil
+		}, func(error) {
+			srv.Close()
+		})
+	}
+
+	if internalListenAddress != "" {
+		// Run the internal HTTP server.
+		h := internalserver.NewHandler(
+			internalserver.WithName("Internal prom-label-proxy API"),
+			internalserver.WithPrometheusRegistry(reg),
+			internalserver.WithPProf(),
+		)
+		// Run the HTTP server.
+		l, err := net.Listen("tcp", internalListenAddress)
+		if err != nil {
+			log.Fatalf("Failed to listen on internal address: %v", err)
+		}
+
+		srv := &http.Server{Handler: h}
+
+		g.Add(func() error {
+			log.Printf("Listening on %v for metrics and pprof", l.Addr())
+			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
+				log.Printf("Internal server stopped with %v", err)
+				return err
+			}
+			return nil
+		}, func(error) {
+			srv.Close()
+		})
+	}
+
+	g.Add(run.SignalHandler(context.Background(), syscall.SIGINT, syscall.SIGTERM))
+
+	if err := g.Run(); err != nil {
+		if !errors.As(err, &run.SignalError{}) {
+			log.Printf("Server stopped with %v", err)
+			os.Exit(1)
+		}
+		log.Print("Caught signal; exiting gracefully...")
 	}
 }
