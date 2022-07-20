@@ -386,14 +386,14 @@ const keyLabel ctxKey = iota
 // from the given context.
 // It will panic if no label is found or the value is empty.
 func MustLabelValue(ctx context.Context) string {
-	label, ok := ctx.Value(keyLabel).(string)
+	labels, ok := ctx.Value(keyLabel).([]string)
 	if !ok {
 		panic(fmt.Sprintf("can't find the %q value in the context", keyLabel))
 	}
-	if label == "" {
+	if labels[0] == "" {
 		panic(fmt.Sprintf("empty %q value in the context", keyLabel))
 	}
-	return label
+	return labels[0]
 }
 
 // WithLabelValue stores a label in the given context.
