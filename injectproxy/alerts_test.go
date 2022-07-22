@@ -99,7 +99,6 @@ func TestGetAlerts(t *testing.T) {
 			for _, lv := range tc.labelv {
 				q.Add(proxyLabel, lv)
 			}
-
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
