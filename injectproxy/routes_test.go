@@ -258,7 +258,7 @@ func TestWithPassthroughPaths(t *testing.T) {
 
 func TestMatch(t *testing.T) {
 	for _, tc := range []struct {
-		labelv  string
+		labelv  []string
 		matches []string
 
 		expCode  int
@@ -271,33 +271,49 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			// No "match" parameter.
-			labelv:   "default",
+			labelv:   []string{"default"},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{namespace="default"}`},
+			expMatch: []string{`{namespace=~"default"}`},
 			expBody:  okResponse,
 		},
 		{
 			// Single "match" parameters.
-			labelv:   "default",
+			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus",__name__=~"job:.*"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace=~"default"}`},
+			expBody:  okResponse,
+		},
+		{
+			// Single "match" parameters with multiple label values.
+			labelv:   []string{"default", "something"},
+			matches:  []string{`{job="prometheus",__name__=~"job:.*"}`},
+			expCode:  http.StatusOK,
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace=~"default|something"}`},
+			expBody:  okResponse,
+		},
+		{
+			// Check that label values are correctly escaped.
+			labelv:   []string{"default", "some|thing"},
+			matches:  []string{`{job="prometheus",__name__=~"job:.*"}`},
+			expCode:  http.StatusOK,
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace=~"default|some\\|thing"}`},
 			expBody:  okResponse,
 		},
 		{
 			// Single "match" parameters with label dup name.
-			labelv:   "default",
+			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default",namespace="default"}`},
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default",namespace=~"default"}`},
 			expBody:  okResponse,
 		},
 		{
 			// Many "match" parameters.
-			labelv:   "default",
+			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus"}`, `{__name__=~"job:.*"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",namespace="default"}`, `{__name__=~"job:.*",namespace="default"}`},
+			expMatch: []string{`{job="prometheus",namespace=~"default"}`, `{__name__=~"job:.*",namespace=~"default"}`},
 			expBody:  okResponse,
 		},
 	} {
@@ -327,7 +343,9 @@ func TestMatch(t *testing.T) {
 				for _, m := range tc.matches {
 					q.Add(matchersParam, m)
 				}
-				q.Set(proxyLabel, tc.labelv)
+				for _, lv := range tc.labelv {
+					q.Add(proxyLabel, lv)
+				}
 				u.RawQuery = q.Encode()
 
 				w := httptest.NewRecorder()
@@ -357,7 +375,7 @@ func TestMatch(t *testing.T) {
 
 func TestMatchWithPost(t *testing.T) {
 	for _, tc := range []struct {
-		labelv  string
+		labelv  []string
 		matches []string
 
 		expCode  int
@@ -370,33 +388,49 @@ func TestMatchWithPost(t *testing.T) {
 		},
 		{
 			// No "match" parameter.
-			labelv:   "default",
+			labelv:   []string{"default"},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{namespace="default"}`},
+			expMatch: []string{`{namespace=~"default"}`},
 			expBody:  okResponse,
 		},
 		{
 			// Single "match" parameters.
-			labelv:   "default",
+			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus",__name__=~"job:.*"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace=~"default"}`},
+			expBody:  okResponse,
+		},
+		{
+			// Single "match" parameters with multiple label values.
+			labelv:   []string{"default", "something"},
+			matches:  []string{`{job="prometheus",__name__=~"job:.*"}`},
+			expCode:  http.StatusOK,
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace=~"default|something"}`},
+			expBody:  okResponse,
+		},
+		{
+			// Check that label values are correctly escaped.
+			labelv:   []string{"default", "some|thing"},
+			matches:  []string{`{job="prometheus",__name__=~"job:.*"}`},
+			expCode:  http.StatusOK,
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace=~"default|some\\|thing"}`},
 			expBody:  okResponse,
 		},
 		{
 			// Single "match" parameters with label dup name.
-			labelv:   "default",
+			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default",namespace="default"}`},
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default",namespace=~"default"}`},
 			expBody:  okResponse,
 		},
 		{
 			// Many "match" parameters.
-			labelv:   "default",
+			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus"}`, `{__name__=~"job:.*"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",namespace="default"}`, `{__name__=~"job:.*",namespace="default"}`},
+			expMatch: []string{`{job="prometheus",namespace=~"default"}`, `{__name__=~"job:.*",namespace=~"default"}`},
 			expBody:  okResponse,
 		},
 	} {
@@ -424,7 +458,9 @@ func TestMatchWithPost(t *testing.T) {
 				for _, m := range tc.matches {
 					q.Add(matchersParam, m)
 				}
-				q.Set(proxyLabel, tc.labelv)
+				for _, lv := range tc.labelv {
+					q.Add(proxyLabel, lv)
+				}
 
 				w := httptest.NewRecorder()
 				req := httptest.NewRequest(http.MethodPost, u.String(), strings.NewReader(q.Encode()))
@@ -455,7 +491,7 @@ func TestMatchWithPost(t *testing.T) {
 func TestSeries(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
-		labelv      string
+		labelv      []string
 		promQuery   string
 		expResponse []byte
 		expCode     int
@@ -472,32 +508,48 @@ func TestSeries(t *testing.T) {
 		},
 		{
 			name:        `No "match[]" parameter returns 200 with empty body`,
-			labelv:      "default",
-			expMatch:    []string{`{namespace="default"}`},
+			labelv:      []string{"default"},
+			expMatch:    []string{`{namespace=~"default"}`},
 			expResponse: okResponse,
 			expCode:     http.StatusOK,
 		},
 		{
 			name:        `No "match[]" parameter returns 200 with empty body for POSTs`,
-			labelv:      "default",
-			expMatch:    []string{`{namespace="default"}`},
+			labelv:      []string{"default"},
+			expMatch:    []string{`{namespace=~"default"}`},
 			expResponse: okResponse,
 			expCode:     http.StatusOK,
 		},
 		{
 			name:        `Series`,
-			labelv:      "default",
+			labelv:      []string{"default"},
 			promQuery:   "up",
 			expCode:     http.StatusOK,
-			expMatch:    []string{`{__name__="up",namespace="default"}`},
+			expMatch:    []string{`{__name__="up",namespace=~"default"}`},
+			expResponse: okResponse,
+		},
+		{
+			name:        `Series with multiple label values`,
+			labelv:      []string{"default", "something"},
+			promQuery:   "up",
+			expCode:     http.StatusOK,
+			expMatch:    []string{`{__name__="up",namespace=~"default|something"}`},
+			expResponse: okResponse,
+		},
+		{
+			name:        `Series: check that label values are correctly escaped`,
+			labelv:      []string{"default", "some|thing"},
+			promQuery:   "up",
+			expCode:     http.StatusOK,
+			expMatch:    []string{`{__name__="up",namespace=~"default|some\\|thing"}`},
 			expResponse: okResponse,
 		},
 		{
 			name:        `Series with labels`,
-			labelv:      "default",
+			labelv:      []string{"default"},
 			promQuery:   `up{instance="localhost:9090"}`,
 			expCode:     http.StatusOK,
-			expMatch:    []string{`{instance="localhost:9090",__name__="up",namespace="default"}`},
+			expMatch:    []string{`{instance="localhost:9090",__name__="up",namespace=~"default"}`},
 			expResponse: okResponse,
 		},
 	} {
@@ -524,8 +576,8 @@ func TestSeries(t *testing.T) {
 				if tc.promQuery != "" {
 					q.Add(matchersParam, tc.promQuery)
 				}
-				if tc.labelv != "" {
-					q.Set(proxyLabel, tc.labelv)
+				for _, lv := range tc.labelv {
+					q.Add(proxyLabel, lv)
 				}
 				u.RawQuery = q.Encode()
 
@@ -561,7 +613,7 @@ func TestSeries(t *testing.T) {
 func TestSeriesWithPost(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
-		labelv        string
+		labelv        []string
 		promQueryBody string
 		expResponse   []byte
 		method        string
@@ -580,36 +632,54 @@ func TestSeriesWithPost(t *testing.T) {
 		},
 		{
 			name:        `No "match[]" parameter returns 200 with empty body`,
-			labelv:      "default",
+			labelv:      []string{"default"},
 			method:      http.MethodPost,
-			expMatch:    []string{`{namespace="default"}`},
+			expMatch:    []string{`{namespace=~"default"}`},
 			expResponse: okResponse,
 			expCode:     http.StatusOK,
 		},
 		{
 			name:        `No "match[]" parameter returns 200 with empty body for POSTs`,
 			method:      http.MethodPost,
-			labelv:      "default",
-			expMatch:    []string{`{namespace="default"}`},
+			labelv:      []string{"default"},
+			expMatch:    []string{`{namespace=~"default"}`},
 			expResponse: okResponse,
 			expCode:     http.StatusOK,
 		},
 		{
 			name:          `Series POST`,
-			labelv:        "default",
+			labelv:        []string{"default"},
 			promQueryBody: "up",
 			method:        http.MethodPost,
 			expCode:       http.StatusOK,
-			expMatch:      []string{`{__name__="up",namespace="default"}`},
+			expMatch:      []string{`{__name__="up",namespace=~"default"}`},
+			expResponse:   okResponse,
+		},
+		{
+			name:          `Series POST with multiple label values`,
+			labelv:        []string{"default", "something"},
+			promQueryBody: "up",
+			method:        http.MethodPost,
+			expCode:       http.StatusOK,
+			expMatch:      []string{`{__name__="up",namespace=~"default|something"}`},
+			expResponse:   okResponse,
+		},
+		{
+			name:          `Series POST: check that label values are correctly escaped`,
+			labelv:        []string{"default", "some|thing"},
+			promQueryBody: "up",
+			method:        http.MethodPost,
+			expCode:       http.StatusOK,
+			expMatch:      []string{`{__name__="up",namespace=~"default|some\\|thing"}`},
 			expResponse:   okResponse,
 		},
 		{
 			name:          `Series with labels POST`,
-			labelv:        "default",
+			labelv:        []string{"default"},
 			promQueryBody: `up{instance="localhost:9090"}`,
 			method:        http.MethodPost,
 			expCode:       http.StatusOK,
-			expMatch:      []string{`{instance="localhost:9090",__name__="up",namespace="default"}`},
+			expMatch:      []string{`{instance="localhost:9090",__name__="up",namespace=~"default"}`},
 			expResponse:   okResponse,
 		},
 	} {
@@ -633,7 +703,9 @@ func TestSeriesWithPost(t *testing.T) {
 					t.Fatalf("unexpected error: %v", err)
 				}
 				q := u.Query()
-				q.Set(proxyLabel, tc.labelv)
+				for _, lv := range tc.labelv {
+					q.Add(proxyLabel, lv)
+				}
 				u.RawQuery = q.Encode()
 
 				var b io.Reader = nil
@@ -724,6 +796,14 @@ func TestQuery(t *testing.T) {
 			promQuery:    "up",
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace=~"default"}`,
+			expResponse:  okResponse,
+		},
+		{
+			name:         `Query: check that label values are correctly escaped`,
+			labelv:       []string{"de|fault"},
+			promQuery:    "up",
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace=~"de\\|fault"}`,
 			expResponse:  okResponse,
 		},
 		{

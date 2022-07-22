@@ -150,7 +150,7 @@ and specifying the namespace label must be enforced to `b`, then the query will 
 
 
 ```
-http_requests_total{namespace="b"}
+http_requests_total{namespace=~"b"}
 ```
 
 This is enforced for any case, whether a label matcher is specified in the original query or not.

@@ -19,13 +19,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"path"
+	"regexp/syntax"
 	"strconv"
 	"strings"
 
 	runtimeclient "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+	"github.com/pkg/errors"
 	"github.com/prometheus/alertmanager/api/v2/client"
 	"github.com/prometheus/alertmanager/api/v2/client/silence"
 	"github.com/prometheus/alertmanager/api/v2/models"
@@ -35,7 +38,7 @@ import (
 func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "GET":
-		r.enforceFilterParameter(w, req)
+		r.getsilences(w, req)
 	case "POST":
 		r.postSilence(w, req)
 	default:
@@ -43,13 +46,80 @@ func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (r *routes) getsilences(w http.ResponseWriter, req *http.Request) {
+	q := req.URL.Query()
+	q.Del(r.label)
+	req.URL.RawQuery = q.Encode()
+	r.handler.ServeHTTP(w, req)
+}
+
+func (r *routes) filterSilences(lvalues []string, data models.GettableSilences) (interface{}, error) {
+	filtered := models.GettableSilences{}
+
+	for _, gts := range data {
+		if hasMatcherForLabel(gts.Matchers, r.label, lvalues) {
+			filtered = append(filtered, gts)
+		}
+	}
+
+	return filtered, nil
+}
+
+func getAlertmanagerAPIResponse(resp *http.Response) (models.GettableSilences, error) {
+	defer resp.Body.Close()
+	reader := resp.Body
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var apir models.GettableSilences
+	if err := json.NewDecoder(reader).Decode(&apir); err != nil {
+		return nil, errors.Wrap(err, "JSON decoding")
+	}
+
+	return apir, nil
+}
+
+func modifyAlertmanagerResponse(f func([]string, models.GettableSilences) (interface{}, error)) func(*http.Response) error {
+	return func(resp *http.Response) error {
+		if resp.Request.Method != http.MethodGet {
+			return nil
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			// Pass non-200 responses as-is.
+			return nil
+		}
+
+		apir, err := getAlertmanagerAPIResponse(resp)
+		if err != nil {
+			return errors.Wrap(err, "can't decode API response")
+		}
+
+		v, err := f(MustLabelValues(resp.Request.Context()), apir)
+		if err != nil {
+			return err
+		}
+
+		var buf bytes.Buffer
+		if err = json.NewEncoder(&buf).Encode(v); err != nil {
+			return errors.Wrap(err, "can't encode API response")
+		}
+		resp.Body = ioutil.NopCloser(&buf)
+		resp.Header["Content-Length"] = []string{fmt.Sprint(buf.Len())}
+
+		return nil
+	}
+}
+
 func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request) {
 	var (
 		q               = req.URL.Query()
 		proxyLabelMatch = labels.Matcher{
-			Type:  labels.MatchEqual,
+			Type:  labels.MatchRegexp,
 			Name:  r.label,
-			Value: MustLabelValue(req.Context()),
+			Value: joinMultipleLabelValues(MustLabelValues(req.Context())),
 		}
 		modified = []string{proxyLabelMatch.String()}
 	)
@@ -74,8 +144,9 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 
 func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 	var (
-		sil    models.PostableSilence
-		lvalue = MustLabelValue(req.Context())
+		sil          models.PostableSilence
+		lvalues      = MustLabelValues(req.Context())
+		matcherValue = joinMultipleLabelValues(lvalues)
 	)
 	if err := json.NewDecoder(req.Body).Decode(&sil); err != nil {
 		prometheusAPIError(w, fmt.Sprintf("bad request: can't decode: %v", err), http.StatusBadRequest)
@@ -90,15 +161,15 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !hasMatcherForLabel(existing.Matchers, r.label, lvalue) {
+		if !hasMatcherForLabel(existing.Matchers, r.label, lvalues) {
 			prometheusAPIError(w, "forbidden", http.StatusForbidden)
 			return
 		}
 	}
 
-	var falsy bool
+	truthy := true
 	modified := models.Matchers{
-		&models.Matcher{Name: &(r.label), Value: &lvalue, IsRegex: &falsy},
+		&models.Matcher{Name: &(r.label), Value: &matcherValue, IsRegex: &truthy},
 	}
 	for _, m := range sil.Matchers {
 		if m.Name != nil && *m.Name == r.label {
@@ -143,7 +214,7 @@ func (r *routes) deleteSilence(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if !hasMatcherForLabel(sil.Matchers, r.label, MustLabelValue(req.Context())) {
+	if !hasMatcherForLabel(sil.Matchers, r.label, MustLabelValues(req.Context())) {
 		prometheusAPIError(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -166,11 +237,76 @@ func (r *routes) getSilenceByID(ctx context.Context, id string) (*models.Gettabl
 	return sil.Payload, nil
 }
 
-func hasMatcherForLabel(matchers models.Matchers, name, value string) bool {
+func hasMatcherForLabel(matchers models.Matchers, name string, values []string) bool {
 	for _, m := range matchers {
-		if *m.Name == name && !*m.IsRegex && *m.Value == value {
-			return true
+		if *m.Name == name {
+			if *m.IsRegex {
+				r, err := syntax.Parse(*m.Value, 0)
+				if err != nil {
+					return false
+				}
+
+				return doesRegexMatchSubSlice(r, values, 10)
+
+			} else if contains(values, *m.Value) {
+				return true
+			}
 		}
 	}
+	return false
+}
+
+func doesRegexMatchSubSlice(re *syntax.Regexp, slice []string, maxDepth int) bool {
+	if maxDepth <= 0 {
+		return false
+	}
+
+	// Literal: namespace=~"namespace1"
+	if re.Op == syntax.OpLiteral {
+		return contains(slice, string(re.Rune))
+	}
+
+	// Alternate: namespace=~"default|something"
+	// Capture: namespace=~"(default)|something"
+	if re.Op == syntax.OpAlternate || re.Op == syntax.OpCapture {
+		for _, subRe := range re.Sub {
+			if !doesRegexMatchSubSlice(subRe, slice, maxDepth-1) {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	// Concat: namespace=~"namespace1|namespace2"
+	if re.Op == syntax.OpConcat {
+		var lvs []string
+		for i, _ := range slice {
+			if strings.HasPrefix(slice[i], string(re.Sub[0].Rune)) {
+				lvs = append(lvs, strings.TrimPrefix(slice[i], string(re.Sub[0].Rune)))
+			}
+		}
+		if len(lvs) == 0 {
+			return false
+		}
+
+		return doesRegexMatchSubSlice(re.Sub[1], lvs, maxDepth-1)
+	}
+
+	// CharClass: namespace=~"a|b"
+	if re.Op == syntax.OpCharClass {
+		for _, char := range re.Rune {
+			if !contains(slice, string(char)) {
+				return false
+			}
+		}
+		return true
+	}
+
+	// EmptyMatch: for Concat: namespace=~"default|default2"
+	if re.Op == syntax.OpEmptyMatch {
+		return contains(slice, "")
+	}
+
 	return false
 }

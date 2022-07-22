@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/efficientgo/core/merrors"
@@ -346,8 +347,9 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 	r.mux = mux
 	r.modifiers = map[string]func(*http.Response) error{
-		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
-		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
+		"/api/v1/rules":    modifyAPIResponse(r.filterRules),
+		"/api/v1/alerts":   modifyAPIResponse(r.filterAlerts),
+		"/api/v2/silences": modifyAlertmanagerResponse(r.filterSilences),
 	}
 	proxy.ModifyResponse = r.ModifyResponse
 	return r, nil
@@ -382,22 +384,30 @@ type ctxKey int
 
 const keyLabel ctxKey = iota
 
-// MustLabelValue returns a label (previously stored using WithLabelValue())
+// MustLabelValues returns labels (previously stored using WithLabelValue())
 // from the given context.
 // It will panic if no label is found or the value is empty.
-func MustLabelValue(ctx context.Context) string {
+func MustLabelValues(ctx context.Context) []string {
 	labels, ok := ctx.Value(keyLabel).([]string)
 	if !ok {
 		panic(fmt.Sprintf("can't find the %q value in the context", keyLabel))
 	}
-	if labels[0] == "" {
+	if len(labels) == 0 {
 		panic(fmt.Sprintf("empty %q value in the context", keyLabel))
 	}
-	return labels[0]
+	return labels
 }
 
-// WithLabelValue stores a label in the given context.
-func WithLabelValues(ctx context.Context, labels []string) context.Context {
+func joinMultipleLabelValues(labelValues []string) string {
+	lvs := make([]string, len(labelValues))
+	for i := range labelValues {
+		lvs[i] = regexp.QuoteMeta(labelValues[i])
+	}
+
+	return strings.Join(lvs, "|")
+}
+
+func withLabelValues(ctx context.Context, labels []string) context.Context {
 	return context.WithValue(ctx, keyLabel, labels)
 }
 
@@ -406,11 +416,12 @@ func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
+
 	e := NewEnforcer(r.errorOnReplace,
 		[]*labels.Matcher{{
 			Name:  r.label,
 			Type:  labels.MatchRegexp,
-			Value: MustLabelValue(req.Context()),
+			Value: joinMultipleLabelValues(MustLabelValues(req.Context())),
 		}}...)
 
 	// The `query` can come in the URL query string and/or the POST body.
@@ -495,8 +506,8 @@ func enforceQueryValues(e *Enforcer, v url.Values) (values string, noQuery bool,
 func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	matcher := &labels.Matcher{
 		Name:  r.label,
-		Type:  labels.MatchEqual,
-		Value: MustLabelValue(req.Context()),
+		Type:  labels.MatchRegexp,
+		Value: joinMultipleLabelValues(MustLabelValues(req.Context())),
 	}
 	q := req.URL.Query()
 

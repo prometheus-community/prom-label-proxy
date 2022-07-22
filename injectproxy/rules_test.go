@@ -327,7 +327,7 @@ func validAlerts() http.Handler {
 
 func TestRules(t *testing.T) {
 	for _, tc := range []struct {
-		labelv     string
+		labelv     []string
 		upstream   http.Handler
 		reqHeaders http.Header
 
@@ -341,7 +341,7 @@ func TestRules(t *testing.T) {
 		},
 		{
 			// non 200 status code from upstream is passed as-is.
-			labelv: "upstream_error",
+			labelv: []string{"upstream_error"},
 			upstream: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				w.Write([]byte("error"))
@@ -352,7 +352,7 @@ func TestRules(t *testing.T) {
 		},
 		{
 			// incomplete API response triggers a 502 error.
-			labelv: "incomplete_data_from_upstream",
+			labelv: []string{"incomplete_data_from_upstream"},
 			upstream: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				w.Write([]byte("{"))
 			}),
@@ -362,7 +362,7 @@ func TestRules(t *testing.T) {
 		},
 		{
 			// invalid API response triggers a 502 error.
-			labelv: "invalid_data_from_upstream",
+			labelv: []string{"invalid_data_from_upstream"},
 			upstream: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				w.Write([]byte("0"))
 			}),
@@ -372,7 +372,7 @@ func TestRules(t *testing.T) {
 		},
 		{
 			// "namespace" parameter matching no rule.
-			labelv:   "not_present",
+			labelv:   []string{"not_present"},
 			upstream: validRules(),
 
 			expCode: http.StatusOK,
@@ -385,7 +385,7 @@ func TestRules(t *testing.T) {
 		},
 		{
 			// Gzipped response should be handled when explictly asked by the original client.
-			labelv:   "not_present_gzip_requested",
+			labelv:   []string{"not_present_gzip_requested"},
 			upstream: gzipHandler(validRules()),
 			reqHeaders: map[string][]string{
 				"Accept-Encoding": []string{"gzip"},
@@ -403,7 +403,7 @@ func TestRules(t *testing.T) {
 			// When the client doesn't ask explicitly for gzip encoding, the Go
 			// standard library will automatically ask for it and it will
 			// transparently decompress the gzipped response.
-			labelv:   "not_present_gzip_not_requested",
+			labelv:   []string{"not_present_gzip_not_requested"},
 			upstream: gzipHandler(validRules()),
 
 			expCode: http.StatusOK,
@@ -415,7 +415,7 @@ func TestRules(t *testing.T) {
 }`),
 		},
 		{
-			labelv:   "ns1",
+			labelv:   []string{"ns1"},
 			upstream: validRules(),
 
 			expCode: http.StatusOK,
@@ -532,7 +532,7 @@ func TestRules(t *testing.T) {
 }`),
 		},
 		{
-			labelv:   "ns2",
+			labelv:   []string{"ns2"},
 			upstream: validRules(),
 
 			expCode: http.StatusOK,
@@ -540,6 +540,232 @@ func TestRules(t *testing.T) {
   "status": "success",
   "data": {
     "groups": [
+      {
+        "name": "group1",
+        "file": "testdata/rules2.yml",
+        "rules": [
+          {
+            "name": "metric1",
+            "query": "1",
+            "labels": {
+              "namespace": "ns2"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "Alert1",
+            "query": "metric1{namespace=\"ns2\"} == 0",
+            "duration": 0,
+            "labels": {
+              "namespace": "ns2"
+            },
+            "annotations": {},
+            "alerts": [],
+            "health": "ok",
+            "type": "alerting"
+          }
+        ],
+        "interval": 10
+      },
+      {
+        "name": "group2",
+        "file": "testdata/rules2.yml",
+        "rules": [
+          {
+            "name": "metric2",
+            "query": "1",
+            "labels": {
+              "namespace": "ns2",
+              "operation": "create"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "metric2",
+            "query": "2",
+            "labels": {
+              "namespace": "ns2",
+              "operation": "update"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "metric2",
+            "query": "3",
+            "labels": {
+              "namespace": "ns2",
+              "operation": "delete"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "metric3",
+            "query": "0",
+            "labels": {
+              "namespace": "ns2"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "Alert2",
+            "query": "metric2{namespace=\"ns2\"} == 0",
+            "duration": 0,
+            "labels": {
+              "namespace": "ns2"
+            },
+            "annotations": {},
+            "alerts": [],
+            "health": "ok",
+            "type": "alerting"
+          },
+          {
+            "name": "Alert3",
+            "query": "metric3{namespace=\"ns2\"} == 0",
+            "duration": 0,
+            "labels": {
+              "namespace": "ns2"
+            },
+            "annotations": {},
+            "alerts": [
+              {
+                "labels": {
+                  "alertname": "Alert3",
+                  "namespace": "ns2"
+                },
+                "annotations": {},
+                "state": "firing",
+                "activeAt": "2019-12-18T13:14:39.972915521+01:00",
+                "value": "0e+00"
+              }
+            ],
+            "health": "ok",
+            "type": "alerting"
+          }
+        ],
+        "interval": 10
+      }
+    ]
+  }
+}`),
+		},
+		{
+			labelv:   []string{"ns1", "ns2"},
+			upstream: validRules(),
+
+			expCode: http.StatusOK,
+			expBody: []byte(`{
+  "status": "success",
+  "data": {
+    "groups": [
+      {
+        "name": "group1",
+        "file": "testdata/rules1.yml",
+        "rules": [
+          {
+            "name": "metric1",
+            "query": "0",
+            "labels": {
+              "namespace": "ns1"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "metric2",
+            "query": "1",
+            "labels": {
+              "namespace": "ns1",
+              "operation": "create"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "metric2",
+            "query": "0",
+            "labels": {
+              "namespace": "ns1",
+              "operation": "update"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "metric2",
+            "query": "0",
+            "labels": {
+              "namespace": "ns1",
+              "operation": "delete"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "Alert1",
+            "query": "metric1{namespace=\"ns1\"} == 0",
+            "duration": 0,
+            "labels": {
+              "namespace": "ns1"
+            },
+            "annotations": {},
+            "alerts": [
+              {
+                "labels": {
+                  "alertname": "Alert1",
+                  "namespace": "ns1"
+                },
+                "annotations": {},
+                "state": "firing",
+                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+                "value": "0e+00"
+              }
+            ],
+            "health": "ok",
+            "type": "alerting"
+          },
+          {
+            "name": "Alert2",
+            "query": "metric2{namespace=\"ns1\"} == 0",
+            "duration": 0,
+            "labels": {
+              "namespace": "ns1"
+            },
+            "annotations": {},
+            "alerts": [
+              {
+                "labels": {
+                  "alertname": "Alert2",
+                  "namespace": "ns1",
+                  "operation": "update"
+                },
+                "annotations": {},
+                "state": "firing",
+                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+                "value": "0e+00"
+              },
+              {
+                "labels": {
+                  "alertname": "Alert2",
+                  "namespace": "ns1",
+                  "operation": "delete"
+                },
+                "annotations": {},
+                "state": "firing",
+                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+                "value": "0e+00"
+              }
+            ],
+            "health": "ok",
+            "type": "alerting"
+          }
+        ],
+        "interval": 10
+      },
       {
         "name": "group1",
         "file": "testdata/rules2.yml",
@@ -666,8 +892,12 @@ func TestRules(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+
 			q := u.Query()
-			q.Set(proxyLabel, tc.labelv)
+			for _, lv := range tc.labelv {
+				q.Add(proxyLabel, lv)
+			}
+
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
@@ -709,7 +939,7 @@ func TestRules(t *testing.T) {
 
 func TestAlerts(t *testing.T) {
 	for _, tc := range []struct {
-		labelv   string
+		labelv   []string
 		upstream http.Handler
 
 		expCode int
@@ -722,7 +952,7 @@ func TestAlerts(t *testing.T) {
 		},
 		{
 			// non 200 status code from upstream is passed as-is.
-			labelv: "upstream_error",
+			labelv: []string{"upstream_error"},
 			upstream: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				w.Write([]byte("error"))
@@ -733,7 +963,7 @@ func TestAlerts(t *testing.T) {
 		},
 		{
 			// incomplete API response triggers a 502 error.
-			labelv: "incomplete_data_from_upstream",
+			labelv: []string{"incomplete_data_from_upstream"},
 			upstream: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				w.Write([]byte("{"))
 			}),
@@ -743,7 +973,7 @@ func TestAlerts(t *testing.T) {
 		},
 		{
 			// invalid API response triggers a 502 error.
-			labelv: "invalid_data_from_upstream",
+			labelv: []string{"invalid_data_from_upstream"},
 			upstream: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				w.Write([]byte("0"))
 			}),
@@ -753,7 +983,7 @@ func TestAlerts(t *testing.T) {
 		},
 		{
 			// "namespace" parameter matching no rule.
-			labelv:   "not_present",
+			labelv:   []string{"not_present"},
 			upstream: validAlerts(),
 
 			expCode: http.StatusOK,
@@ -765,7 +995,7 @@ func TestAlerts(t *testing.T) {
 }`),
 		},
 		{
-			labelv:   "ns1",
+			labelv:   []string{"ns1"},
 			upstream: validAlerts(),
 
 			expCode: http.StatusOK,
@@ -810,7 +1040,7 @@ func TestAlerts(t *testing.T) {
 }`),
 		},
 		{
-			labelv:   "ns2",
+			labelv:   []string{"ns2"},
 			upstream: validAlerts(),
 
 			expCode: http.StatusOK,
@@ -818,6 +1048,61 @@ func TestAlerts(t *testing.T) {
   "status": "success",
   "data": {
     "alerts": [
+      {
+        "labels": {
+          "alertname": "Alert3",
+          "namespace": "ns2"
+        },
+        "annotations": {},
+        "state": "firing",
+        "activeAt": "2019-12-18T13:14:39.972915521+01:00",
+        "value": "0e+00"
+      }
+    ]
+  }
+}`),
+		},
+		{
+			labelv:   []string{"ns1", "ns2"},
+			upstream: validAlerts(),
+
+			expCode: http.StatusOK,
+			expBody: []byte(`{
+  "status": "success",
+  "data": {
+    "alerts": [
+      {
+        "labels": {
+          "alertname": "Alert1",
+          "namespace": "ns1"
+        },
+        "annotations": {},
+        "state": "firing",
+        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+        "value": "0e+00"
+      },
+      {
+        "labels": {
+          "alertname": "Alert2",
+          "namespace": "ns1",
+          "operation": "update"
+        },
+        "annotations": {},
+        "state": "firing",
+        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+        "value": "0e+00"
+      },
+      {
+        "labels": {
+          "alertname": "Alert2",
+          "namespace": "ns1",
+          "operation": "delete"
+        },
+        "annotations": {},
+        "state": "firing",
+        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+        "value": "0e+00"
+      },
       {
         "labels": {
           "alertname": "Alert3",
@@ -846,7 +1131,9 @@ func TestAlerts(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			q := u.Query()
-			q.Set(proxyLabel, tc.labelv)
+			for _, lv := range tc.labelv {
+				q.Add(proxyLabel, lv)
+			}
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
