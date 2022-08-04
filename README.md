@@ -18,6 +18,10 @@ See [Prometheus Operator](https://github.com/prometheus-operator/prometheus-oper
 
 ## Installing `prom-label-proxy`
 
+### Helm
+
+See: https://github.com/prometheus-community/helm-charts/tree/main/charts/prom-label-proxy
+
 ### Docker
 
 We publish docker images for each release, see:
