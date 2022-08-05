@@ -349,7 +349,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	r.modifiers = map[string]func(*http.Response) error{
 		"/api/v1/rules":    modifyAPIResponse(r.filterRules),
 		"/api/v1/alerts":   modifyAPIResponse(r.filterAlerts),
-		"/api/v2/silences": modifyAlertmanagerResponse(r.filterSilences),
+		"/api/v2/silences": r.filterSilences(),
 	}
 	proxy.ModifyResponse = r.ModifyResponse
 	return r, nil

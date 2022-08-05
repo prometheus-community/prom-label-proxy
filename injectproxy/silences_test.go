@@ -76,31 +76,6 @@ func validSilences() http.Handler {
 		"startsAt": "2022-07-22T09:47:17.007Z"
 	},
 	{
-		"id": "2abf41de-0086-4947-8aa9-dd66d28f1b86",
-		"status": {
-			"state": "active"
-		},
-		"updatedAt": "2022-07-22T09:48:00.091Z",
-		"comment": "foo",
-		"createdBy": "bar",
-		"endsAt": "2023-02-13T13:00:02.084Z",
-		"matchers": [
-			{
-				"isEqual": true,
-				"isRegex": true,
-				"name": "namespace",
-				"value": "ns1|ns2|ns3"
-			},
-			{
-				"isEqual": true,
-				"isRegex": false,
-				"name": "foo",
-				"value": "bar"
-			}
-		],
-		"startsAt": "2022-07-22T09:48:00.091Z"
-	},
-	{
 		"id": "8b454fdc-6538-423e-b988-7f64655232c8",
 		"status": {
 			"state": "active"
@@ -239,25 +214,6 @@ func TestListSilences(t *testing.T) {
 			expCode: http.StatusOK,
 			expBody: []byte(`[
 				{
-					"id": "44cc7dd1-6976-44ea-8db4-8fd53a231ab2",
-					"status": {
-						"state": "active"
-					},
-					"updatedAt": "2022-07-22T09:50:04.545Z",
-					"comment": "a",
-					"createdBy": "a",
-					"endsAt": "2022-07-22T11:49:40.163Z",
-					"matchers": [
-						{
-							"isEqual": true,
-							"isRegex": false,
-							"name": "namespace",
-							"value": "ns1"
-						}
-					],
-					"startsAt": "2022-07-22T09:50:04.545Z"
-				},
-				{
 					"id": "23b6a056-b53e-4a3d-a5df-6e890b59f3c4",
 					"status": {
 						"state": "active"
@@ -291,25 +247,6 @@ func TestListSilences(t *testing.T) {
 			expCode: http.StatusOK,
 			expBody: []byte(`[
 				{
-					"id": "44cc7dd1-6976-44ea-8db4-8fd53a231ab2",
-					"status": {
-						"state": "active"
-					},
-					"updatedAt": "2022-07-22T09:50:04.545Z",
-					"comment": "a",
-					"createdBy": "a",
-					"endsAt": "2022-07-22T11:49:40.163Z",
-					"matchers": [
-						{
-							"isEqual": true,
-							"isRegex": false,
-							"name": "namespace",
-							"value": "ns1"
-						}
-					],
-					"startsAt": "2022-07-22T09:50:04.545Z"
-				},
-				{
 					"id": "742b1215-1140-47a6-9fc7-5a98a6b0f99b",
 					"status": {
 						"state": "active"
@@ -333,106 +270,6 @@ func TestListSilences(t *testing.T) {
 						}
 					],
 					"startsAt": "2022-07-22T09:47:17.007Z"
-				},
-				{
-					"id": "2abf41de-0086-4947-8aa9-dd66d28f1b86",
-					"status": {
-						"state": "active"
-					},
-					"updatedAt": "2022-07-22T09:48:00.091Z",
-					"comment": "foo",
-					"createdBy": "bar",
-					"endsAt": "2023-02-13T13:00:02.084Z",
-					"matchers": [
-						{
-							"isEqual": true,
-							"isRegex": true,
-							"name": "namespace",
-							"value": "ns1|ns2|ns3"
-						},
-						{
-							"isEqual": true,
-							"isRegex": false,
-							"name": "foo",
-							"value": "bar"
-						}
-					],
-					"startsAt": "2022-07-22T09:48:00.091Z"
-				},
-				{
-					"id": "8b454fdc-6538-423e-b988-7f64655232c8",
-					"status": {
-						"state": "active"
-					},
-					"updatedAt": "2022-07-22T09:49:10.191Z",
-					"comment": "foo",
-					"createdBy": "bar",
-					"endsAt": "2023-02-13T13:00:02.084Z",
-					"matchers": [
-						{
-							"isEqual": true,
-							"isRegex": true,
-							"name": "namespace",
-							"value": "ns1|ns2"
-						},
-						{
-							"isEqual": true,
-							"isRegex": false,
-							"name": "foo",
-							"value": "bar"
-						}
-					],
-					"startsAt": "2022-07-22T09:49:10.191Z"
-				},
-				{
-					"id": "23b6a056-b53e-4a3d-a5df-6e890b59f3c4",
-					"status": {
-						"state": "active"
-					},
-					"updatedAt": "2022-07-22T09:49:20.973Z",
-					"comment": "foo",
-					"createdBy": "bar",
-					"endsAt": "2023-02-13T13:00:02.084Z",
-					"matchers": [
-						{
-							"isEqual": true,
-							"isRegex": true,
-							"name": "namespace",
-							"value": "ns1"
-						},
-						{
-							"isEqual": true,
-							"isRegex": false,
-							"name": "foo",
-							"value": "bar"
-						}
-					],
-					"startsAt": "2022-07-22T09:49:20.973Z"
-				},
-				{
-					"id": "30995bd4-2fc3-46c8-bb7f-edcb7113374c",
-					"status": {
-						"state": "expired"
-					},
-					"updatedAt": "2022-07-22T09:48:00.091Z",
-					"comment": "foo",
-					"createdBy": "bar",
-					"endsAt": "2022-07-22T09:48:00.091Z",
-					"matchers": [
-						{
-							"isEqual": true,
-							"isRegex": true,
-							"name": "namespace",
-							"value": "ns1|ns2"
-						},
-						{
-							"isEqual": true,
-							"isRegex": false,
-							"name": "foo",
-							"value": "bar"
-						}
-					],
-					"startsAt": "2022-07-22T09:46:05.986Z"
 				}
 			]`),
 		},
@@ -579,7 +416,7 @@ func getSilenceWithLabel(labelv string, regex bool) http.Handler {
 	})
 }
 
-func createSilenceWithLabel(labelv string) http.Handler {
+func createSilenceWithLabel(labelv string, expectedMatchersCount int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var sil models.PostableSilence
 		if err := json.NewDecoder(req.Body).Decode(&sil); err != nil {
@@ -587,17 +424,21 @@ func createSilenceWithLabel(labelv string) http.Handler {
 			return
 		}
 		var values []string
+		matcherCount := 0
 		for _, m := range sil.Matchers {
 			if *m.Name == proxyLabel {
-				values = append(values, *m.Value)
+				matcherCount++
+				if *m.IsRegex {
+					values = append(values, *m.Value)
+				}
 			}
 		}
-		if len(values) != 1 {
-			prometheusAPIError(w, fmt.Sprintf("expected 1 matcher for label %s, got %d", proxyLabel, len(values)), http.StatusInternalServerError)
+		if matcherCount != expectedMatchersCount {
+			prometheusAPIError(w, fmt.Sprintf("expected %d matcher for label %s, got %d", expectedMatchersCount, proxyLabel, len(values)), http.StatusInternalServerError)
 			return
 		}
-		if values[0] != labelv {
-			prometheusAPIError(w, fmt.Sprintf("expected matcher for label %s to be %q, got %q", proxyLabel, labelv, values[0]), http.StatusInternalServerError)
+		if !contains(values, labelv) {
+			prometheusAPIError(w, fmt.Sprintf("expected matcher for label %s to contain %q, got %q", proxyLabel, labelv, values), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -664,42 +505,12 @@ func TestDeleteSilence(t *testing.T) {
 			expCode:  http.StatusForbidden,
 		},
 		{
-			// The silence has the expected value for the label.
-			ID:     silID,
-			labelv: []string{"default"},
-			upstream: &chainedHandlers{
-				handlers: []http.Handler{
-					getSilenceWithLabel("default", false),
-					http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-						w.Write([]byte("ok"))
-					}),
-				},
-			},
-			expCode: http.StatusOK,
-			expBody: []byte("ok"),
-		},
-		{
 			// The silence has the expected regex value for the label.
 			ID:     silID,
 			labelv: []string{"default", "something", "anything"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
-					getSilenceWithLabel("default|something", true),
-					http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-						w.Write([]byte("ok"))
-					}),
-				},
-			},
-			expCode: http.StatusOK,
-			expBody: []byte("ok"),
-		},
-		{
-			// The silence has the expected value for given multiple label values.
-			ID:     silID,
-			labelv: []string{"default", "something", "anything"},
-			upstream: &chainedHandlers{
-				handlers: []http.Handler{
-					getSilenceWithLabel("default", false),
+					getSilenceWithLabel("anything|default|something", true),
 					http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 						w.Write([]byte("ok"))
 					}),
@@ -721,7 +532,7 @@ func TestDeleteSilence(t *testing.T) {
 			labelv: []string{"default"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
-					getSilenceWithLabel("default", false),
+					getSilenceWithLabel("default", true),
 					http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 						w.WriteHeader(http.StatusTeapot)
 					}),
@@ -805,7 +616,7 @@ func TestUpdateSilence(t *testing.T) {
     "startsAt":"2020-02-13T12:02:01Z"
 }`,
 			labelv:   []string{"default"},
-			upstream: createSilenceWithLabel("default"),
+			upstream: createSilenceWithLabel("default", 1),
 
 			expCode: http.StatusOK,
 			expBody: okResponse,
@@ -823,7 +634,7 @@ func TestUpdateSilence(t *testing.T) {
     "startsAt":"2020-02-13T12:02:01Z"
 }`,
 			labelv:   []string{"default"},
-			upstream: createSilenceWithLabel("default"),
+			upstream: createSilenceWithLabel("default", 2),
 
 			expCode: http.StatusOK,
 			expBody: okResponse,
@@ -856,31 +667,8 @@ func TestUpdateSilence(t *testing.T) {
 			labelv: []string{"default"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
-					getSilenceWithLabel("default", false),
-					createSilenceWithLabel("default"),
-				},
-			},
-
-			expCode: http.StatusOK,
-			expBody: okResponse,
-		},
-		{
-			// Update of an existing silence with a matching label with multiple label values is ok.
-			data: `{
-    "id":"` + silID + `",
-    "comment":"foo",
-    "createdBy":"bar",
-    "endsAt":"2020-02-13T13:00:02.084Z",
-    "matchers": [
-        {"isRegex":false,"Name":"foo","Value":"bar"}
-    ],
-    "startsAt":"2020-02-13T12:02:01Z"
-}`,
-			labelv: []string{"default", "something"},
-			upstream: &chainedHandlers{
-				handlers: []http.Handler{
-					getSilenceWithLabel("default", false),
-					createSilenceWithLabel("default|something"),
+					getSilenceWithLabel("default", true),
+					createSilenceWithLabel("default", 1),
 				},
 			},
 
@@ -903,7 +691,7 @@ func TestUpdateSilence(t *testing.T) {
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
 					getSilenceWithLabel("default|something", true),
-					createSilenceWithLabel("default|something"),
+					createSilenceWithLabel("default|something", 1),
 				},
 			},
 
@@ -925,8 +713,8 @@ func TestUpdateSilence(t *testing.T) {
 			labelv: []string{"default", "some|thing"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
-					getSilenceWithLabel("default", true),
-					createSilenceWithLabel("default|some\\|thing"),
+					getSilenceWithLabel("default|some\\\\|thing", true),
+					createSilenceWithLabel("default|some\\|thing", 1),
 				},
 			},
 
@@ -949,7 +737,7 @@ func TestUpdateSilence(t *testing.T) {
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
 					getSilenceWithLabel("default|not default", true),
-					createSilenceWithLabel("default|something"),
+					createSilenceWithLabel("default|something", 1),
 				},
 			},
 
@@ -971,7 +759,7 @@ func TestUpdateSilence(t *testing.T) {
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
 					getSilenceWithLabel("not default", false),
-					createSilenceWithLabel("default"),
+					createSilenceWithLabel("default", 1),
 				},
 			},
 
@@ -1011,7 +799,7 @@ func TestUpdateSilence(t *testing.T) {
 			labelv: []string{"default"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
-					getSilenceWithLabel("default", false),
+					getSilenceWithLabel("default", true),
 					http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 						w.WriteHeader(http.StatusTeapot)
 					}),

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -242,10 +243,7 @@ func (r *routes) filterAlerts(lvalues []string, resp *apiResponse) (interface{},
 }
 
 func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	i := sort.SearchStrings(list, s)
+
+	return i < len(list) && list[i] == s
 }

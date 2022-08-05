@@ -22,7 +22,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path"
-	"regexp/syntax"
 	"strconv"
 	"strings"
 
@@ -38,7 +37,7 @@ import (
 func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "GET":
-		r.getsilences(w, req)
+		r.passthrough(w, req)
 	case "POST":
 		r.postSilence(w, req)
 	default:
@@ -46,44 +45,9 @@ func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (r *routes) getsilences(w http.ResponseWriter, req *http.Request) {
-	q := req.URL.Query()
-	q.Del(r.label)
-	req.URL.RawQuery = q.Encode()
-	r.handler.ServeHTTP(w, req)
-}
-
-func (r *routes) filterSilences(lvalues []string, data models.GettableSilences) (interface{}, error) {
-	filtered := models.GettableSilences{}
-
-	for _, gts := range data {
-		if hasMatcherForLabel(gts.Matchers, r.label, lvalues) {
-			filtered = append(filtered, gts)
-		}
-	}
-
-	return filtered, nil
-}
-
-func getAlertmanagerAPIResponse(resp *http.Response) (models.GettableSilences, error) {
-	defer resp.Body.Close()
-	reader := resp.Body
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var apir models.GettableSilences
-	if err := json.NewDecoder(reader).Decode(&apir); err != nil {
-		return nil, errors.Wrap(err, "JSON decoding")
-	}
-
-	return apir, nil
-}
-
-func modifyAlertmanagerResponse(f func([]string, models.GettableSilences) (interface{}, error)) func(*http.Response) error {
+func (r *routes) filterSilences() func(*http.Response) error {
 	return func(resp *http.Response) error {
-		if resp.Request.Method != http.MethodGet {
+		if resp.Request.Method == http.MethodPost {
 			return nil
 		}
 
@@ -92,12 +56,12 @@ func modifyAlertmanagerResponse(f func([]string, models.GettableSilences) (inter
 			return nil
 		}
 
-		apir, err := getAlertmanagerAPIResponse(resp)
+		apir, err := getAlertmanagerAPIResponse(resp.Body)
 		if err != nil {
 			return errors.Wrap(err, "can't decode API response")
 		}
 
-		v, err := f(MustLabelValues(resp.Request.Context()), apir)
+		v, err := r.filterSilencesFromResp(MustLabelValues(resp.Request.Context()), apir)
 		if err != nil {
 			return err
 		}
@@ -111,6 +75,29 @@ func modifyAlertmanagerResponse(f func([]string, models.GettableSilences) (inter
 
 		return nil
 	}
+}
+
+func (r *routes) filterSilencesFromResp(lvalues []string, data models.GettableSilences) (interface{}, error) {
+	filtered := models.GettableSilences{}
+
+	for _, gts := range data {
+		if hasMatcherForLabel(gts.Matchers, r.label, lvalues) {
+			filtered = append(filtered, gts)
+		}
+	}
+
+	return filtered, nil
+}
+
+func getAlertmanagerAPIResponse(body io.ReadCloser) (models.GettableSilences, error) {
+	defer body.Close()
+
+	var apir models.GettableSilences
+	if err := json.NewDecoder(body).Decode(&apir); err != nil {
+		return nil, errors.Wrap(err, "JSON decoding")
+	}
+
+	return apir, nil
 }
 
 func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request) {
@@ -172,9 +159,6 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 		&models.Matcher{Name: &(r.label), Value: &matcherValue, IsRegex: &truthy},
 	}
 	for _, m := range sil.Matchers {
-		if m.Name != nil && *m.Name == r.label {
-			continue
-		}
 		modified = append(modified, m)
 	}
 	// At least one matcher in addition to the enforced label is required,
@@ -240,73 +224,8 @@ func (r *routes) getSilenceByID(ctx context.Context, id string) (*models.Gettabl
 func hasMatcherForLabel(matchers models.Matchers, name string, values []string) bool {
 	for _, m := range matchers {
 		if *m.Name == name {
-			if *m.IsRegex {
-				r, err := syntax.Parse(*m.Value, 0)
-				if err != nil {
-					return false
-				}
-
-				return doesRegexMatchSubSlice(r, values, 10)
-
-			} else if contains(values, *m.Value) {
-				return true
-			}
+			return *m.IsRegex && *m.Value == joinMultipleLabelValues(values)
 		}
 	}
-	return false
-}
-
-func doesRegexMatchSubSlice(re *syntax.Regexp, slice []string, maxDepth int) bool {
-	if maxDepth <= 0 {
-		return false
-	}
-
-	// Literal: namespace=~"namespace1"
-	if re.Op == syntax.OpLiteral {
-		return contains(slice, string(re.Rune))
-	}
-
-	// Alternate: namespace=~"default|something"
-	// Capture: namespace=~"(default)|something"
-	if re.Op == syntax.OpAlternate || re.Op == syntax.OpCapture {
-		for _, subRe := range re.Sub {
-			if !doesRegexMatchSubSlice(subRe, slice, maxDepth-1) {
-				return false
-			}
-		}
-
-		return true
-	}
-
-	// Concat: namespace=~"namespace1|namespace2"
-	if re.Op == syntax.OpConcat {
-		var lvs []string
-		for i, _ := range slice {
-			if strings.HasPrefix(slice[i], string(re.Sub[0].Rune)) {
-				lvs = append(lvs, strings.TrimPrefix(slice[i], string(re.Sub[0].Rune)))
-			}
-		}
-		if len(lvs) == 0 {
-			return false
-		}
-
-		return doesRegexMatchSubSlice(re.Sub[1], lvs, maxDepth-1)
-	}
-
-	// CharClass: namespace=~"a|b"
-	if re.Op == syntax.OpCharClass {
-		for _, char := range re.Rune {
-			if !contains(slice, string(char)) {
-				return false
-			}
-		}
-		return true
-	}
-
-	// EmptyMatch: for Concat: namespace=~"default|default2"
-	if re.Op == syntax.OpEmptyMatch {
-		return contains(slice, "")
-	}
-
 	return false
 }
