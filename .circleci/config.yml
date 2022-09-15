@@ -1,7 +1,7 @@
 ---
 version: 2.1
 orbs:
-  prometheus: prometheus/prometheus@0.16.0
+  prometheus: "null"
 executors:
   # Whenever the Go version is updated here, .promu.yml should
   # also be updated.
@@ -32,7 +32,7 @@ workflows:
             tags:
               only: /.*/
       - prometheus/publish_main:
-          docker_hub_organization: ""  # Don't publish to DockerHub.
+          docker_hub_organization: "" # Don't publish to DockerHub.
           quay_io_organization: prometheuscommunity
           requires:
             - test
@@ -41,7 +41,7 @@ workflows:
             branches:
               only: main
       - prometheus/publish_release:
-          docker_hub_organization: ""  # Don't publish to DockerHub.
+          docker_hub_organization: "" # Don't publish to DockerHub.
           quay_io_organization: prometheuscommunity
           requires:
             - test
