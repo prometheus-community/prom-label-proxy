@@ -66,7 +66,7 @@ func hasIllegalLabelMatcherError() checkFunc {
 func hasExpression(want string) checkFunc {
 	return func(got string, _ error) error {
 		if want != got {
-			return fmt.Errorf("want expression %v, got %v", want, got)
+			return fmt.Errorf("want expression \n%v\ngot \n%v", want, got)
 		}
 		return nil
 	}
@@ -119,13 +119,13 @@ var tests = []struct {
 		),
 		check: checks(
 			hasError(nil),
-			hasExpression(`sum by(pod) (metric1{label="baz",namespace="NS",pod="POD"})`),
+			hasExpression(`sum by (pod) (metric1{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
 
 	{
 		name:       "binary expression add label",
-		expression: `metric1{} + sum by (pod)(metric2{label="baz"})`,
+		expression: `metric1{} + sum by (pod) (metric2{label="baz"})`,
 		enforcer: NewEnforcer(
 			false,
 			&labels.Matcher{
@@ -141,7 +141,7 @@ var tests = []struct {
 		),
 		check: checks(
 			hasError(nil),
-			hasExpression(`metric1{namespace="NS",pod="POD"} + sum by(pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
+			hasExpression(`metric1{namespace="NS",pod="POD"} + sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
 
@@ -163,7 +163,7 @@ var tests = []struct {
 		),
 		check: checks(
 			hasError(nil),
-			hasExpression(`metric1{namespace="NS",pod="POD"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
+			hasExpression(`metric1{namespace="NS",pod="POD"} + on (pod, namespace) sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
 	// then check error return when a query would be silently altered, i.e. a label
@@ -212,7 +212,7 @@ var tests = []struct {
 
 	{
 		name:       "binary expression error on non-matching label value",
-		expression: `metric1{pod="baz"} + sum by (pod)(metric2{label="baz",pod="foo",namespace="bar"})`,
+		expression: `metric1{pod="baz"} + sum by (pod) (metric2{label="baz",pod="foo",namespace="bar"})`,
 		enforcer: NewEnforcer(
 			true,
 			&labels.Matcher{
@@ -233,7 +233,7 @@ var tests = []struct {
 
 	{
 		name:       "binary expression with vector matching error on non-matching label value",
-		expression: `metric1{pod="baz"} + on(pod,namespace) sum by (pod) (metric2{label="baz",pod="foo",namespace="bar"})`,
+		expression: `metric1{pod="baz"} + on (pod,namespace) sum by (pod) (metric2{label="baz",pod="foo",namespace="bar"})`,
 		enforcer: NewEnforcer(
 			true,
 			&labels.Matcher{
@@ -291,13 +291,13 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasExpression(`sum by(pod) (metric1{label="baz",namespace="NS",pod="POD"})`),
+			hasExpression(`sum by (pod) (metric1{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
 
 	{
 		name:       "binary expression unchanged with matching label value",
-		expression: `metric1{pod="POD"} + sum by (pod)(metric2{label="baz",namespace="NS",pod="POD"})`,
+		expression: `metric1{pod="POD"} + sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`,
 		enforcer: NewEnforcer(
 			false,
 			&labels.Matcher{
@@ -312,13 +312,13 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasExpression(`metric1{namespace="NS",pod="POD"} + sum by(pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
+			hasExpression(`metric1{namespace="NS",pod="POD"} + sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
 
 	{
 		name:       "binary expression with vector matching unchanged with matching label value",
-		expression: `metric1{pod="POD"} + on(pod,namespace) sum by (pod) (metric2{label="baz",pod="POD",namespace="NS"})`,
+		expression: `metric1{pod="POD"} + on (pod,namespace) sum by (pod) (metric2{label="baz",pod="POD",namespace="NS"})`,
 		enforcer: NewEnforcer(
 			false,
 			&labels.Matcher{
@@ -333,7 +333,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasExpression(`metric1{namespace="NS",pod="POD"} + on(pod, namespace) sum by(pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
+			hasExpression(`metric1{namespace="NS",pod="POD"} + on (pod, namespace) sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
 }
