@@ -65,7 +65,7 @@ func TestGetAlerts(t *testing.T) {
 		t.Run(strings.Join(tc.filters, "&"), func(t *testing.T) {
 			m := newMockUpstream(checkQueryHandler("", tc.queryParam, tc.expQueryValues...))
 			defer m.Close()
-			r, err := NewRoutes(m.url, proxyLabel)
+			r, err := NewRoutes(m.url, proxyLabel, WithQueryParam(proxyLabel))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

@@ -38,6 +38,8 @@ func main() {
 		insecureListenAddress  string
 		internalListenAddress  string
 		upstream               string
+		queryParam             string
+		headerName             string
 		label                  string
 		labelValue             string
 		enableLabelAPIs        bool
@@ -48,10 +50,10 @@ func main() {
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flagset.StringVar(&insecureListenAddress, "insecure-listen-address", "", "The address the prom-label-proxy HTTP server should listen on.")
 	flagset.StringVar(&internalListenAddress, "internal-listen-address", "", "The address the internal prom-label-proxy HTTP server should listen on to expose metrics about itself.")
+	flagset.StringVar(&queryParam, "query-param", "", "Name of the GET query param to define the tenant. If empty and header-name is empty, the value of label will be used.")
+	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name to define the tenant.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
-	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries. "+
-		"This label will be also required as the URL parameter to get the value to be injected. For example: -label=tenant will"+
-		" make it required for this proxy to have URL in form of: <URL>?tenant=abc&other_params...")
+	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries.")
 	flagset.StringVar(&labelValue, "label-value", "", "A fixed label value to enforce in all proxied PromQL queries. "+
 		"When this flag is not set, the label value will be taken from the URL parameter defined by the label flag.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
@@ -66,6 +68,14 @@ func main() {
 	flagset.Parse(os.Args[1:])
 	if label == "" {
 		log.Fatalf("-label flag cannot be empty")
+	}
+
+	if labelValue == "" && queryParam == "" && headerName == "" {
+		queryParam = label
+	}
+
+	if labelValue == "" && queryParam != "" && headerName != "" {
+		log.Fatalf("-query-param and -header-name flag cannot be both non-empty if -label-value is empty")
 	}
 
 	upstreamURL, err := url.Parse(upstream)
@@ -95,6 +105,12 @@ func main() {
 	}
 	if labelValue != "" {
 		opts = append(opts, injectproxy.WithLabelValue(labelValue))
+	}
+	if queryParam != "" {
+		opts = append(opts, injectproxy.WithQueryParam(queryParam))
+	}
+	if headerName != "" {
+		opts = append(opts, injectproxy.WithHeaderName(headerName))
 	}
 
 	var g run.Group

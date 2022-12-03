@@ -65,21 +65,36 @@ Particularly, you can run `prom-label-proxy` with label `tenant` and point to ex
 
 ```
 prom-label-proxy \
+   -query-param tenant \
    -label tenant \
    -upstream http://demo.do.prometheus.io:9090 \
    -insecure-listen-address 127.0.0.1:8080
 ```
 
-Accessing demo Prometheus APIs on `127.0.0.1:8080` will now expect `tenant` query parameter or http header to be set in the URL:
+Accessing the demo Prometheus APIs on `127.0.0.1:8080` will now expect that the client' request provides the `tenant` label value using either the `tenant` HTTP query parameter (configurable by -query-param) or a HTTP header (configurable by -header-name) :
 
 ```bash
 ➜  ~ curl http://127.0.0.1:8080/api/v1/query\?query="up"
 The "tenant" query parameter must be provided.
 ➜  ~ curl http://127.0.0.1:8080/api/v1/query\?query="up"\&tenant\="something"
 {"status":"success","data":{"resultType":"vector","result":[]}}%
-➜  ~ curl -H 'x-prom-label-proxy-tenant=something' http://127.0.0.1:8080/api/v1/query\?query="up"
+```
+
+Alternatively, a http header can be used instead a GET parameter.
+
+```
+prom-label-proxy \
+   -header-name tenant \
+   -label tenant \
+   -upstream http://demo.do.prometheus.io:9090 \
+   -insecure-listen-address 127.0.0.1:8080
+```
+
+```bash
+➜  ~ curl -H 'tenant=something' http://127.0.0.1:8080/api/v1/query\?query="up"
 {"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
+
 
 You can also provide a static value for a label. For example, running `prom-label-proxy` with
 ```

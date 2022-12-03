@@ -34,7 +34,6 @@ import (
 const (
 	queryParam    = "query"
 	matchersParam = "match[]"
-	headerPrefix  = "x-prom-label-proxy-"
 )
 
 type routes struct {
@@ -42,6 +41,8 @@ type routes struct {
 	handler    http.Handler
 	label      string
 	labelValue string
+	headerName string
+	queryParam string
 
 	mux            http.Handler
 	modifiers      map[string]func(*http.Response) error
@@ -50,6 +51,8 @@ type routes struct {
 
 type options struct {
 	labelValue       string
+	headerName       string
+	queryParam       string
 	enableLabelAPIs  bool
 	passthroughPaths []string
 	errorOnReplace   bool
@@ -109,6 +112,20 @@ func WithLabelValue(value string) Option {
 type mux interface {
 	http.Handler
 	Handle(string, http.Handler)
+}
+
+// WithQueryParam define the GET param where the tenant is defined
+func WithQueryParam(value string) Option {
+	return optionFunc(func(o *options) {
+		o.queryParam = value
+	})
+}
+
+// WithHeaderName define the HTTP header where the tenant is defined
+func WithHeaderName(value string) Option {
+	return optionFunc(func(o *options) {
+		o.headerName = value
+	})
 }
 
 // strictMux is a mux that wraps standard HTTP handler with safer handler that allows safe user provided handler registrations.
@@ -176,6 +193,11 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 	for _, o := range opts {
 		o.apply(&opt)
 	}
+
+	if opt.labelValue == "" && opt.headerName == "" && opt.queryParam == "" {
+		return nil, errors.New("labelValue, headerName and queryParam can't be empty.")
+	}
+
 	if opt.registerer == nil {
 		opt.registerer = prometheus.NewRegistry()
 	}
@@ -188,6 +210,8 @@ func NewRoutes(upstream *url.URL, label string, opts ...Option) (*routes, error)
 		label:          label,
 		labelValue:     opt.labelValue,
 		errorOnReplace: opt.errorOnReplace,
+		headerName:     opt.headerName,
+		queryParam:     opt.queryParam,
 	}
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
 
@@ -269,18 +293,18 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 
 		// Remove the proxy label from the query parameters.
 		q := req.URL.Query()
-		if q.Get(r.label) != "" {
-			q.Del(r.label)
+		if q.Get(r.queryParam) != "" {
+			q.Del(r.queryParam)
 		}
 		req.URL.RawQuery = q.Encode()
-		// Remove the proxy label from the PostForm.
+		// Remove the param from the PostForm.
 		if req.Method == http.MethodPost {
 			if err := req.ParseForm(); err != nil {
 				prometheusAPIError(w, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
 				return
 			}
-			if req.PostForm.Get(r.label) != "" {
-				req.PostForm.Del(r.label)
+			if req.PostForm.Get(r.queryParam) != "" {
+				req.PostForm.Del(r.queryParam)
 				newBody := req.PostForm.Encode()
 				// We are replacing request body, close previous one (req.FormValue ensures it is read fully and not nil).
 				_ = req.Body.Close()
@@ -294,32 +318,40 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 }
 
 // getLabelValue returns the statically set label value, or the label value
-// sent through a URL parameter or http request header.
+// sent through a URL parameter or HTTP request header.
 // It returns an error when either the value is found in both places, or is not found at all.
 func (r *routes) getLabelValue(req *http.Request) (string, error) {
-	headerValue, ok := req.Header[headerPrefix+r.label]
-	formValue := req.FormValue(r.label)
+	if r.headerName != "" {
+		headerValues, ok := req.Header[r.headerName]
+		if ok {
+			if len(headerValues) == 0 {
+				return "", fmt.Errorf("the http header %q must be provided", r.headerName)
+			} else if len(headerValues) > 1 {
+				return "", fmt.Errorf("the http header %q has multiple values", r.headerName)
+			}
 
-	if ok {
-		if r.labelValue != "" && headerValue[0] != "" {
-			return "", fmt.Errorf("a static value for the %s label has already been specified", r.label)
-		}
-		if formValue != "" && headerValue[0] != "" {
-			return "", fmt.Errorf("a value for the %s label has already been specified though an http header", r.label)
-		}
+			if r.labelValue != "" && headerValues[0] != "" {
+				return "", fmt.Errorf("a static value for the %s label has already been specified", r.label)
+			}
 
-		if r.labelValue != "" {
-			return r.labelValue, nil
-		}
+			if r.labelValue == "" && headerValues[0] == "" {
+				return "", fmt.Errorf("the http header %q must be provided", r.headerName)
+			}
 
-		return headerValue[0], nil
-	} else {
+			if r.labelValue != "" {
+				return r.labelValue, nil
+			}
+
+			return headerValues[0], nil
+		}
+	} else if r.queryParam != "" {
+		formValue := req.FormValue(r.queryParam)
 		if r.labelValue != "" && formValue != "" {
 			return "", fmt.Errorf("a static value for the %s label has already been specified", r.label)
 		}
 
 		if r.labelValue == "" && formValue == "" {
-			return "", fmt.Errorf("the %q query parameter must be provided", r.label)
+			return "", fmt.Errorf("the %q query parameter must be provided", r.queryParam)
 		}
 
 		if r.labelValue != "" {
@@ -328,6 +360,12 @@ func (r *routes) getLabelValue(req *http.Request) (string, error) {
 
 		return formValue, nil
 	}
+
+	if r.labelValue != "" {
+		return r.labelValue, nil
+	}
+
+	return "", fmt.Errorf("options headerName and queryParam are empty")
 }
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
