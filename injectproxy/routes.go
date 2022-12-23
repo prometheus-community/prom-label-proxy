@@ -17,7 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -283,7 +283,7 @@ func (r *routes) enforceLabel(h http.HandlerFunc) http.Handler {
 				newBody := req.PostForm.Encode()
 				// We are replacing request body, close previous one (req.FormValue ensures it is read fully and not nil).
 				_ = req.Body.Close()
-				req.Body = ioutil.NopCloser(strings.NewReader(newBody))
+				req.Body = io.NopCloser(strings.NewReader(newBody))
 				req.ContentLength = int64(len(newBody))
 			}
 		}
@@ -407,7 +407,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		}
 		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
 		_ = req.Body.Close()
-		req.Body = ioutil.NopCloser(strings.NewReader(q))
+		req.Body = io.NopCloser(strings.NewReader(q))
 		req.ContentLength = int64(len(q))
 	}
 
@@ -470,7 +470,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
 		_ = req.Body.Close()
 		newBody := q.Encode()
-		req.Body = ioutil.NopCloser(strings.NewReader(newBody))
+		req.Body = io.NopCloser(strings.NewReader(newBody))
 		req.ContentLength = int64(len(newBody))
 	}
 	r.handler.ServeHTTP(w, req)

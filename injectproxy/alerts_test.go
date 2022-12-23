@@ -14,7 +14,7 @@
 package injectproxy
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -86,7 +86,7 @@ func TestGetAlerts(t *testing.T) {
 			r.ServeHTTP(w, req)
 
 			resp := w.Result()
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != tc.expCode {

@@ -16,7 +16,6 @@ package injectproxy
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -80,7 +79,7 @@ func checkQueryHandler(body, key string, values ...string) http.Handler {
 				return
 			}
 		}
-		buf, err := ioutil.ReadAll(req.Body)
+		buf, err := io.ReadAll(req.Body)
 		if err != nil {
 			prometheusAPIError(w, "failed to read body", http.StatusInternalServerError)
 			return
@@ -249,7 +248,7 @@ func TestWithPassthroughPaths(t *testing.T) {
 			r.ServeHTTP(w, httptest.NewRequest(tcase.method, tcase.url, nil))
 			resp := w.Result()
 			if resp.StatusCode != tcase.expCode {
-				b, err := ioutil.ReadAll(resp.Body)
+				b, err := io.ReadAll(resp.Body)
 				fmt.Println(string(b), err)
 				t.Fatalf("expected status code %v, got %d", tcase.expCode, resp.StatusCode)
 			}
@@ -336,7 +335,7 @@ func TestMatch(t *testing.T) {
 				r.ServeHTTP(w, req)
 
 				resp := w.Result()
-				body, _ := ioutil.ReadAll(resp.Body)
+				body, _ := io.ReadAll(resp.Body)
 				defer resp.Body.Close()
 
 				if resp.StatusCode != tc.expCode {
@@ -433,7 +432,7 @@ func TestMatchWithPost(t *testing.T) {
 				r.ServeHTTP(w, req)
 
 				resp := w.Result()
-				body, _ := ioutil.ReadAll(resp.Body)
+				body, _ := io.ReadAll(resp.Body)
 				defer resp.Body.Close()
 
 				if resp.StatusCode != tc.expCode {
@@ -534,7 +533,7 @@ func TestSeries(t *testing.T) {
 
 				resp := w.Result()
 
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -646,7 +645,7 @@ func TestSeriesWithPost(t *testing.T) {
 
 				resp := w.Result()
 
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -900,7 +899,7 @@ func TestQuery(t *testing.T) {
 				r.ServeHTTP(w, req)
 
 				resp := w.Result()
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}

@@ -18,7 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"path"
 	"strconv"
@@ -121,7 +121,7 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 	}
 
 	req = req.Clone(req.Context())
-	req.Body = ioutil.NopCloser(&buf)
+	req.Body = io.NopCloser(&buf)
 	req.URL.RawQuery = ""
 	req.Header["Content-Length"] = []string{strconv.Itoa(buf.Len())}
 	req.ContentLength = int64(buf.Len())

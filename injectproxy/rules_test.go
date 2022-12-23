@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -686,7 +685,7 @@ func TestRules(t *testing.T) {
 				t.Fatalf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
 			}
 
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode != http.StatusOK {
 				if string(body) != string(tc.expBody) {
 					t.Fatalf("expected: %q, got: %q", string(tc.expBody), string(body))
@@ -860,7 +859,7 @@ func TestAlerts(t *testing.T) {
 				t.Fatalf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
 			}
 
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode != http.StatusOK {
 				if string(body) != string(tc.expBody) {
 					t.Fatalf("expected: %q, got: %q", string(tc.expBody), string(body))

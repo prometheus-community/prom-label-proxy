@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -94,7 +94,7 @@ func TestListSilences(t *testing.T) {
 			r.ServeHTTP(w, req)
 
 			resp := w.Result()
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != tc.expCode {
@@ -318,7 +318,7 @@ func TestDeleteSilence(t *testing.T) {
 			r.ServeHTTP(w, req)
 
 			resp := w.Result()
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != tc.expCode {
@@ -513,7 +513,7 @@ func TestUpdateSilence(t *testing.T) {
 			r.ServeHTTP(w, req)
 
 			resp := w.Result()
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != tc.expCode {
@@ -587,7 +587,7 @@ func TestGetAlertGroups(t *testing.T) {
 			r.ServeHTTP(w, req)
 
 			resp := w.Result()
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != tc.expCode {
