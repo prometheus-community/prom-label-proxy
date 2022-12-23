@@ -61,7 +61,8 @@ When started with the `-enable-label-apis` flag, the application can also proxy 
 * `/api/v1/labels` for GET and POST methods (Prometheus/Thanos)
 * `/api/v1/label/<name>/values` for GET method (Prometheus/Thanos)
 
-Particularly, you can run `prom-label-proxy` with label `tenant` and point to example, demo Prometheus server e.g:
+You can run `prom-label-proxy` to enforce the value of the `tenant` label
+provided in the client's request via the `tenant` HTTP query/form parameter:
 
 ```
 prom-label-proxy \
@@ -71,43 +72,48 @@ prom-label-proxy \
    -insecure-listen-address 127.0.0.1:8080
 ```
 
-Accessing the demo Prometheus APIs on `127.0.0.1:8080` will now expect that the client' request provides the `tenant` label value using either the `tenant` HTTP query parameter (configurable by -query-param) or a HTTP header (configurable by -header-name) :
+Accessing the demo Prometheus APIs on `http://127.0.0.1:8080` will now expect that the client's request provides the `tenant` label value using the `tenant` HTTP query parameter:
 
 ```bash
 ➜  ~ curl http://127.0.0.1:8080/api/v1/query\?query="up"
-The "tenant" query parameter must be provided.
+{"error":"The \"tenant\" query parameter must be provided.","errorType":"prom-label-proxy","status":"error"}
 ➜  ~ curl http://127.0.0.1:8080/api/v1/query\?query="up"\&tenant\="something"
 {"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
 
-Alternatively, a http header can be used instead a GET parameter.
+It also works with POST requests:
+
+```bash
+➜  ~ curl http://127.0.0.1:8080/api/v1/query" -d "tenant=foo"
+{"status":"success","data":{"resultType":"vector","result":[]}}%
+```
+
+Alternatively, `prom-label-proxy` can use a custom HTTP header instead HTTP parameters:
 
 ```
 prom-label-proxy \
-   -header-name tenant \
+   -header-name X-Tenant \
    -label tenant \
    -upstream http://demo.do.prometheus.io:9090 \
    -insecure-listen-address 127.0.0.1:8080
 ```
 
 ```bash
-➜  ~ curl -H 'tenant=something' http://127.0.0.1:8080/api/v1/query\?query="up"
+➜  ~ curl -H 'X-Tenant=something' http://127.0.0.1:8080/api/v1/query\?query="up"
 {"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
 
+A last option is to provide a static value for the label:
 
-You can also provide a static value for a label. For example, running `prom-label-proxy` with
 ```
 prom-label-proxy \
    -label tenant \
-   -value prometheus \
+   -label-value prometheus \
    -upstream http://demo.do.prometheus.io:9090 \
    -insecure-listen-address 127.0.0.1:8080
 ```
-will enforce `tenant=prometheus` in all requests.
 
-
-In this mode, sending the label value as a query parameter will result in the request getting rejected as a 400 Bad Request.
+Now prom-label-proxy enforces the `tenant="prometheus"` label in all requests.
 
 Once again for clarity: **this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or
 authorize the requesting entity in any way, this has to be built around this project.**

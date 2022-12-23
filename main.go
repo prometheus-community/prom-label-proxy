@@ -50,7 +50,7 @@ func main() {
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flagset.StringVar(&insecureListenAddress, "insecure-listen-address", "", "The address the prom-label-proxy HTTP server should listen on.")
 	flagset.StringVar(&internalListenAddress, "internal-listen-address", "", "The address the internal prom-label-proxy HTTP server should listen on to expose metrics about itself.")
-	flagset.StringVar(&queryParam, "query-param", "", "Name of the GET query param to define the tenant. If empty and header-name is empty, the value of label will be used.")
+	flagset.StringVar(&queryParam, "query-param", "", "Name of the GET query param to define the tenant. If this flag is empty and the -header-name flag is empty, the value of -label will be used.")
 	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name to define the tenant.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
 	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries.")
@@ -74,8 +74,12 @@ func main() {
 		queryParam = label
 	}
 
-	if labelValue == "" && queryParam != "" && headerName != "" {
-		log.Fatalf("-query-param and -header-name flag cannot be both non-empty if -label-value is empty")
+	if labelValue != "" {
+		if queryParam != "" || headerName != "" {
+			log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
+		}
+	} else if queryParam != "" && headerName != "" {
+		log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
 	}
 
 	upstreamURL, err := url.Parse(upstream)
@@ -103,21 +107,22 @@ func main() {
 	if errorOnReplace {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
 	}
-	if labelValue != "" {
-		opts = append(opts, injectproxy.WithLabelValue(labelValue))
-	}
-	if queryParam != "" {
-		opts = append(opts, injectproxy.WithQueryParam(queryParam))
-	}
-	if headerName != "" {
-		opts = append(opts, injectproxy.WithHeaderName(headerName))
+
+	var extractLabeler injectproxy.ExtractLabeler
+	switch {
+	case labelValue != "":
+		extractLabeler = injectproxy.StaticLabelEnforcer(labelValue)
+	case queryParam != "":
+		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam}
+	case headerName != "":
+		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName)}
 	}
 
 	var g run.Group
 
 	{
 		// Run the insecure HTTP server.
-		routes, err := injectproxy.NewRoutes(upstreamURL, label, opts...)
+		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
 		if err != nil {
 			log.Fatalf("Failed to create injectproxy Routes: %v", err)
 		}
