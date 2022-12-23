@@ -18,7 +18,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -190,7 +190,7 @@ func modifyAPIResponse(f func(string, *apiResponse) (interface{}, error)) func(*
 		if err = json.NewEncoder(&buf).Encode(apir); err != nil {
 			return errors.Wrap(err, "can't encode API response")
 		}
-		resp.Body = ioutil.NopCloser(&buf)
+		resp.Body = io.NopCloser(&buf)
 		resp.Header["Content-Length"] = []string{fmt.Sprint(buf.Len())}
 
 		return nil
