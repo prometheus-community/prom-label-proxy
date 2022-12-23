@@ -50,12 +50,11 @@ func main() {
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flagset.StringVar(&insecureListenAddress, "insecure-listen-address", "", "The address the prom-label-proxy HTTP server should listen on.")
 	flagset.StringVar(&internalListenAddress, "internal-listen-address", "", "The address the internal prom-label-proxy HTTP server should listen on to expose metrics about itself.")
-	flagset.StringVar(&queryParam, "query-param", "", "Name of the GET query param to define the tenant. If this flag is empty and the -header-name flag is empty, the value of -label will be used.")
-	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name to define the tenant.")
+	flagset.StringVar(&queryParam, "query-param", "", "Name of the HTTP  parameter that contains the tenant value.At most one of -query-param, -header-name and -label-value should be given. If the flag isn't defined and neither -header-name nor -label-value  is set, it will default to the value of the -label flag.")
+	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
-	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries.")
-	flagset.StringVar(&labelValue, "label-value", "", "A fixed label value to enforce in all proxied PromQL queries. "+
-		"When this flag is not set, the label value will be taken from the URL parameter defined by the label flag.")
+	flagset.StringVar(&label, "label", "", "The label name to enforce in all proxied PromQL queries.")
+	flagset.StringVar(&labelValue, "label-value", "", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
 		"NOTE: Enable with care because filtering by matcher is not implemented in older versions of Prometheus (>= v2.24.0 required) and Thanos (>= v0.18.0 required, >= v0.23.0 recommended). If enabled and "+
 		"any labels endpoint does not support selectors, the injected matcher will have no effect.")

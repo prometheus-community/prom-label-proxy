@@ -72,7 +72,9 @@ prom-label-proxy \
    -insecure-listen-address 127.0.0.1:8080
 ```
 
-Accessing the demo Prometheus APIs on `http://127.0.0.1:8080` will now expect that the client's request provides the `tenant` label value using the `tenant` HTTP query parameter:
+Accessing the demo Prometheus APIs on `http://127.0.0.1:8080` will now expect
+that the client's request provides the `tenant` label value using the `tenant`
+HTTP query parameter:
 
 ```bash
 ➜  ~ curl http://127.0.0.1:8080/api/v1/query\?query="up"
