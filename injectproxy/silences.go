@@ -49,7 +49,7 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 		proxyLabelMatch = labels.Matcher{
 			Type:  labels.MatchEqual,
 			Name:  r.label,
-			Value: mustLabelValue(req.Context()),
+			Value: MustLabelValue(req.Context()),
 		}
 		modified = []string{proxyLabelMatch.String()}
 	)
@@ -75,7 +75,7 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 	var (
 		sil    models.PostableSilence
-		lvalue = mustLabelValue(req.Context())
+		lvalue = MustLabelValue(req.Context())
 	)
 	if err := json.NewDecoder(req.Body).Decode(&sil); err != nil {
 		prometheusAPIError(w, fmt.Sprintf("bad request: can't decode: %v", err), http.StatusBadRequest)
@@ -143,7 +143,7 @@ func (r *routes) deleteSilence(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if !hasMatcherForLabel(sil.Matchers, r.label, mustLabelValue(req.Context())) {
+	if !hasMatcherForLabel(sil.Matchers, r.label, MustLabelValue(req.Context())) {
 		prometheusAPIError(w, "forbidden", http.StatusForbidden)
 		return
 	}

@@ -38,6 +38,8 @@ func main() {
 		insecureListenAddress  string
 		internalListenAddress  string
 		upstream               string
+		queryParam             string
+		headerName             string
 		label                  string
 		labelValue             string
 		enableLabelAPIs        bool
@@ -48,12 +50,11 @@ func main() {
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flagset.StringVar(&insecureListenAddress, "insecure-listen-address", "", "The address the prom-label-proxy HTTP server should listen on.")
 	flagset.StringVar(&internalListenAddress, "internal-listen-address", "", "The address the internal prom-label-proxy HTTP server should listen on to expose metrics about itself.")
+	flagset.StringVar(&queryParam, "query-param", "", "Name of the HTTP parameter that contains the tenant value.At most one of -query-param, -header-name and -label-value should be given. If the flag isn't defined and neither -header-name nor -label-value is set, it will default to the value of the -label flag.")
+	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
-	flagset.StringVar(&label, "label", "", "The label to enforce in all proxied PromQL queries. "+
-		"This label will be also required as the URL parameter to get the value to be injected. For example: -label=tenant will"+
-		" make it required for this proxy to have URL in form of: <URL>?tenant=abc&other_params...")
-	flagset.StringVar(&labelValue, "label-value", "", "A fixed label value to enforce in all proxied PromQL queries. "+
-		"When this flag is not set, the label value will be taken from the URL parameter defined by the label flag.")
+	flagset.StringVar(&label, "label", "", "The label name to enforce in all proxied PromQL queries.")
+	flagset.StringVar(&labelValue, "label-value", "", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
 		"NOTE: Enable with care because filtering by matcher is not implemented in older versions of Prometheus (>= v2.24.0 required) and Thanos (>= v0.18.0 required, >= v0.23.0 recommended). If enabled and "+
 		"any labels endpoint does not support selectors, the injected matcher will have no effect.")
@@ -66,6 +67,18 @@ func main() {
 	flagset.Parse(os.Args[1:])
 	if label == "" {
 		log.Fatalf("-label flag cannot be empty")
+	}
+
+	if labelValue == "" && queryParam == "" && headerName == "" {
+		queryParam = label
+	}
+
+	if labelValue != "" {
+		if queryParam != "" || headerName != "" {
+			log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
+		}
+	} else if queryParam != "" && headerName != "" {
+		log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
 	}
 
 	upstreamURL, err := url.Parse(upstream)
@@ -93,15 +106,22 @@ func main() {
 	if errorOnReplace {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
 	}
-	if labelValue != "" {
-		opts = append(opts, injectproxy.WithLabelValue(labelValue))
+
+	var extractLabeler injectproxy.ExtractLabeler
+	switch {
+	case labelValue != "":
+		extractLabeler = injectproxy.StaticLabelEnforcer(labelValue)
+	case queryParam != "":
+		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam}
+	case headerName != "":
+		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName)}
 	}
 
 	var g run.Group
 
 	{
 		// Run the insecure HTTP server.
-		routes, err := injectproxy.NewRoutes(upstreamURL, label, opts...)
+		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
 		if err != nil {
 			log.Fatalf("Failed to create injectproxy Routes: %v", err)
 		}
