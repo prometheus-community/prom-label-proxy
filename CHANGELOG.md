@@ -1,3 +1,9 @@
+## 0.6.0 / 2023-01-04
+
+* [FEATURE] Add the `--header-name` flag to pass the label value via HTTP header. #118
+* [FEATURE] Add the `--internal-listen-address` flag to expose Prometheus metrics. #121
+* [FEATURE] Add the the `--label-value` flag to set the label value statically. #116
+
 ## 0.5.0 / 2022-06-14
 
 * [ENHANCEMENT] Add `/healthz` endpoint for (Kubernetes) probes. #106
