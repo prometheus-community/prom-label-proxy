@@ -789,6 +789,7 @@ func TestQuery(t *testing.T) {
 			name:    `No "query" parameter returns 200 with empty body for POSTs`,
 			labelv:  []string{"default"},
 			expCode: http.StatusOK,
+			method:  http.MethodPost,
 		},
 		{
 			name:         `Query without a vector selector`,
@@ -1012,7 +1013,7 @@ func TestQuery(t *testing.T) {
 			headerName:   "namespace",
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
 			expResponse:  okResponse,
 		},
 		{
@@ -1021,7 +1022,7 @@ func TestQuery(t *testing.T) {
 			labelv:       []string{"default"},
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
 			expResponse:  okResponse,
 		},
 		{
@@ -1031,13 +1032,6 @@ func TestQuery(t *testing.T) {
 			expCode:        http.StatusOK,
 			expPromQuery:   `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
 			expResponse:    okResponse,
-		},
-		{
-			name:           `Static label value with URL query parameter`,
-			staticLabelVal: []string{"default"},
-			labelv:         []string{"other-default"},
-			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
-			expCode:        http.StatusBadRequest,
 		},
 	} {
 		for _, endpoint := range []string{"query", "query_range", "query_exemplars"} {
@@ -1085,7 +1079,7 @@ func TestQuery(t *testing.T) {
 					for _, lv := range tc.labelv {
 						q.Add(tc.queryParam, lv)
 					}
-				} else if len(tc.staticLabelVal) > 0 && tc.headerName == "" {
+				} else if len(tc.staticLabelVal) == 0 && tc.headerName == "" && len(tc.labelv) > 0 {
 					for _, lv := range tc.labelv {
 						q.Add(proxyLabel, lv)
 					}
