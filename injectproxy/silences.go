@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"path"
 	"strconv"
@@ -70,7 +69,7 @@ func (r *routes) filterSilences() func(*http.Response) error {
 		if err = json.NewEncoder(&buf).Encode(v); err != nil {
 			return errors.Wrap(err, "can't encode API response")
 		}
-		resp.Body = ioutil.NopCloser(&buf)
+		resp.Body = io.NopCloser(&buf)
 		resp.Header["Content-Length"] = []string{fmt.Sprint(buf.Len())}
 
 		return nil
@@ -158,9 +157,7 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 	modified := models.Matchers{
 		&models.Matcher{Name: &(r.label), Value: &matcherValue, IsRegex: &truthy},
 	}
-	for _, m := range sil.Matchers {
-		modified = append(modified, m)
-	}
+	modified = append(modified, sil.Matchers...)
 	// At least one matcher in addition to the enforced label is required,
 	// otherwise all alerts would be silenced
 	if len(modified) < 2 {

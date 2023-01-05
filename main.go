@@ -45,8 +45,9 @@ func (i *arrayFlags) String() string {
 // Set is the method to set the flag value, part of the flag.Value interface.
 func (i *arrayFlags) Set(value string) error {
 	if value == "" {
-		return errors.New("empty value cannot be provided to -label-value")
+		return nil
 	}
+
 	*i = append(*i, value)
 	return nil
 }

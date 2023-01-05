@@ -771,13 +771,13 @@ func TestQuery(t *testing.T) {
 		},
 		{
 			labelv:  []string{"default", ""},
-			name:    `One of the "namespace" parameters empty returns an error`,
-			expCode: http.StatusBadRequest,
+			name:    `One of the "namespace" parameters empty returns 200`,
+			expCode: http.StatusOK,
 		},
 		{
 			labelv:  []string{"default", ""},
-			name:    `One of the "namespace" parameters empty returns an error for POSTs`,
-			expCode: http.StatusBadRequest,
+			name:    `One of the "namespace" parameters empty returns 200 for POSTs`,
+			expCode: http.StatusOK,
 			method:  http.MethodPost,
 		},
 		{
@@ -899,6 +899,14 @@ func TestQuery(t *testing.T) {
 			promQuery:    `up{namespace="other"}`,
 			expCode:      http.StatusOK,
 			expPromQuery: `up{namespace=~"default|second"}`,
+			expResponse:  okResponse,
+		},
+		{
+			name:         `Query with a vector selector with empty label values`,
+			labelv:       []string{"default", ""},
+			promQuery:    `up{namespace="other"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace=~"default"}`,
 			expResponse:  okResponse,
 		},
 		{
@@ -1031,6 +1039,15 @@ func TestQuery(t *testing.T) {
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
 			expPromQuery: `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
+			expResponse:  okResponse,
+		},
+		{
+			name:         `multiple http header with empty label value`,
+			headers:      http.Header{"namespace": []string{"default", ""}},
+			headerName:   "namespace",
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
 			expResponse:  okResponse,
 		},
 		{

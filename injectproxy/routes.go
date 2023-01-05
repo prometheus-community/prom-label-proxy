@@ -217,15 +217,11 @@ func (hff HTTPFormEnforcer) getLabelValues(r *http.Request) ([]string, error) {
 
 	formValues := r.Form[hff.ParameterName]
 
+	// Skip empty values
+	formValues = removeEmptyValue(formValues)
+
 	if len(formValues) == 0 {
 		return nil, fmt.Errorf("the %q query parameter must be provided", hff.ParameterName)
-	}
-
-	// Check if every value is non-empty
-	for i := range formValues {
-		if formValues[i] == "" {
-			return nil, fmt.Errorf("the %q query parameter must be provided", hff.ParameterName)
-		}
 	}
 
 	return formValues, nil
@@ -251,6 +247,8 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 
 func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) {
 	headerValues := r.Header[hhe.Name]
+
+	headerValues = removeEmptyValue(headerValues)
 
 	if len(headerValues) == 0 {
 		return nil, fmt.Errorf("missing HTTP header %q", hhe.Name)
@@ -593,4 +591,14 @@ func humanFriendlyErrorMessage(err error) string {
 	}
 	errMsg := err.Error()
 	return fmt.Sprintf("%s%s.", strings.ToUpper(errMsg[:1]), errMsg[1:])
+}
+
+func removeEmptyValue(slice []string) []string {
+	for i := 0; i < len(slice); i++ {
+		if slice[i] == "" {
+			slice = append(slice[:i], slice[i+1:]...)
+			i--
+		}
+	}
+	return slice
 }
