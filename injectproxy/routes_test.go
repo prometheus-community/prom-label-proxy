@@ -1008,12 +1008,29 @@ func TestQuery(t *testing.T) {
 			expResponse:    okResponse,
 		},
 		{
+			name:           `Multiple static label value`,
+			staticLabelVal: []string{"default", "second"},
+			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:        http.StatusOK,
+			expPromQuery:   `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
+			expResponse:    okResponse,
+		},
+		{
 			name:         `http header label value`,
 			headers:      http.Header{"namespace": []string{"default"}},
 			headerName:   "namespace",
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
 			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
+			expResponse:  okResponse,
+		},
+		{
+			name:         `multiple http header label value`,
+			headers:      http.Header{"namespace": []string{"default", "second"}},
+			headerName:   "namespace",
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
 			expResponse:  okResponse,
 		},
 		{
@@ -1024,14 +1041,6 @@ func TestQuery(t *testing.T) {
 			expCode:      http.StatusOK,
 			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
 			expResponse:  okResponse,
-		},
-		{
-			name:           `Multipe static label value`,
-			staticLabelVal: []string{"default", "second"},
-			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
-			expCode:        http.StatusOK,
-			expPromQuery:   `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
-			expResponse:    okResponse,
 		},
 	} {
 		for _, endpoint := range []string{"query", "query_range", "query_exemplars"} {

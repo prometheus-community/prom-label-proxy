@@ -112,6 +112,13 @@ prom-label-proxy \
 {"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
 
+You can provide multiple values for the http header:
+
+```bash
+➜  ~ curl -H 'X-Tenant=something' -H 'X-Tenant=anything' http://127.0.0.1:8080/api/v1/query\?query="up"
+{"status":"success","data":{"resultType":"vector","result":[]}}%
+```
+
 A last option is to provide a static value for the label:
 
 ```
