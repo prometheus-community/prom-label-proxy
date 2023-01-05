@@ -142,8 +142,6 @@ prom-label-proxy \
 ```
 will enforce `tenant=~"prometheus|alertmanager"` in all requests.
 
-In this mode, sending the label value as a query parameter will result in the request getting rejected as a 400 Bad Request.
-
 Once again for clarity: **this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or
 authorize the requesting entity in any way, this has to be built around this project.**
 
