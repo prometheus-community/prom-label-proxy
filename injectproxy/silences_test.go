@@ -156,9 +156,8 @@ func validSilences() http.Handler {
 
 func TestListSilences(t *testing.T) {
 	for _, tc := range []struct {
-		labelv     []string
-		upstream   http.Handler
-		reqHeaders http.Header
+		labelv   []string
+		upstream http.Handler
 
 		expCode int
 		expBody []byte
@@ -296,11 +295,6 @@ func TestListSilences(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest("GET", u.String(), nil)
-			for k, v := range tc.reqHeaders {
-				for i := range v {
-					req.Header.Add(k, v[i])
-				}
-			}
 			r.ServeHTTP(w, req)
 
 			resp := w.Result()
