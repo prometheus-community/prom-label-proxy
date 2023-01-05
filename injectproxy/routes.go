@@ -177,7 +177,7 @@ type HTTPFormEnforcer struct {
 // ExtractLabel implements the ExtractLabeler interface.
 func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		labelValue, err := hff.getLabelValues(r)
+		labelValues, err := hff.getLabelValues(r)
 		if err != nil {
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
@@ -204,7 +204,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			}
 		}
 
-		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValue)))
+		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
 
@@ -407,7 +407,8 @@ func joinMultipleLabelValues(labelValues []string) string {
 	return strings.Join(lvs, "|")
 }
 
-func withLabelValues(ctx context.Context, labels []string) context.Context {
+// WithLabelValue stores labels in the given context.
+func WithLabelValues(ctx context.Context, labels []string) context.Context {
 	return context.WithValue(ctx, keyLabel, labels)
 }
 
