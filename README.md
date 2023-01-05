@@ -101,7 +101,7 @@ prom-label-proxy \
 ```
 
 ```bash
-➜  ~ curl -H 'X-Tenant=something' http://127.0.0.1:8080/api/v1/query\?query="up"
+➜  ~ curl -H 'X-Tenant: something' http://127.0.0.1:8080/api/v1/query\?query="up"
 {"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
 
