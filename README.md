@@ -99,6 +99,14 @@ It also works with POST requests:
 
 Alternatively, `prom-label-proxy` can use a custom HTTP header instead HTTP parameters:
 
+```
+prom-label-proxy \
+   -header-name X-Tenant \
+   -label tenant \
+   -upstream http://demo.do.prometheus.io:9090 \
+   -insecure-listen-address 127.0.0.1:8080
+```
+
 ```bash
 ➜  ~ curl -H 'X-Tenant: something' http://127.0.0.1:8080/api/v1/query\?query="up"
 {"status":"success","data":{"resultType":"vector","result":[]}}%

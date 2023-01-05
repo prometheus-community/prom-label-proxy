@@ -233,7 +233,7 @@ type HTTPHeaderEnforcer struct {
 // ExtractLabel implements the ExtractLabeler interface.
 func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		labelValue, err := hhe.getLabelValue(r)
+		labelValue, err := hhe.getLabelValues(r)
 		if err != nil {
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
@@ -243,15 +243,15 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	})
 }
 
-func (hhe HTTPHeaderEnforcer) getLabelValue(r *http.Request) ([]string, error) {
+func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) {
 	headerValues := r.Header[hhe.Name]
 
 	if len(headerValues) == 0 {
-		return []string{}, fmt.Errorf("missing HTTP header %q", hhe.Name)
+		return nil, fmt.Errorf("missing HTTP header %q", hhe.Name)
 	}
 
 	if len(headerValues) > 1 {
-		return []string{}, fmt.Errorf("multiple values for the http header %q", hhe.Name)
+		return nil, fmt.Errorf("multiple values for the http header %q", hhe.Name)
 	}
 
 	return headerValues, nil
