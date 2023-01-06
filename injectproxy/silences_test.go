@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"sort"
 	"strings"
 	"testing"
 
@@ -428,8 +427,6 @@ func createSilenceWithLabel(labelv string, expectedMatchersCount int) http.Handl
 				}
 			}
 		}
-
-		sort.Strings(values)
 
 		if matcherCount != expectedMatchersCount {
 			prometheusAPIError(w, fmt.Sprintf("expected %d matcher for label %s, got %d", expectedMatchersCount, proxyLabel, len(values)), http.StatusInternalServerError)
