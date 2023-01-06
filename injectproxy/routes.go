@@ -395,11 +395,13 @@ func MustLabelValues(ctx context.Context) []string {
 	if len(labels) == 0 {
 		panic(fmt.Sprintf("empty %q value in the context", keyLabel))
 	}
+
+	sort.Strings(labels)
+
 	return labels
 }
 
 func joinMultipleLabelValues(labelValues []string) string {
-	sort.Strings(labelValues)
 	lvs := make([]string, len(labelValues))
 	for i := range labelValues {
 		lvs[i] = regexp.QuoteMeta(labelValues[i])
