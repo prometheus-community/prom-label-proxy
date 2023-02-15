@@ -539,12 +539,13 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
 	}
 
+	var q url.Values
 	if req.Method == http.MethodPost && req.Header.Get("Content-Type") == "application/x-www-form-urlencoded" {
 		if err := req.ParseForm(); err != nil {
 			return
 		}
 
-		q := req.PostForm
+		q = req.PostForm
 		if err := injectMatcher(q, matcher); err != nil {
 			return
 		}
@@ -555,13 +556,13 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		req.Body = io.NopCloser(strings.NewReader(newBody))
 		req.ContentLength = int64(len(newBody))
 	} else {
-		q := req.URL.Query()
+		q = req.URL.Query()
 		if err := injectMatcher(q, matcher); err != nil {
 			return
 		}
-		req.URL.RawQuery = q.Encode()
 	}
 
+	req.URL.RawQuery = q.Encode()
 	r.handler.ServeHTTP(w, req)
 }
 
