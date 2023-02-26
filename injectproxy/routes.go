@@ -23,7 +23,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/efficientgo/tools/core/pkg/merrors"
+	"github.com/efficientgo/core/merrors"
 	"github.com/metalmatze/signal/server/signalhttp"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
