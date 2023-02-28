@@ -3,7 +3,7 @@ module github.com/prometheus-community/prom-label-proxy
 go 1.17
 
 require (
-	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
+	github.com/efficientgo/core v1.0.0-rc.2
 	github.com/go-openapi/runtime v0.24.0
 	github.com/go-openapi/strfmt v0.21.3
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a
