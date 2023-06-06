@@ -8,7 +8,7 @@ require (
 	github.com/go-openapi/strfmt v0.21.7
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a
 	github.com/oklog/run v1.1.0
-	github.com/prometheus/alertmanager v0.24.0
+	github.com/prometheus/alertmanager v0.25.0
 	github.com/prometheus/client_golang v1.15.1
 	github.com/prometheus/prometheus v0.40.1
 )
