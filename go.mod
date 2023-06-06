@@ -8,9 +8,9 @@ require (
 	github.com/go-openapi/strfmt v0.21.7
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a
 	github.com/oklog/run v1.1.0
-	github.com/prometheus/alertmanager v0.24.0
+	github.com/prometheus/alertmanager v0.25.0
 	github.com/prometheus/client_golang v1.15.1
-	github.com/prometheus/prometheus v0.40.1
+	github.com/prometheus/prometheus v0.44.0
 )
 
 require (
@@ -45,7 +45,6 @@ require (
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
-	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/stretchr/testify v1.8.2 // indirect
 	go.mongodb.org/mongo-driver v1.11.3 // indirect
 	go.opentelemetry.io/otel v1.14.0 // indirect
