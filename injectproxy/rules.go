@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 )
 
@@ -42,7 +41,7 @@ func getAPIResponse(resp *http.Response) (*apiResponse, error) {
 		var err error
 		reader, err = gzip.NewReader(resp.Body)
 		if err != nil {
-			return nil, errors.Wrap(err, "gzip decoding")
+			return nil, fmt.Errorf("gzip decoding error: %w", err)
 		}
 		defer reader.Close()
 
@@ -56,7 +55,7 @@ func getAPIResponse(resp *http.Response) (*apiResponse, error) {
 
 	var apir apiResponse
 	if err := json.NewDecoder(reader).Decode(&apir); err != nil {
-		return nil, errors.Wrap(err, "JSON decoding")
+		return nil, fmt.Errorf("JSON decoding error: %w", err)
 	}
 
 	if apir.Status != "success" {
@@ -172,7 +171,7 @@ func modifyAPIResponse(f func(string, *apiResponse) (interface{}, error)) func(*
 
 		apir, err := getAPIResponse(resp)
 		if err != nil {
-			return errors.Wrap(err, "can't decode API response")
+			return fmt.Errorf("can't decode API response: %w", err)
 		}
 
 		v, err := f(MustLabelValue(resp.Request.Context()), apir)
@@ -182,13 +181,13 @@ func modifyAPIResponse(f func(string, *apiResponse) (interface{}, error)) func(*
 
 		b, err := json.Marshal(v)
 		if err != nil {
-			return errors.Wrap(err, "can't replace data")
+			return fmt.Errorf("can't replace data: %w", err)
 		}
 		apir.Data = json.RawMessage(b)
 
 		var buf bytes.Buffer
 		if err = json.NewEncoder(&buf).Encode(apir); err != nil {
-			return errors.Wrap(err, "can't encode API response")
+			return fmt.Errorf("can't encode API response: %w", err)
 		}
 		resp.Body = io.NopCloser(&buf)
 		resp.Header["Content-Length"] = []string{fmt.Sprint(buf.Len())}
@@ -200,7 +199,7 @@ func modifyAPIResponse(f func(string, *apiResponse) (interface{}, error)) func(*
 func (r *routes) filterRules(lvalue string, resp *apiResponse) (interface{}, error) {
 	var rgs rulesData
 	if err := json.Unmarshal(resp.Data, &rgs); err != nil {
-		return nil, errors.Wrap(err, "can't decode rules data")
+		return nil, fmt.Errorf("can't decode rules data: %w", err)
 	}
 
 	filtered := []*ruleGroup{}
@@ -226,7 +225,7 @@ func (r *routes) filterRules(lvalue string, resp *apiResponse) (interface{}, err
 func (r *routes) filterAlerts(lvalue string, resp *apiResponse) (interface{}, error) {
 	var data alertsData
 	if err := json.Unmarshal(resp.Data, &data); err != nil {
-		return nil, errors.Wrap(err, "can't decode alerts data")
+		return nil, fmt.Errorf("can't decode alerts data: %w", err)
 	}
 
 	filtered := []*alert{}

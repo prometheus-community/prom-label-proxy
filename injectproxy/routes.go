@@ -25,7 +25,6 @@ import (
 
 	"github.com/efficientgo/core/merrors"
 	"github.com/metalmatze/signal/server/signalhttp"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -127,12 +126,12 @@ func (s *strictMux) Handle(pattern string, handler http.Handler) error {
 	}
 
 	if _, ok := s.seen[sanitized]; ok {
-		return errors.Errorf("pattern %q was already registered", sanitized)
+		return fmt.Errorf("pattern %q was already registered", sanitized)
 	}
 
 	for p := range s.seen {
 		if strings.HasPrefix(sanitized+"/", p+"/") {
-			return errors.Errorf("pattern %q is registered, cannot register path %q that shares it", p, sanitized)
+			return fmt.Errorf("pattern %q is registered, cannot register path %q that shares it", p, sanitized)
 		}
 	}
 
