@@ -308,8 +308,10 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 
 	errs.Add(
-		mux.Handle("/api/v2/silences", r.el.ExtractLabel(enforceMethods(r.silences, "GET", "POST"))),
-		mux.Handle("/api/v2/silence/", r.el.ExtractLabel(enforceMethods(r.deleteSilence, "DELETE"))),
+		// The semantics of the Silences API don't support multi-label matchers hence enforceSingleLabelValue().
+		mux.Handle("/api/v2/silences", r.el.ExtractLabel(enforceMethods(enforceSingleLabelValue(r.silences), "GET", "POST"))),
+		// The semantics of the Silences API don't support multi-label matchers hence enforceSingleLabelValue().
+		mux.Handle("/api/v2/silence/", r.el.ExtractLabel(enforceMethods(enforceSingleLabelValue(r.deleteSilence), "DELETE"))),
 		mux.Handle("/api/v2/alerts/groups", r.el.ExtractLabel(enforceMethods(r.enforceFilterParameter, "GET"))),
 		mux.Handle("/api/v2/alerts", r.el.ExtractLabel(enforceMethods(r.alerts, "GET"))),
 	)
@@ -347,9 +349,8 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 	r.mux = mux
 	r.modifiers = map[string]func(*http.Response) error{
-		"/api/v1/rules":    modifyAPIResponse(r.filterRules),
-		"/api/v1/alerts":   modifyAPIResponse(r.filterAlerts),
-		"/api/v2/silences": r.filterSilences(),
+		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
+		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
 	}
 	proxy.ModifyResponse = r.ModifyResponse
 	return r, nil
@@ -401,6 +402,15 @@ func MustLabelValues(ctx context.Context) []string {
 	return labels
 }
 
+// MustLabelValue returns the first (alphabetical order) label value previously
+// stored using WithLabelValue() from the given context.
+// Similar to MustLabelValues, it will panic if no label is found or the value
+// is empty.
+func MustLabelValue(ctx context.Context) string {
+	v := MustLabelValues(ctx)
+	return v[0]
+}
+
 func joinMultipleLabelValues(labelValues []string) string {
 	lvs := make([]string, len(labelValues))
 	for i := range labelValues {
@@ -410,7 +420,7 @@ func joinMultipleLabelValues(labelValues []string) string {
 	return strings.Join(lvs, "|")
 }
 
-// WithLabelValue stores labels in the given context.
+// WithLabelValues stores labels in the given context.
 func WithLabelValues(ctx context.Context, labels []string) context.Context {
 	return context.WithValue(ctx, keyLabel, labels)
 }

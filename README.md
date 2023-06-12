@@ -194,6 +194,8 @@ The proxy ensures the following:
 * `POST` requests to the `/api/v2/silences` endpoint can only affect silences that match the label and the label matcher is enforced.
 * `DELETE` requests to the `/api/v2/silence/` endpoint can only affect silences that match the label.
 
+:rotating_light: `prom-label-proxy` doesn't support multiple label values for the Silences endpoints :rotating_light:
+
 ## Example use
 
 The concrete setup being shipped in OpenShift starting with 4.0: the proxy is configured to work with the label-key: namespace. In order to ensure that this is secure is it paired with the [kube-rbac-proxy](https://github.com/brancz/kube-rbac-proxy) and its URL rewrite functionality, meaning first ServiceAccount token authentication is performed, and then the kube-rbac-proxy authorization to see whether the requesting entity is allowed to retrieve the metrics for the requested namespace. The RBAC role we chose to authorize against is the same as the Kubernetes Resource Metrics API, the reasoning being, if an entity can `kubectl top pod` in a namespace, it can see cAdvisor metrics (container_memory_rss, container_cpu_usage_seconds_total, etc.).

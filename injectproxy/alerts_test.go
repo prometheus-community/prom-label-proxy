@@ -48,7 +48,7 @@ func TestGetAlerts(t *testing.T) {
 			// Check that filter parameter is added when other query parameter are present
 			labelv:         []string{"default"},
 			expCode:        http.StatusOK,
-			expQueryValues: []string{`namespace=~"default"`},
+			expQueryValues: []string{`namespace="default"`},
 			queryParam:     "filter",
 			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
 		},
@@ -73,7 +73,7 @@ func TestGetAlerts(t *testing.T) {
 			labelv:         []string{"default"},
 			filters:        []string{`job="prometheus"`, `instance=~".+"`},
 			expCode:        http.StatusOK,
-			expQueryValues: []string{`job="prometheus"`, `instance=~".+"`, `namespace=~"default"`},
+			expQueryValues: []string{`job="prometheus"`, `instance=~".+"`, `namespace="default"`},
 			queryParam:     "filter",
 			url:            "http://alertmanager.example.com/api/v2/alerts",
 		},

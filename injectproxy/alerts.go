@@ -15,6 +15,7 @@ package injectproxy
 
 import "net/http"
 
+// alerts proxies HTTP requests to the Alertmanager /api/v2/alerts endpoint.
 func (r *routes) alerts(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "GET":

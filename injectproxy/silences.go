@@ -32,10 +32,11 @@ import (
 	"github.com/prometheus/alertmanager/pkg/labels"
 )
 
+// silences proxies HTTP requests to the Alertmanager /api/v2/silences endpoint.
 func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "GET":
-		r.passthrough(w, req)
+		r.enforceFilterParameter(w, req)
 	case "POST":
 		r.postSilence(w, req)
 	default:
@@ -43,71 +44,43 @@ func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (r *routes) filterSilences() func(*http.Response) error {
-	return func(resp *http.Response) error {
-		if resp.Request.Method == http.MethodPost {
-			return nil
+// enforceSingleLabelValue verifies that the proxy is configured to match only
+// one label value. If not, it will reply with "422 Unprocessable Content".
+func enforceSingleLabelValue(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		labelValues := MustLabelValues(req.Context())
+		if len(labelValues) > 1 {
+			http.Error(w, "Multiple label matchers not supported", http.StatusUnprocessableEntity)
+			return
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			// Pass non-200 responses as-is.
-			return nil
-		}
-
-		apir, err := getAlertmanagerAPIResponse(resp.Body)
-		if err != nil {
-			return fmt.Errorf("can't decode API response: %w", err)
-		}
-
-		v, err := r.filterSilencesFromResp(MustLabelValues(resp.Request.Context()), apir)
-		if err != nil {
-			return err
-		}
-
-		var buf bytes.Buffer
-		if err = json.NewEncoder(&buf).Encode(v); err != nil {
-			return fmt.Errorf("can't encode API response: %w", err)
-		}
-		resp.Body = io.NopCloser(&buf)
-		resp.Header["Content-Length"] = []string{fmt.Sprint(buf.Len())}
-
-		return nil
+		next(w, req)
 	}
 }
 
-func (r *routes) filterSilencesFromResp(lvalues []string, data models.GettableSilences) (interface{}, error) {
-	filtered := models.GettableSilences{}
-
-	for _, gts := range data {
-		if hasMatcherForLabel(gts.Matchers, r.label, lvalues) {
-			filtered = append(filtered, gts)
-		}
-	}
-
-	return filtered, nil
-}
-
-func getAlertmanagerAPIResponse(body io.ReadCloser) (models.GettableSilences, error) {
-	defer body.Close()
-
-	var apir models.GettableSilences
-	if err := json.NewDecoder(body).Decode(&apir); err != nil {
-		return nil, fmt.Errorf("JSON decoding: %w", err)
-	}
-
-	return apir, nil
-}
-
+// enforceFilterParameter injects a label matcher parameter into the
+// Alertmanager API's query.
 func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request) {
 	var (
 		q               = req.URL.Query()
+		proxyLabelMatch labels.Matcher
+	)
+
+	if len(MustLabelValues(req.Context())) > 1 {
 		proxyLabelMatch = labels.Matcher{
 			Type:  labels.MatchRegexp,
 			Name:  r.label,
 			Value: joinMultipleLabelValues(MustLabelValues(req.Context())),
 		}
-		modified = []string{proxyLabelMatch.String()}
-	)
+	} else {
+		proxyLabelMatch = labels.Matcher{
+			Type:  labels.MatchEqual,
+			Name:  r.label,
+			Value: MustLabelValue(req.Context()),
+		}
+	}
+
+	modified := []string{proxyLabelMatch.String()}
 	for _, filter := range q["filter"] {
 		m, err := labels.ParseMatcher(filter)
 		if err != nil {
@@ -129,10 +102,10 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 
 func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 	var (
-		sil          models.PostableSilence
-		lvalues      = MustLabelValues(req.Context())
-		matcherValue = joinMultipleLabelValues(lvalues)
+		sil    models.PostableSilence
+		lvalue = MustLabelValue(req.Context())
 	)
+
 	if err := json.NewDecoder(req.Body).Decode(&sil); err != nil {
 		prometheusAPIError(w, fmt.Sprintf("bad request: can't decode: %v", err), http.StatusBadRequest)
 		return
@@ -146,17 +119,22 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !hasMatcherForLabel(existing.Matchers, r.label, lvalues) {
+		if !hasMatcherForLabel(existing.Matchers, r.label, lvalue) {
 			prometheusAPIError(w, "forbidden", http.StatusForbidden)
 			return
 		}
 	}
 
-	truthy := true
+	var falsy bool
 	modified := models.Matchers{
-		&models.Matcher{Name: &(r.label), Value: &matcherValue, IsRegex: &truthy},
+		&models.Matcher{Name: &(r.label), Value: &lvalue, IsRegex: &falsy},
 	}
-	modified = append(modified, sil.Matchers...)
+	for _, m := range sil.Matchers {
+		if m.Name != nil && *m.Name == r.label {
+			continue
+		}
+		modified = append(modified, m)
+	}
 	// At least one matcher in addition to the enforced label is required,
 	// otherwise all alerts would be silenced
 	if len(modified) < 2 {
@@ -180,6 +158,7 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
 }
 
+// deleteSilence proxies HTTP requests to the Alertmanager /api/v2/silence/ endpoint.
 func (r *routes) deleteSilence(w http.ResponseWriter, req *http.Request) {
 	silID := strings.TrimPrefix(req.URL.Path, "/api/v2/silence/")
 	if silID == "" || silID == req.URL.Path {
@@ -194,7 +173,7 @@ func (r *routes) deleteSilence(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if !hasMatcherForLabel(sil.Matchers, r.label, MustLabelValues(req.Context())) {
+	if !hasMatcherForLabel(sil.Matchers, r.label, MustLabelValue(req.Context())) {
 		prometheusAPIError(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -217,10 +196,10 @@ func (r *routes) getSilenceByID(ctx context.Context, id string) (*models.Gettabl
 	return sil.Payload, nil
 }
 
-func hasMatcherForLabel(matchers models.Matchers, name string, values []string) bool {
+func hasMatcherForLabel(matchers models.Matchers, name, value string) bool {
 	for _, m := range matchers {
-		if *m.Name == name {
-			return *m.IsRegex && *m.Value == joinMultipleLabelValues(values)
+		if *m.Name == name && !*m.IsRegex && *m.Value == value {
+			return true
 		}
 	}
 	return false
