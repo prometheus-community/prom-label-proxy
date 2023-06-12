@@ -83,7 +83,7 @@ HTTP query parameter:
 {"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
 
-You can provide multiple values for the label using query parameter in the URL:
+You can provide multiple values for the label using several `tenant` HTTP query parameters:
 
 ```bash
 ➜  ~ curl http://127.0.0.1:8080/api/v1/query\?query="up"\&tenant\="something"\&tenant\="anything"
@@ -131,7 +131,8 @@ prom-label-proxy \
 
 Now prom-label-proxy enforces the `tenant="prometheus"` label in all requests.
 
-You can provide multiple static values for a label. For example, running `prom-label-proxy` with
+You can provide multiple static values for a label. For example:
+
 ```
 prom-label-proxy \
    -label tenant \
@@ -140,7 +141,8 @@ prom-label-proxy \
    -upstream http://demo.do.prometheus.io:9090 \
    -insecure-listen-address 127.0.0.1:8080
 ```
-will enforce `tenant=~"prometheus|alertmanager"` in all requests.
+
+`prom-label-proxy` will enforce the `tenant=~"prometheus|alertmanager"` label selector in all requests.
 
 Once again for clarity: **this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or
 authorize the requesting entity in any way, this has to be built around this project.**
