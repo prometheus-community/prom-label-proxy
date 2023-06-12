@@ -26,7 +26,6 @@ import (
 
 	runtimeclient "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
-	"github.com/pkg/errors"
 	"github.com/prometheus/alertmanager/api/v2/client"
 	"github.com/prometheus/alertmanager/api/v2/client/silence"
 	"github.com/prometheus/alertmanager/api/v2/models"
@@ -57,7 +56,7 @@ func (r *routes) filterSilences() func(*http.Response) error {
 
 		apir, err := getAlertmanagerAPIResponse(resp.Body)
 		if err != nil {
-			return errors.Wrap(err, "can't decode API response")
+			return fmt.Errorf("can't decode API response: %w", err)
 		}
 
 		v, err := r.filterSilencesFromResp(MustLabelValues(resp.Request.Context()), apir)
@@ -67,7 +66,7 @@ func (r *routes) filterSilences() func(*http.Response) error {
 
 		var buf bytes.Buffer
 		if err = json.NewEncoder(&buf).Encode(v); err != nil {
-			return errors.Wrap(err, "can't encode API response")
+			return fmt.Errorf("can't encode API response: %w", err)
 		}
 		resp.Body = io.NopCloser(&buf)
 		resp.Header["Content-Length"] = []string{fmt.Sprint(buf.Len())}
@@ -93,7 +92,7 @@ func getAlertmanagerAPIResponse(body io.ReadCloser) (models.GettableSilences, er
 
 	var apir models.GettableSilences
 	if err := json.NewDecoder(body).Decode(&apir); err != nil {
-		return nil, errors.Wrap(err, "JSON decoding")
+		return nil, fmt.Errorf("JSON decoding: %w", err)
 	}
 
 	return apir, nil
