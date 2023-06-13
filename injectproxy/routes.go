@@ -212,14 +212,10 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 func (hff HTTPFormEnforcer) getLabelValues(r *http.Request) ([]string, error) {
 	err := r.ParseForm()
 	if err != nil {
-		return nil, fmt.Errorf("the query parameter can not be parsed: %w", err)
+		return nil, fmt.Errorf("the form data can not be parsed: %w", err)
 	}
 
-	formValues := r.Form[hff.ParameterName]
-
-	// Skip empty values
-	formValues = removeEmptyValue(formValues)
-
+	formValues := removeEmptyValues(r.Form[hff.ParameterName])
 	if len(formValues) == 0 {
 		return nil, fmt.Errorf("the %q query parameter must be provided", hff.ParameterName)
 	}
@@ -246,9 +242,7 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 }
 
 func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) {
-	headerValues := r.Header[hhe.Name]
-
-	headerValues = removeEmptyValue(headerValues)
+	headerValues := removeEmptyValues(r.Header[hhe.Name])
 
 	if len(headerValues) == 0 {
 		return nil, fmt.Errorf("missing HTTP header %q", hhe.Name)
@@ -308,10 +302,21 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 
 	errs.Add(
-		// The semantics of the Silences API don't support multi-label matchers hence enforceSingleLabelValue().
-		mux.Handle("/api/v2/silences", r.el.ExtractLabel(enforceMethods(enforceSingleLabelValue(r.silences), "GET", "POST"))),
-		// The semantics of the Silences API don't support multi-label matchers hence enforceSingleLabelValue().
-		mux.Handle("/api/v2/silence/", r.el.ExtractLabel(enforceMethods(enforceSingleLabelValue(r.deleteSilence), "DELETE"))),
+		// Reject multi label values with assertSingleLabelValue() because the
+		// semantics of the Silences API don't support multi-label matchers.
+		mux.Handle("/api/v2/silences", r.el.ExtractLabel(
+			enforceMethods(
+				assertSingleLabelValue(r.silences),
+				"GET", "POST",
+			),
+		)),
+		mux.Handle("/api/v2/silence/", r.el.ExtractLabel(
+			enforceMethods(
+				assertSingleLabelValue(r.deleteSilence),
+				"DELETE",
+			),
+		)),
+
 		mux.Handle("/api/v2/alerts/groups", r.el.ExtractLabel(enforceMethods(r.enforceFilterParameter, "GET"))),
 		mux.Handle("/api/v2/alerts", r.el.ExtractLabel(enforceMethods(r.alerts, "GET"))),
 	)
@@ -411,7 +416,7 @@ func MustLabelValue(ctx context.Context) string {
 	return v[0]
 }
 
-func joinMultipleLabelValues(labelValues []string) string {
+func labelValuesToRegexpString(labelValues []string) string {
 	lvs := make([]string, len(labelValues))
 	for i := range labelValues {
 		lvs[i] = regexp.QuoteMeta(labelValues[i])
@@ -434,7 +439,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		[]*labels.Matcher{{
 			Name:  r.label,
 			Type:  labels.MatchRegexp,
-			Value: joinMultipleLabelValues(MustLabelValues(req.Context())),
+			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
 		}}...)
 
 	// The `query` can come in the URL query string and/or the POST body.
@@ -520,7 +525,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	matcher := &labels.Matcher{
 		Name:  r.label,
 		Type:  labels.MatchRegexp,
-		Value: joinMultipleLabelValues(MustLabelValues(req.Context())),
+		Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
 	}
 	q := req.URL.Query()
 
@@ -605,12 +610,13 @@ func humanFriendlyErrorMessage(err error) string {
 	return fmt.Sprintf("%s%s.", strings.ToUpper(errMsg[:1]), errMsg[1:])
 }
 
-func removeEmptyValue(slice []string) []string {
+func removeEmptyValues(slice []string) []string {
 	for i := 0; i < len(slice); i++ {
 		if slice[i] == "" {
 			slice = append(slice[:i], slice[i+1:]...)
 			i--
 		}
 	}
+
 	return slice
 }

@@ -44,9 +44,9 @@ func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// enforceSingleLabelValue verifies that the proxy is configured to match only
+// assertSingleLabelValue verifies that the proxy is configured to match only
 // one label value. If not, it will reply with "422 Unprocessable Content".
-func enforceSingleLabelValue(next http.HandlerFunc) http.HandlerFunc {
+func assertSingleLabelValue(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		labelValues := MustLabelValues(req.Context())
 		if len(labelValues) > 1 {
@@ -64,15 +64,17 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 	var (
 		q               = req.URL.Query()
 		proxyLabelMatch labels.Matcher
+		singleValue     bool
 	)
 
 	if len(MustLabelValues(req.Context())) > 1 {
 		proxyLabelMatch = labels.Matcher{
 			Type:  labels.MatchRegexp,
 			Name:  r.label,
-			Value: joinMultipleLabelValues(MustLabelValues(req.Context())),
+			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
 		}
 	} else {
+		singleValue = true
 		proxyLabelMatch = labels.Matcher{
 			Type:  labels.MatchEqual,
 			Name:  r.label,
@@ -87,9 +89,13 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 			prometheusAPIError(w, fmt.Sprintf("bad request: can't parse filter %q: %v", filter, err), http.StatusBadRequest)
 			return
 		}
-		if m.Name == r.label {
+
+		// Keep the original matcher in case of multi label values because
+		// the user might want to filter on a specific value.
+		if m.Name == r.label && singleValue {
 			continue
 		}
+
 		modified = append(modified, filter)
 	}
 

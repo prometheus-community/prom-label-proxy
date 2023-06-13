@@ -45,7 +45,7 @@ func TestGetAlerts(t *testing.T) {
 			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
 		},
 		{
-			// Check that filter parameter is added when other query parameter are present
+			// Check that filter parameter is added when other query parameter are present.
 			labelv:         []string{"default"},
 			expCode:        http.StatusOK,
 			expQueryValues: []string{`namespace="default"`},
@@ -53,7 +53,7 @@ func TestGetAlerts(t *testing.T) {
 			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
 		},
 		{
-			// Check that filter parameter is added when multiple label values are set
+			// Check that the filter parameter is added when multiple label values are set.
 			labelv:         []string{"default", "something"},
 			expCode:        http.StatusOK,
 			expQueryValues: []string{`namespace=~"default|something"`},
@@ -61,7 +61,16 @@ func TestGetAlerts(t *testing.T) {
 			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
 		},
 		{
-			// Check that label values are correctly escaped
+			// Check that the original filter parameter is preserved when multiple label values are set.
+			labelv:         []string{"default", "something"},
+			filters:        []string{`namespace="default"`, `instance=~".+"`},
+			expCode:        http.StatusOK,
+			expQueryValues: []string{`namespace=~"default|something"`, `namespace="default"`, `instance=~".+"`},
+			queryParam:     "filter",
+			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
+		},
+		{
+			// Check that label values are correctly escaped.
 			labelv:         []string{"default", "some|thing"},
 			expCode:        http.StatusOK,
 			expQueryValues: []string{`namespace=~"default|some\\|thing"`},
