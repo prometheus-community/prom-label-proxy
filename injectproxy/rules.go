@@ -20,10 +20,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"time"
 
 	"github.com/prometheus/prometheus/model/labels"
+	"golang.org/x/exp/slices"
 )
 
 type apiResponse struct {
@@ -208,7 +208,7 @@ func (r *routes) filterRules(lvalues []string, resp *apiResponse) (interface{}, 
 		var rules []rule
 		for _, rule := range rg.Rules {
 			for _, lbl := range rule.Labels() {
-				if lbl.Name == r.label && contains(lvalues, lbl.Value) {
+				if lbl.Name == r.label && slices.Contains(lvalues, lbl.Value) {
 					rules = append(rules, rule)
 					break
 				}
@@ -232,7 +232,7 @@ func (r *routes) filterAlerts(lvalues []string, resp *apiResponse) (interface{},
 	filtered := []*alert{}
 	for _, alert := range data.Alerts {
 		for _, lbl := range alert.Labels {
-			if lbl.Name == r.label && contains(lvalues, lbl.Value) {
+			if lbl.Name == r.label && slices.Contains(lvalues, lbl.Value) {
 				filtered = append(filtered, alert)
 				break
 			}
@@ -240,10 +240,4 @@ func (r *routes) filterAlerts(lvalues []string, resp *apiResponse) (interface{},
 	}
 
 	return &alertsData{Alerts: filtered}, nil
-}
-
-func contains(list []string, s string) bool {
-	i := sort.SearchStrings(list, s)
-
-	return i < len(list) && list[i] == s
 }
