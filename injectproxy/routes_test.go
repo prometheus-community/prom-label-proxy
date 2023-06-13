@@ -66,11 +66,13 @@ func checkQueryHandler(body, key string, values ...string) http.Handler {
 			prometheusAPIError(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
 			return
 		}
+
 		// Verify that the client provides the parameter only once.
 		if len(kvs[key]) != len(values) {
 			prometheusAPIError(w, fmt.Sprintf("expected %d values of parameter %q, got %d", len(values), key, len(kvs[key])), http.StatusInternalServerError)
 			return
 		}
+
 		sort.Strings(values)
 		sort.Strings(kvs[key])
 		for i := range values {
@@ -79,11 +81,13 @@ func checkQueryHandler(body, key string, values ...string) http.Handler {
 				return
 			}
 		}
+
 		buf, err := io.ReadAll(req.Body)
 		if err != nil {
 			prometheusAPIError(w, "failed to read body", http.StatusInternalServerError)
 			return
 		}
+
 		if string(buf) != body {
 			prometheusAPIError(w, fmt.Sprintf("expected body %q, got %q", body, string(buf)), http.StatusInternalServerError)
 			return
@@ -316,6 +320,22 @@ func TestMatch(t *testing.T) {
 			expMatch: []string{`{job="prometheus",namespace=~"default"}`, `{__name__=~"job:.*",namespace=~"default"}`},
 			expBody:  okResponse,
 		},
+		{
+			// Many "match" parameters with multiple label values.
+			labelv: []string{"default", "something"},
+			matches: []string{
+				`{job="prometheus"}`,
+				`{__name__=~"job:.*"}`,
+				`{namespace="something"}`,
+			},
+			expCode: http.StatusOK,
+			expMatch: []string{
+				`{job="prometheus",namespace=~"default|something"}`,
+				`{__name__=~"job:.*",namespace=~"default|something"}`,
+				`{namespace="something",namespace=~"default|something"}`,
+			},
+			expBody: okResponse,
+		},
 	} {
 		for _, u := range []string{
 			"http://prometheus.example.com/federate",
@@ -330,6 +350,7 @@ func TestMatch(t *testing.T) {
 					),
 				)
 				defer m.Close()
+
 				r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel}, WithEnabledLabelsAPI())
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -432,6 +453,22 @@ func TestMatchWithPost(t *testing.T) {
 			expCode:  http.StatusOK,
 			expMatch: []string{`{job="prometheus",namespace=~"default"}`, `{__name__=~"job:.*",namespace=~"default"}`},
 			expBody:  okResponse,
+		},
+		{
+			// Many "match" parameters with multiple label values.
+			labelv: []string{"default", "something"},
+			matches: []string{
+				`{job="prometheus"}`,
+				`{__name__=~"job:.*"}`,
+				`{namespace="something"}`,
+			},
+			expCode: http.StatusOK,
+			expMatch: []string{
+				`{job="prometheus",namespace=~"default|something"}`,
+				`{__name__=~"job:.*",namespace=~"default|something"}`,
+				`{namespace="something",namespace=~"default|something"}`,
+			},
+			expBody: okResponse,
 		},
 	} {
 		for _, u := range []string{
@@ -545,11 +582,19 @@ func TestSeries(t *testing.T) {
 			expResponse: okResponse,
 		},
 		{
-			name:        `Series with labels`,
+			name:        `Series with multiple labels`,
 			labelv:      []string{"default"},
 			promQuery:   `up{instance="localhost:9090"}`,
 			expCode:     http.StatusOK,
 			expMatch:    []string{`{instance="localhost:9090",__name__="up",namespace=~"default"}`},
+			expResponse: okResponse,
+		},
+		{
+			name:        `Series with multiple label values and existing matcher`,
+			labelv:      []string{"default", "something"},
+			promQuery:   `up{instance="localhost:9090",namespace="something"}`,
+			expCode:     http.StatusOK,
+			expMatch:    []string{`{instance="localhost:9090",namespace="something",__name__="up",namespace=~"default|something"}`},
 			expResponse: okResponse,
 		},
 	} {
@@ -682,6 +727,15 @@ func TestSeriesWithPost(t *testing.T) {
 			expMatch:      []string{`{instance="localhost:9090",__name__="up",namespace=~"default"}`},
 			expResponse:   okResponse,
 		},
+		{
+			name:          `Series POST with multiple label values and existing matcher`,
+			labelv:        []string{"default", "something"},
+			promQueryBody: `up{instance="localhost:9090",namespace="something"}`,
+			method:        http.MethodPost,
+			expCode:       http.StatusOK,
+			expMatch:      []string{`{instance="localhost:9090",namespace="something",__name__="up",namespace=~"default|something"}`},
+			expResponse:   okResponse,
+		},
 	} {
 		for _, endpoint := range []string{"series"} {
 			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
@@ -796,15 +850,23 @@ func TestQuery(t *testing.T) {
 			labelv:       []string{"default"},
 			promQuery:    "up",
 			expCode:      http.StatusOK,
-			expPromQuery: `up{namespace=~"default"}`,
+			expPromQuery: `up{namespace="default"}`,
 			expResponse:  okResponse,
 		},
 		{
 			name:         `Query: check that label values are correctly escaped`,
+			labelv:       []string{"de|fault", "something"},
+			promQuery:    "up",
+			expCode:      http.StatusOK,
+			expPromQuery: `up{namespace=~"de\\|fault|something"}`,
+			expResponse:  okResponse,
+		},
+		{
+			name:         `Query: check that label values are not escaped for single label values`,
 			labelv:       []string{"de|fault"},
 			promQuery:    "up",
 			expCode:      http.StatusOK,
-			expPromQuery: `up{namespace=~"de\\|fault"}`,
+			expPromQuery: `up{namespace="de|fault"}`,
 			expResponse:  okResponse,
 		},
 		{
@@ -821,7 +883,7 @@ func TestQuery(t *testing.T) {
 			promQueryBody:    "up",
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
-			expPromQueryBody: `up{namespace=~"default"}`,
+			expPromQueryBody: `up{namespace="default"}`,
 			expResponse:      okResponse,
 		},
 		{
@@ -848,8 +910,8 @@ func TestQuery(t *testing.T) {
 			promQueryBody:    "up",
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
-			expPromQuery:     `up{namespace=~"default"}`,
-			expPromQueryBody: `up{namespace=~"default"}`,
+			expPromQuery:     `up{namespace="default"}`,
+			expPromQueryBody: `up{namespace="default"}`,
 			expResponse:      okResponse,
 		},
 		{
@@ -870,8 +932,8 @@ func TestQuery(t *testing.T) {
 			promQueryBody:    "foo",
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
-			expPromQuery:     `up{namespace=~"default"}`,
-			expPromQueryBody: `foo{namespace=~"default"}`,
+			expPromQuery:     `up{namespace="default"}`,
+			expPromQueryBody: `foo{namespace="default"}`,
 			expResponse:      okResponse,
 		},
 		{
@@ -890,15 +952,15 @@ func TestQuery(t *testing.T) {
 			labelv:       []string{"default"},
 			promQuery:    `up{namespace="other"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{namespace=~"default"}`,
+			expPromQuery: `up{namespace="default"}`,
 			expResponse:  okResponse,
 		},
 		{
 			name:         `Query with a vector selector with multiple label values`,
 			labelv:       []string{"default", "second"},
-			promQuery:    `up{namespace="other"}`,
+			promQuery:    `up{namespace="second"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{namespace=~"default|second"}`,
+			expPromQuery: `up{namespace="second",namespace=~"default|second"}`,
 			expResponse:  okResponse,
 		},
 		{
@@ -906,7 +968,7 @@ func TestQuery(t *testing.T) {
 			labelv:       []string{"default", ""},
 			promQuery:    `up{namespace="other"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{namespace=~"default"}`,
+			expPromQuery: `up{namespace="default"}`,
 			expResponse:  okResponse,
 		},
 		{
@@ -915,16 +977,16 @@ func TestQuery(t *testing.T) {
 			promQueryBody:    `up{namespace="other"}`,
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
-			expPromQueryBody: `up{namespace=~"default"}`,
+			expPromQueryBody: `up{namespace="default"}`,
 			expResponse:      okResponse,
 		},
 		{
 			name:             `Query with a vector selector in POST body with multiple label values`,
 			labelv:           []string{"default", "second"},
-			promQueryBody:    `up{namespace="other"}`,
+			promQueryBody:    `up{namespace="second"}`,
 			method:           http.MethodPost,
 			expCode:          http.StatusOK,
-			expPromQueryBody: `up{namespace=~"default|second"}`,
+			expPromQueryBody: `up{namespace="second",namespace=~"default|second"}`,
 			expResponse:      okResponse,
 		},
 		{
@@ -996,58 +1058,58 @@ func TestQuery(t *testing.T) {
 			labelv:       []string{"default"},
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
+			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
 			expResponse:  okResponse,
 		},
 		{
 			name:         `Binary expression with multiple label values`,
 			labelv:       []string{"default", "second"},
-			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="second"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace="second",namespace=~"default|second"}`,
 			expResponse:  okResponse,
 		},
 		{
 			name:           `Static label value`,
 			staticLabelVal: []string{"default"},
-			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			promQuery:      `up{instance="localhost:9090"} + foo{namespace="default"}`,
 			expCode:        http.StatusOK,
-			expPromQuery:   `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
+			expPromQuery:   `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
 			expResponse:    okResponse,
 		},
 		{
-			name:           `Multiple static label value`,
+			name:           `Multiple static label values`,
 			staticLabelVal: []string{"default", "second"},
-			promQuery:      `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			promQuery:      `up{instance="localhost:9090"} + foo{namespace="second"}`,
 			expCode:        http.StatusOK,
-			expPromQuery:   `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
+			expPromQuery:   `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace="second",namespace=~"default|second"}`,
 			expResponse:    okResponse,
 		},
 		{
-			name:         `http header label value`,
+			name:         `HTTP header label value`,
 			headers:      http.Header{"namespace": []string{"default"}},
 			headerName:   "namespace",
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
+			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
 			expResponse:  okResponse,
 		},
 		{
-			name:         `multiple http header label value`,
+			name:         `multiple HTTP header label values`,
 			headers:      http.Header{"namespace": []string{"default", "second"}},
 			headerName:   "namespace",
-			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="second"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace=~"default|second"}`,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"default|second"} + foo{namespace="second",namespace=~"default|second"}`,
 			expResponse:  okResponse,
 		},
 		{
-			name:         `multiple http header with empty label value`,
+			name:         `multiple HTTP header with empty label value`,
 			headers:      http.Header{"namespace": []string{"default", ""}},
 			headerName:   "namespace",
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
+			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
 			expResponse:  okResponse,
 		},
 		{
@@ -1056,7 +1118,7 @@ func TestQuery(t *testing.T) {
 			labelv:       []string{"default"},
 			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
 			expCode:      http.StatusOK,
-			expPromQuery: `up{instance="localhost:9090",namespace=~"default"} + foo{namespace=~"default"}`,
+			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
 			expResponse:  okResponse,
 		},
 	} {

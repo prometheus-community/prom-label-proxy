@@ -64,7 +64,6 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 	var (
 		q               = req.URL.Query()
 		proxyLabelMatch labels.Matcher
-		singleValue     bool
 	)
 
 	if len(MustLabelValues(req.Context())) > 1 {
@@ -74,7 +73,6 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
 		}
 	} else {
-		singleValue = true
 		proxyLabelMatch = labels.Matcher{
 			Type:  labels.MatchEqual,
 			Name:  r.label,
@@ -92,7 +90,7 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 
 		// Keep the original matcher in case of multi label values because
 		// the user might want to filter on a specific value.
-		if m.Name == r.label && singleValue {
+		if m.Name == r.label && proxyLabelMatch.Type != labels.MatchRegexp {
 			continue
 		}
 

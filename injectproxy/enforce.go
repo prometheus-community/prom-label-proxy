@@ -136,8 +136,10 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 // EnforceMatchers appends the configured label matcher if not present.
 // If the label matcher that is to be injected is present (by labelname) but
 // different (either by match type or value) the behavior depends on the
-// errorOnReplace variable. If errorOnReplace is true an error is returned,
-// otherwise the label matcher is silently replaced.
+// errorOnReplace variable and the enforced matcher(s):
+// * if errorOnReplace is true, an error is returned,
+// * if errorOnReplace is false and the label matcher type is '=', the existing matcher is silently replaced.
+// * otherwise the existing matcher is preserved.
 func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.Matcher, error) {
 	var res []*labels.Matcher
 
@@ -147,7 +149,12 @@ func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.Matcher
 			if ms.errorOnReplace && matcher.String() != target.String() {
 				return res, newIllegalLabelMatcherError(matcher.String(), target.String())
 			}
-			continue
+
+			// Drop the existing matcher only if the enforced matcher is an
+			// equal matcher.
+			if matcher.Type == labels.MatchEqual {
+				continue
+			}
 		}
 
 		res = append(res, target)

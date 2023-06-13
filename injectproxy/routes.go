@@ -435,12 +435,23 @@ func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
-	e := NewEnforcer(r.errorOnReplace,
-		[]*labels.Matcher{{
+	var matcher *labels.Matcher
+
+	if len(MustLabelValues(req.Context())) > 1 {
+		matcher = &labels.Matcher{
 			Name:  r.label,
 			Type:  labels.MatchRegexp,
 			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
-		}}...)
+		}
+	} else {
+		matcher = &labels.Matcher{
+			Name:  r.label,
+			Type:  labels.MatchEqual,
+			Value: MustLabelValue(req.Context()),
+		}
+	}
+
+	e := NewEnforcer(r.errorOnReplace, matcher)
 
 	// The `query` can come in the URL query string and/or the POST body.
 	// For this reason, we need to try to enforcing in both places.
@@ -527,26 +538,30 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		Type:  labels.MatchRegexp,
 		Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
 	}
-	q := req.URL.Query()
 
+	q := req.URL.Query()
 	if err := injectMatcher(q, matcher); err != nil {
 		return
 	}
+
 	req.URL.RawQuery = q.Encode()
 	if req.Method == http.MethodPost {
 		if err := req.ParseForm(); err != nil {
 			return
 		}
+
 		q = req.PostForm
 		if err := injectMatcher(q, matcher); err != nil {
 			return
 		}
+
 		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
 		_ = req.Body.Close()
 		newBody := q.Encode()
 		req.Body = io.NopCloser(strings.NewReader(newBody))
 		req.ContentLength = int64(len(newBody))
 	}
+
 	r.handler.ServeHTTP(w, req)
 }
 
@@ -554,17 +569,20 @@ func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
-	} else {
-		// Inject label to existing matchers.
-		for i, m := range matchers {
-			ms, err := parser.ParseMetricSelector(m)
-			if err != nil {
-				return err
-			}
-			matchers[i] = matchersToString(append(ms, matcher)...)
-		}
-		q[matchersParam] = matchers
+		return nil
 	}
+
+	// Inject label into existing matchers.
+	for i, m := range matchers {
+		ms, err := parser.ParseMetricSelector(m)
+		if err != nil {
+			return err
+		}
+
+		matchers[i] = matchersToString(append(ms, matcher)...)
+	}
+	q[matchersParam] = matchers
+
 	return nil
 }
 
