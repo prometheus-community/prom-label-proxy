@@ -1,3 +1,7 @@
+## 0.7.0 / 2023-06-15
+
+* [FEATURE] Support filtering on multiple label values. #115
+
 ## 0.6.0 / 2023-01-04
 
 * [FEATURE] Add the `--header-name` flag to pass the label value via HTTP header. #118
