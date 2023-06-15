@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -33,6 +34,24 @@ import (
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 )
 
+type arrayFlags []string
+
+// String is the method to format the flag's value, part of the flag.Value interface.
+// The String method's output will be used in diagnostics.
+func (i *arrayFlags) String() string {
+	return fmt.Sprint(*i)
+}
+
+// Set is the method to set the flag value, part of the flag.Value interface.
+func (i *arrayFlags) Set(value string) error {
+	if value == "" {
+		return nil
+	}
+
+	*i = append(*i, value)
+	return nil
+}
+
 func main() {
 	var (
 		insecureListenAddress  string
@@ -41,7 +60,7 @@ func main() {
 		queryParam             string
 		headerName             string
 		label                  string
-		labelValue             string
+		labelValues            arrayFlags
 		enableLabelAPIs        bool
 		unsafePassthroughPaths string // Comma-delimited string.
 		errorOnReplace         bool
@@ -54,7 +73,7 @@ func main() {
 	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
 	flagset.StringVar(&label, "label", "", "The label name to enforce in all proxied PromQL queries.")
-	flagset.StringVar(&labelValue, "label-value", "", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given.")
+	flagset.Var(&labelValues, "label-value", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given. It can be repeated in which case the proxy will enforce the union of values.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
 		"NOTE: Enable with care because filtering by matcher is not implemented in older versions of Prometheus (>= v2.24.0 required) and Thanos (>= v0.18.0 required, >= v0.23.0 recommended). If enabled and "+
 		"any labels endpoint does not support selectors, the injected matcher will have no effect.")
@@ -69,11 +88,11 @@ func main() {
 		log.Fatalf("-label flag cannot be empty")
 	}
 
-	if labelValue == "" && queryParam == "" && headerName == "" {
+	if len(labelValues) == 0 && queryParam == "" && headerName == "" {
 		queryParam = label
 	}
 
-	if labelValue != "" {
+	if len(labelValues) > 0 {
 		if queryParam != "" || headerName != "" {
 			log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
 		}
@@ -109,8 +128,8 @@ func main() {
 
 	var extractLabeler injectproxy.ExtractLabeler
 	switch {
-	case labelValue != "":
-		extractLabeler = injectproxy.StaticLabelEnforcer(labelValue)
+	case len(labelValues) > 0:
+		extractLabeler = injectproxy.StaticLabelEnforcer(labelValues)
 	case queryParam != "":
 		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam}
 	case headerName != "":

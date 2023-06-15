@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/model/labels"
+	"golang.org/x/exp/slices"
 )
 
 type apiResponse struct {
@@ -162,7 +163,7 @@ type alert struct {
 // modifyAPIResponse unwraps the Prometheus API response, passes the enforced
 // label value and the response to the given function and finally replaces the
 // result in the response.
-func modifyAPIResponse(f func(string, *apiResponse) (interface{}, error)) func(*http.Response) error {
+func modifyAPIResponse(f func([]string, *apiResponse) (interface{}, error)) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		if resp.StatusCode != http.StatusOK {
 			// Pass non-200 responses as-is.
@@ -174,7 +175,7 @@ func modifyAPIResponse(f func(string, *apiResponse) (interface{}, error)) func(*
 			return fmt.Errorf("can't decode API response: %w", err)
 		}
 
-		v, err := f(MustLabelValue(resp.Request.Context()), apir)
+		v, err := f(MustLabelValues(resp.Request.Context()), apir)
 		if err != nil {
 			return err
 		}
@@ -196,7 +197,7 @@ func modifyAPIResponse(f func(string, *apiResponse) (interface{}, error)) func(*
 	}
 }
 
-func (r *routes) filterRules(lvalue string, resp *apiResponse) (interface{}, error) {
+func (r *routes) filterRules(lvalues []string, resp *apiResponse) (interface{}, error) {
 	var rgs rulesData
 	if err := json.Unmarshal(resp.Data, &rgs); err != nil {
 		return nil, fmt.Errorf("can't decode rules data: %w", err)
@@ -207,7 +208,7 @@ func (r *routes) filterRules(lvalue string, resp *apiResponse) (interface{}, err
 		var rules []rule
 		for _, rule := range rg.Rules {
 			for _, lbl := range rule.Labels() {
-				if lbl.Name == r.label && lbl.Value == lvalue {
+				if lbl.Name == r.label && slices.Contains(lvalues, lbl.Value) {
 					rules = append(rules, rule)
 					break
 				}
@@ -222,7 +223,7 @@ func (r *routes) filterRules(lvalue string, resp *apiResponse) (interface{}, err
 	return &rulesData{RuleGroups: filtered}, nil
 }
 
-func (r *routes) filterAlerts(lvalue string, resp *apiResponse) (interface{}, error) {
+func (r *routes) filterAlerts(lvalues []string, resp *apiResponse) (interface{}, error) {
 	var data alertsData
 	if err := json.Unmarshal(resp.Data, &data); err != nil {
 		return nil, fmt.Errorf("can't decode alerts data: %w", err)
@@ -231,7 +232,7 @@ func (r *routes) filterAlerts(lvalue string, resp *apiResponse) (interface{}, er
 	filtered := []*alert{}
 	for _, alert := range data.Alerts {
 		for _, lbl := range alert.Labels {
-			if lbl.Name == r.label && lbl.Value == lvalue {
+			if lbl.Name == r.label && slices.Contains(lvalues, lbl.Value) {
 				filtered = append(filtered, alert)
 				break
 			}

@@ -11,6 +11,7 @@ require (
 	github.com/prometheus/alertmanager v0.25.0
 	github.com/prometheus/client_golang v1.15.1
 	github.com/prometheus/prometheus v0.44.0
+	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
 )
 
 require (
@@ -51,7 +52,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.14.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/goleak v1.2.1 // indirect
-	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
 	golang.org/x/sys v0.7.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

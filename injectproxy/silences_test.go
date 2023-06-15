@@ -29,7 +29,7 @@ import (
 
 func TestListSilences(t *testing.T) {
 	for _, tc := range []struct {
-		labelv  string
+		labelv  []string
 		filters []string
 
 		expCode    int
@@ -42,14 +42,14 @@ func TestListSilences(t *testing.T) {
 		},
 		{
 			// No "filter" parameter.
-			labelv:     "default",
+			labelv:     []string{"default"},
 			expCode:    http.StatusOK,
 			expFilters: []string{`namespace="default"`},
 			expBody:    okResponse,
 		},
 		{
 			// Many "filter" parameters.
-			labelv:     "default",
+			labelv:     []string{"default"},
 			filters:    []string{`job="prometheus"`, `instance=~".+"`},
 			expCode:    http.StatusOK,
 			expFilters: []string{`job="prometheus"`, `instance=~".+"`, `namespace="default"`},
@@ -57,7 +57,7 @@ func TestListSilences(t *testing.T) {
 		},
 		{
 			// Many "filter" parameters with a "namespace" label that needs to be enforced.
-			labelv:     "default",
+			labelv:     []string{"default"},
 			filters:    []string{`namespace=~"foo|default"`, `job="prometheus"`},
 			expCode:    http.StatusOK,
 			expFilters: []string{`namespace="default"`, `job="prometheus"`},
@@ -65,9 +65,14 @@ func TestListSilences(t *testing.T) {
 		},
 		{
 			// Invalid "filter" parameter.
-			labelv:  "default",
+			labelv:  []string{"default"},
 			filters: []string{`namespace=~"foo|default"`, `job="promethe`},
 			expCode: http.StatusBadRequest,
+		},
+		{
+			// Multiple label values are not supported.
+			labelv:  []string{"default", "something"},
+			expCode: http.StatusUnprocessableEntity,
 		},
 	} {
 		t.Run(strings.Join(tc.filters, "&"), func(t *testing.T) {
@@ -86,7 +91,9 @@ func TestListSilences(t *testing.T) {
 			for _, m := range tc.filters {
 				q.Add("filter", m)
 			}
-			q.Set(proxyLabel, tc.labelv)
+			for _, s := range tc.labelv {
+				q.Add(proxyLabel, s)
+			}
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
@@ -228,7 +235,7 @@ func (c *chainedHandlers) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func TestDeleteSilence(t *testing.T) {
 	for _, tc := range []struct {
 		ID       string
-		labelv   string
+		labelv   []string
 		upstream http.Handler
 
 		expCode int
@@ -241,13 +248,13 @@ func TestDeleteSilence(t *testing.T) {
 		{
 			// Missing silence ID.
 			ID:      "",
-			labelv:  "default",
+			labelv:  []string{"default"},
 			expCode: http.StatusBadRequest,
 		},
 		{
 			// The silence doesn't exist upstream.
 			ID:     silID,
-			labelv: "default",
+			labelv: []string{"default"},
 			upstream: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				http.NotFound(w, req)
 			}),
@@ -256,21 +263,21 @@ func TestDeleteSilence(t *testing.T) {
 		{
 			// The silence doesn't contain the expected label.
 			ID:       silID,
-			labelv:   "default",
+			labelv:   []string{"default"},
 			upstream: getSilenceWithoutLabel(),
 			expCode:  http.StatusForbidden,
 		},
 		{
 			// The silence doesn't have the expected value for the label.
 			ID:       silID,
-			labelv:   "default",
+			labelv:   []string{"default"},
 			upstream: getSilenceWithLabel("not default"),
 			expCode:  http.StatusForbidden,
 		},
 		{
 			// The silence has the expected value for the label.
 			ID:     silID,
-			labelv: "default",
+			labelv: []string{"default"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
 					getSilenceWithLabel("default"),
@@ -285,7 +292,7 @@ func TestDeleteSilence(t *testing.T) {
 		{
 			// The silence has the expected value for the label but upstream returns an error.
 			ID:     silID,
-			labelv: "default",
+			labelv: []string{"default"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
 					getSilenceWithLabel("default"),
@@ -295,6 +302,11 @@ func TestDeleteSilence(t *testing.T) {
 				},
 			},
 			expCode: http.StatusTeapot,
+		},
+		{
+			// Multiple label values are not supported.
+			labelv:  []string{"default", "something"},
+			expCode: http.StatusUnprocessableEntity,
 		},
 	} {
 		t.Run("", func(t *testing.T) {
@@ -310,7 +322,9 @@ func TestDeleteSilence(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			q := u.Query()
-			q.Set(proxyLabel, tc.labelv)
+			for _, s := range tc.labelv {
+				q.Add(proxyLabel, s)
+			}
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
@@ -340,7 +354,7 @@ func TestDeleteSilence(t *testing.T) {
 func TestUpdateSilence(t *testing.T) {
 	for _, tc := range []struct {
 		data     string
-		labelv   string
+		labelv   []string
 		upstream http.Handler
 
 		expCode int
@@ -353,7 +367,7 @@ func TestUpdateSilence(t *testing.T) {
 		{
 			// Invalid silence payload returns an error.
 			data:    "{",
-			labelv:  "default",
+			labelv:  []string{"default"},
 			expCode: http.StatusBadRequest,
 		},
 		{
@@ -367,7 +381,7 @@ func TestUpdateSilence(t *testing.T) {
     ],
     "startsAt":"2020-02-13T12:02:01Z"
 }`,
-			labelv:   "default",
+			labelv:   []string{"default"},
 			upstream: createSilenceWithLabel("default"),
 
 			expCode: http.StatusOK,
@@ -385,7 +399,7 @@ func TestUpdateSilence(t *testing.T) {
     ],
     "startsAt":"2020-02-13T12:02:01Z"
 }`,
-			labelv:   "default",
+			labelv:   []string{"default"},
 			upstream: createSilenceWithLabel("default"),
 
 			expCode: http.StatusOK,
@@ -400,7 +414,7 @@ func TestUpdateSilence(t *testing.T) {
     "matchers": [],
     "startsAt":"2020-02-13T12:02:01Z"
 }`,
-			labelv: "default",
+			labelv: []string{"default"},
 
 			expCode: http.StatusBadRequest,
 		},
@@ -416,7 +430,7 @@ func TestUpdateSilence(t *testing.T) {
     ],
     "startsAt":"2020-02-13T12:02:01Z"
 }`,
-			labelv: "default",
+			labelv: []string{"default"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
 					getSilenceWithLabel("default"),
@@ -439,7 +453,7 @@ func TestUpdateSilence(t *testing.T) {
     ],
     "startsAt":"2020-02-13T12:02:01Z"
 }`,
-			labelv: "default",
+			labelv: []string{"default"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
 					getSilenceWithLabel("not default"),
@@ -461,7 +475,7 @@ func TestUpdateSilence(t *testing.T) {
     ],
     "startsAt":"2020-02-13T12:02:01Z"
 }`,
-			labelv: "default",
+			labelv: []string{"default"},
 			upstream: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				http.NotFound(w, req)
 			}),
@@ -480,7 +494,7 @@ func TestUpdateSilence(t *testing.T) {
     ],
     "startsAt":"2020-02-13T12:02:01Z"
 }`,
-			labelv: "default",
+			labelv: []string{"default"},
 			upstream: &chainedHandlers{
 				handlers: []http.Handler{
 					getSilenceWithLabel("default"),
@@ -490,6 +504,11 @@ func TestUpdateSilence(t *testing.T) {
 				},
 			},
 			expCode: http.StatusTeapot,
+		},
+		{
+			// Multiple label values are not supported.
+			labelv:  []string{"default", "something"},
+			expCode: http.StatusUnprocessableEntity,
 		},
 	} {
 		t.Run("", func(t *testing.T) {
@@ -505,7 +524,9 @@ func TestUpdateSilence(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			q := u.Query()
-			q.Set(proxyLabel, tc.labelv)
+			for _, s := range tc.labelv {
+				q.Add(proxyLabel, s)
+			}
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
@@ -533,7 +554,7 @@ func TestUpdateSilence(t *testing.T) {
 }
 func TestGetAlertGroups(t *testing.T) {
 	for _, tc := range []struct {
-		labelv         string
+		labelv         []string
 		filters        []string
 		expCode        int
 		expQueryValues []string
@@ -547,7 +568,7 @@ func TestGetAlertGroups(t *testing.T) {
 		},
 		{
 			// Check for other query parameters
-			labelv:         "default",
+			labelv:         []string{"default"},
 			expCode:        http.StatusOK,
 			expQueryValues: []string{"false"},
 			queryParam:     "silenced",
@@ -555,10 +576,19 @@ func TestGetAlertGroups(t *testing.T) {
 		},
 		{
 			// Check for filter parameter.
-			labelv:         "default",
+			labelv:         []string{"default"},
 			filters:        []string{`job="prometheus"`, `instance=~".+"`},
 			expCode:        http.StatusOK,
 			expQueryValues: []string{`job="prometheus"`, `instance=~".+"`, `namespace="default"`},
+			queryParam:     "filter",
+			url:            "http://alertmanager.example.com/api/v2/alerts/groups",
+		},
+		{
+			// Check for filter parameter with multiple label values.
+			labelv:         []string{"default", "something"},
+			filters:        []string{`job="prometheus"`, `instance=~".+"`},
+			expCode:        http.StatusOK,
+			expQueryValues: []string{`job="prometheus"`, `instance=~".+"`, `namespace=~"default|something"`},
 			queryParam:     "filter",
 			url:            "http://alertmanager.example.com/api/v2/alerts/groups",
 		},
@@ -579,7 +609,9 @@ func TestGetAlertGroups(t *testing.T) {
 			for _, m := range tc.filters {
 				q.Add("filter", m)
 			}
-			q.Set(proxyLabel, tc.labelv)
+			for _, s := range tc.labelv {
+				q.Add(proxyLabel, s)
+			}
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()

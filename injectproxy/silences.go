@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/alertmanager/pkg/labels"
 )
 
+// silences proxies HTTP requests to the Alertmanager /api/v2/silences endpoint.
 func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "GET":
@@ -43,25 +44,56 @@ func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// assertSingleLabelValue verifies that the proxy is configured to match only
+// one label value. If not, it will reply with "422 Unprocessable Content".
+func assertSingleLabelValue(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		labelValues := MustLabelValues(req.Context())
+		if len(labelValues) > 1 {
+			http.Error(w, "Multiple label matchers not supported", http.StatusUnprocessableEntity)
+			return
+		}
+
+		next(w, req)
+	}
+}
+
+// enforceFilterParameter injects a label matcher parameter into the
+// Alertmanager API's query.
 func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request) {
 	var (
 		q               = req.URL.Query()
+		proxyLabelMatch labels.Matcher
+	)
+
+	if len(MustLabelValues(req.Context())) > 1 {
+		proxyLabelMatch = labels.Matcher{
+			Type:  labels.MatchRegexp,
+			Name:  r.label,
+			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
+		}
+	} else {
 		proxyLabelMatch = labels.Matcher{
 			Type:  labels.MatchEqual,
 			Name:  r.label,
 			Value: MustLabelValue(req.Context()),
 		}
-		modified = []string{proxyLabelMatch.String()}
-	)
+	}
+
+	modified := []string{proxyLabelMatch.String()}
 	for _, filter := range q["filter"] {
 		m, err := labels.ParseMatcher(filter)
 		if err != nil {
 			prometheusAPIError(w, fmt.Sprintf("bad request: can't parse filter %q: %v", filter, err), http.StatusBadRequest)
 			return
 		}
-		if m.Name == r.label {
+
+		// Keep the original matcher in case of multi label values because
+		// the user might want to filter on a specific value.
+		if m.Name == r.label && proxyLabelMatch.Type != labels.MatchRegexp {
 			continue
 		}
+
 		modified = append(modified, filter)
 	}
 
@@ -77,6 +109,7 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 		sil    models.PostableSilence
 		lvalue = MustLabelValue(req.Context())
 	)
+
 	if err := json.NewDecoder(req.Body).Decode(&sil); err != nil {
 		prometheusAPIError(w, fmt.Sprintf("bad request: can't decode: %v", err), http.StatusBadRequest)
 		return
@@ -129,6 +162,7 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
 }
 
+// deleteSilence proxies HTTP requests to the Alertmanager /api/v2/silence/ endpoint.
 func (r *routes) deleteSilence(w http.ResponseWriter, req *http.Request) {
 	silID := strings.TrimPrefix(req.URL.Path, "/api/v2/silence/")
 	if silID == "" || silID == req.URL.Path {

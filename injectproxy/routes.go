@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/efficientgo/core/merrors"
@@ -176,7 +178,7 @@ type HTTPFormEnforcer struct {
 // ExtractLabel implements the ExtractLabeler interface.
 func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		labelValue, err := hff.getLabelValue(r)
+		labelValues, err := hff.getLabelValues(r)
 		if err != nil {
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
@@ -203,17 +205,22 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			}
 		}
 
-		next.ServeHTTP(w, r.WithContext(WithLabelValue(r.Context(), labelValue)))
+		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
 
-func (hff HTTPFormEnforcer) getLabelValue(r *http.Request) (string, error) {
-	formValue := r.FormValue(hff.ParameterName)
-	if formValue == "" {
-		return "", fmt.Errorf("the %q query parameter must be provided", hff.ParameterName)
+func (hff HTTPFormEnforcer) getLabelValues(r *http.Request) ([]string, error) {
+	err := r.ParseForm()
+	if err != nil {
+		return nil, fmt.Errorf("the form data can not be parsed: %w", err)
 	}
 
-	return formValue, nil
+	formValues := removeEmptyValues(r.Form[hff.ParameterName])
+	if len(formValues) == 0 {
+		return nil, fmt.Errorf("the %q query parameter must be provided", hff.ParameterName)
+	}
+
+	return formValues, nil
 }
 
 // HTTPHeaderEnforcer enforces a label value extracted from the HTTP headers.
@@ -224,37 +231,33 @@ type HTTPHeaderEnforcer struct {
 // ExtractLabel implements the ExtractLabeler interface.
 func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		labelValue, err := hhe.getLabelValue(r)
+		labelValues, err := hhe.getLabelValues(r)
 		if err != nil {
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
 
-		next.ServeHTTP(w, r.WithContext(WithLabelValue(r.Context(), labelValue)))
+		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
 
-func (hhe HTTPHeaderEnforcer) getLabelValue(r *http.Request) (string, error) {
-	headerValues := r.Header[hhe.Name]
+func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) {
+	headerValues := removeEmptyValues(r.Header[hhe.Name])
 
 	if len(headerValues) == 0 {
-		return "", fmt.Errorf("missing HTTP header %q", hhe.Name)
+		return nil, fmt.Errorf("missing HTTP header %q", hhe.Name)
 	}
 
-	if len(headerValues) > 1 {
-		return "", fmt.Errorf("multiple values for the http header %q", hhe.Name)
-	}
-
-	return headerValues[0], nil
+	return headerValues, nil
 }
 
 // StaticLabelEnforcer enforces a static label value.
-type StaticLabelEnforcer string
+type StaticLabelEnforcer []string
 
 // ExtractLabel implements the ExtractLabeler interface.
 func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next(w, r.WithContext(WithLabelValue(r.Context(), string(sle))))
+		next(w, r.WithContext(WithLabelValues(r.Context(), sle)))
 	})
 }
 
@@ -299,8 +302,21 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 
 	errs.Add(
-		mux.Handle("/api/v2/silences", r.el.ExtractLabel(enforceMethods(r.silences, "GET", "POST"))),
-		mux.Handle("/api/v2/silence/", r.el.ExtractLabel(enforceMethods(r.deleteSilence, "DELETE"))),
+		// Reject multi label values with assertSingleLabelValue() because the
+		// semantics of the Silences API don't support multi-label matchers.
+		mux.Handle("/api/v2/silences", r.el.ExtractLabel(
+			enforceMethods(
+				assertSingleLabelValue(r.silences),
+				"GET", "POST",
+			),
+		)),
+		mux.Handle("/api/v2/silence/", r.el.ExtractLabel(
+			enforceMethods(
+				assertSingleLabelValue(r.deleteSilence),
+				"DELETE",
+			),
+		)),
+
 		mux.Handle("/api/v2/alerts/groups", r.el.ExtractLabel(enforceMethods(r.enforceFilterParameter, "GET"))),
 		mux.Handle("/api/v2/alerts", r.el.ExtractLabel(enforceMethods(r.alerts, "GET"))),
 	)
@@ -374,23 +390,44 @@ type ctxKey int
 
 const keyLabel ctxKey = iota
 
-// MustLabelValue returns a label (previously stored using WithLabelValue())
+// MustLabelValues returns labels (previously stored using WithLabelValue())
 // from the given context.
 // It will panic if no label is found or the value is empty.
-func MustLabelValue(ctx context.Context) string {
-	label, ok := ctx.Value(keyLabel).(string)
+func MustLabelValues(ctx context.Context) []string {
+	labels, ok := ctx.Value(keyLabel).([]string)
 	if !ok {
 		panic(fmt.Sprintf("can't find the %q value in the context", keyLabel))
 	}
-	if label == "" {
+	if len(labels) == 0 {
 		panic(fmt.Sprintf("empty %q value in the context", keyLabel))
 	}
-	return label
+
+	sort.Strings(labels)
+
+	return labels
 }
 
-// WithLabelValue stores a label in the given context.
-func WithLabelValue(ctx context.Context, label string) context.Context {
-	return context.WithValue(ctx, keyLabel, label)
+// MustLabelValue returns the first (alphabetical order) label value previously
+// stored using WithLabelValue() from the given context.
+// Similar to MustLabelValues, it will panic if no label is found or the value
+// is empty.
+func MustLabelValue(ctx context.Context) string {
+	v := MustLabelValues(ctx)
+	return v[0]
+}
+
+func labelValuesToRegexpString(labelValues []string) string {
+	lvs := make([]string, len(labelValues))
+	for i := range labelValues {
+		lvs[i] = regexp.QuoteMeta(labelValues[i])
+	}
+
+	return strings.Join(lvs, "|")
+}
+
+// WithLabelValues stores labels in the given context.
+func WithLabelValues(ctx context.Context, labels []string) context.Context {
+	return context.WithValue(ctx, keyLabel, labels)
 }
 
 func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
@@ -398,12 +435,23 @@ func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
-	e := NewEnforcer(r.errorOnReplace,
-		[]*labels.Matcher{{
+	var matcher *labels.Matcher
+
+	if len(MustLabelValues(req.Context())) > 1 {
+		matcher = &labels.Matcher{
+			Name:  r.label,
+			Type:  labels.MatchRegexp,
+			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
+		}
+	} else {
+		matcher = &labels.Matcher{
 			Name:  r.label,
 			Type:  labels.MatchEqual,
 			Value: MustLabelValue(req.Context()),
-		}}...)
+		}
+	}
+
+	e := NewEnforcer(r.errorOnReplace, matcher)
 
 	// The `query` can come in the URL query string and/or the POST body.
 	// For this reason, we need to try to enforcing in both places.
@@ -487,29 +535,33 @@ func enforceQueryValues(e *Enforcer, v url.Values) (values string, noQuery bool,
 func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	matcher := &labels.Matcher{
 		Name:  r.label,
-		Type:  labels.MatchEqual,
-		Value: MustLabelValue(req.Context()),
+		Type:  labels.MatchRegexp,
+		Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
 	}
-	q := req.URL.Query()
 
+	q := req.URL.Query()
 	if err := injectMatcher(q, matcher); err != nil {
 		return
 	}
+
 	req.URL.RawQuery = q.Encode()
 	if req.Method == http.MethodPost {
 		if err := req.ParseForm(); err != nil {
 			return
 		}
+
 		q = req.PostForm
 		if err := injectMatcher(q, matcher); err != nil {
 			return
 		}
+
 		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
 		_ = req.Body.Close()
 		newBody := q.Encode()
 		req.Body = io.NopCloser(strings.NewReader(newBody))
 		req.ContentLength = int64(len(newBody))
 	}
+
 	r.handler.ServeHTTP(w, req)
 }
 
@@ -517,17 +569,20 @@ func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
-	} else {
-		// Inject label to existing matchers.
-		for i, m := range matchers {
-			ms, err := parser.ParseMetricSelector(m)
-			if err != nil {
-				return err
-			}
-			matchers[i] = matchersToString(append(ms, matcher)...)
-		}
-		q[matchersParam] = matchers
+		return nil
 	}
+
+	// Inject label into existing matchers.
+	for i, m := range matchers {
+		ms, err := parser.ParseMetricSelector(m)
+		if err != nil {
+			return err
+		}
+
+		matchers[i] = matchersToString(append(ms, matcher)...)
+	}
+	q[matchersParam] = matchers
+
 	return nil
 }
 
@@ -571,4 +626,15 @@ func humanFriendlyErrorMessage(err error) string {
 	}
 	errMsg := err.Error()
 	return fmt.Sprintf("%s%s.", strings.ToUpper(errMsg[:1]), errMsg[1:])
+}
+
+func removeEmptyValues(slice []string) []string {
+	for i := 0; i < len(slice); i++ {
+		if slice[i] == "" {
+			slice = append(slice[:i], slice[i+1:]...)
+			i--
+		}
+	}
+
+	return slice
 }

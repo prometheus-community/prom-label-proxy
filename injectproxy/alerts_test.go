@@ -24,7 +24,7 @@ import (
 
 func TestGetAlerts(t *testing.T) {
 	for _, tc := range []struct {
-		labelv         string
+		labelv         []string
 		filters        []string
 		expCode        int
 		expQueryValues []string
@@ -38,23 +38,48 @@ func TestGetAlerts(t *testing.T) {
 		},
 		{
 			// Check that other query parameters are not removed.
-			labelv:         "default",
+			labelv:         []string{"default"},
 			expCode:        http.StatusOK,
 			expQueryValues: []string{"false"},
 			queryParam:     "silenced",
 			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
 		},
 		{
-			// Check that filter parameter is added when other query parameter are present
-			labelv:         "default",
+			// Check that filter parameter is added when other query parameter are present.
+			labelv:         []string{"default"},
 			expCode:        http.StatusOK,
 			expQueryValues: []string{`namespace="default"`},
 			queryParam:     "filter",
 			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
 		},
 		{
+			// Check that the filter parameter is added when multiple label values are set.
+			labelv:         []string{"default", "something"},
+			expCode:        http.StatusOK,
+			expQueryValues: []string{`namespace=~"default|something"`},
+			queryParam:     "filter",
+			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
+		},
+		{
+			// Check that the original filter parameter is preserved when multiple label values are set.
+			labelv:         []string{"default", "something"},
+			filters:        []string{`namespace="default"`, `instance=~".+"`},
+			expCode:        http.StatusOK,
+			expQueryValues: []string{`namespace=~"default|something"`, `namespace="default"`, `instance=~".+"`},
+			queryParam:     "filter",
+			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
+		},
+		{
+			// Check that label values are correctly escaped.
+			labelv:         []string{"default", "some|thing"},
+			expCode:        http.StatusOK,
+			expQueryValues: []string{`namespace=~"default|some\\|thing"`},
+			queryParam:     "filter",
+			url:            "http://alertmanager.example.com/api/v2/alerts?silenced=false",
+		},
+		{
 			// Check for filter parameter.
-			labelv:         "default",
+			labelv:         []string{"default"},
 			filters:        []string{`job="prometheus"`, `instance=~".+"`},
 			expCode:        http.StatusOK,
 			expQueryValues: []string{`job="prometheus"`, `instance=~".+"`, `namespace="default"`},
@@ -79,7 +104,10 @@ func TestGetAlerts(t *testing.T) {
 			for _, m := range tc.filters {
 				q.Add("filter", m)
 			}
-			q.Set(proxyLabel, tc.labelv)
+
+			for _, lv := range tc.labelv {
+				q.Add(proxyLabel, lv)
+			}
 			u.RawQuery = q.Encode()
 
 			w := httptest.NewRecorder()
