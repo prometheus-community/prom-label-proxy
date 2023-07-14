@@ -64,6 +64,8 @@ func main() {
 		enableLabelAPIs        bool
 		unsafePassthroughPaths string // Comma-delimited string.
 		errorOnReplace         bool
+		extraHttpHeaders       arrayFlags
+		rewriteHostHeader      string
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -81,6 +83,8 @@ func main() {
 		"This option is checked after Prometheus APIs, you cannot override enforced API endpoints to be not enforced with this option. Use carefully as it can easily cause a data leak if the provided path is an important "+
 		"API (like /api/v1/configuration) which isn't enforced by prom-label-proxy. NOTE: \"all\" matching paths like \"/\" or \"\" and regex are not allowed.")
 	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
+	flagset.Var(&extraHttpHeaders, "extra-http-header", "Additional HTTP headers to add to the upstream prometheus query in the format 'header: value'. Can be repeated multiple times for additional headers.")
+	flagset.StringVar(&rewriteHostHeader, "rewrite-host-header-to", "", "Rewrite host header to supplied value when sending the query to the upstream URL.")
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
@@ -107,6 +111,13 @@ func main() {
 
 	if upstreamURL.Scheme != "http" && upstreamURL.Scheme != "https" {
 		log.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
+	}
+
+	for _, headerArg := range extraHttpHeaders {
+		header, val, found := strings.Cut(headerArg, ":")
+		if !found || len(strings.TrimSpace(header)) == 0 || len(strings.TrimSpace(val)) == 0 {
+			log.Fatalf("extra-http-header %s is not in the format 'key:value'", headerArg)
+		}
 	}
 
 	reg := prometheus.NewRegistry()
@@ -140,7 +151,7 @@ func main() {
 
 	{
 		// Run the insecure HTTP server.
-		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
+		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, extraHttpHeaders, rewriteHostHeader, opts...)
 		if err != nil {
 			log.Fatalf("Failed to create injectproxy Routes: %v", err)
 		}

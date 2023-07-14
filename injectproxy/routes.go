@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -261,7 +262,7 @@ func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler 
 	})
 }
 
-func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, opts ...Option) (*routes, error) {
+func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, extraHttpHeaders []string, rewriteHostHeader string, opts ...Option) (*routes, error) {
 	opt := options{}
 	for _, o := range opts {
 		o.apply(&opt)
@@ -271,7 +272,24 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		opt.registerer = prometheus.NewRegistry()
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(upstream)
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(upstream)
+			if len(strings.TrimSpace(rewriteHostHeader)) == 0 {
+				r.Out.Host = r.In.Host
+			} else {
+				r.Out.Host = strings.TrimSpace(rewriteHostHeader)
+			}
+			for _, headerArg := range extraHttpHeaders {
+				header, val, found := strings.Cut(headerArg, ":")
+				if !found {
+					log.Printf("Header %s specified but ':' delimited not found", headerArg)
+					continue
+				}
+				r.Out.Header[strings.TrimSpace(header)] = []string{strings.TrimSpace(val)}
+			}
+		},
+	}
 
 	r := &routes{
 		upstream:       upstream,
