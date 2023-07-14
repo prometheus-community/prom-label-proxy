@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -50,10 +49,12 @@ type routes struct {
 }
 
 type options struct {
-	enableLabelAPIs  bool
-	passthroughPaths []string
-	errorOnReplace   bool
-	registerer       prometheus.Registerer
+	enableLabelAPIs   bool
+	passthroughPaths  []string
+	errorOnReplace    bool
+	registerer        prometheus.Registerer
+	extraHttpHeaders  map[string]string
+	rewriteHostHeader string
 }
 
 type Option interface {
@@ -94,6 +95,24 @@ func WithPassthroughPaths(paths []string) Option {
 func WithErrorOnReplace() Option {
 	return optionFunc(func(o *options) {
 		o.errorOnReplace = true
+	})
+}
+
+func WithExtraHttpHeaders(headers []string) Option {
+	return optionFunc(func(o *options) {
+		o.extraHttpHeaders = make(map[string]string)
+		for _, headerArg := range headers {
+			header, val, found := strings.Cut(headerArg, ":")
+			if found {
+				o.extraHttpHeaders[strings.TrimSpace(header)] = strings.TrimSpace(val)
+			}
+		}
+	})
+}
+
+func WithRewriteHostHeader(host string) Option {
+	return optionFunc(func(o *options) {
+		o.rewriteHostHeader = host
 	})
 }
 
@@ -262,7 +281,8 @@ func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler 
 	})
 }
 
-func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, extraHttpHeaders []string, rewriteHostHeader string, opts ...Option) (*routes, error) {
+func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, opts ...Option) (*routes, error) {
+	//extraHttpHeaders []string, rewriteHostHeader string
 	opt := options{}
 	for _, o := range opts {
 		o.apply(&opt)
@@ -275,17 +295,12 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, e
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(upstream)
-			if len(strings.TrimSpace(rewriteHostHeader)) == 0 {
+			if len(opt.rewriteHostHeader) == 0 {
 				r.Out.Host = r.In.Host
 			} else {
-				r.Out.Host = strings.TrimSpace(rewriteHostHeader)
+				r.Out.Host = opt.rewriteHostHeader
 			}
-			for _, headerArg := range extraHttpHeaders {
-				header, val, found := strings.Cut(headerArg, ":")
-				if !found {
-					log.Printf("Header %s specified but ':' delimited not found", headerArg)
-					continue
-				}
+			for header, val := range opt.extraHttpHeaders {
 				r.Out.Header[strings.TrimSpace(header)] = []string{strings.TrimSpace(val)}
 			}
 		},

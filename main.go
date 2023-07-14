@@ -137,6 +137,14 @@ func main() {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
 	}
 
+	if len(extraHttpHeaders) > 0 {
+		opts = append(opts, injectproxy.WithExtraHttpHeaders(extraHttpHeaders))
+	}
+
+	if len(rewriteHostHeader) > 0 {
+		opts = append(opts, injectproxy.WithRewriteHostHeader(rewriteHostHeader))
+	}
+
 	var extractLabeler injectproxy.ExtractLabeler
 	switch {
 	case len(labelValues) > 0:
@@ -151,7 +159,7 @@ func main() {
 
 	{
 		// Run the insecure HTTP server.
-		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, extraHttpHeaders, rewriteHostHeader, opts...)
+		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
 		if err != nil {
 			log.Fatalf("Failed to create injectproxy Routes: %v", err)
 		}
