@@ -104,7 +104,7 @@ func WithExtraHttpHeaders(headers []string) Option {
 		for _, headerArg := range headers {
 			header, val, found := strings.Cut(headerArg, ":")
 			if found {
-				o.extraHttpHeaders[strings.TrimSpace(header)] = strings.TrimSpace(val)
+				o.extraHttpHeaders[header] = val
 			}
 		}
 	})
