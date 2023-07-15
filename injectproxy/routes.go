@@ -104,7 +104,7 @@ func WithExtraHttpHeaders(headers []string) Option {
 		for _, headerArg := range headers {
 			header, val, found := strings.Cut(headerArg, ":")
 			if found {
-				o.extraHttpHeaders[header] = val
+				o.extraHttpHeaders[strings.TrimSpace(header)] = strings.TrimSpace(val)
 			}
 		}
 	})
@@ -301,7 +301,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 				r.Out.Host = opt.rewriteHostHeader
 			}
 			for header, val := range opt.extraHttpHeaders {
-				r.Out.Header[strings.TrimSpace(header)] = []string{strings.TrimSpace(val)}
+				r.Out.Header[header] = []string{val}
 			}
 		},
 	}
