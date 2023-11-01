@@ -83,7 +83,7 @@ func main() {
 		"This option is checked after Prometheus APIs, you cannot override enforced API endpoints to be not enforced with this option. Use carefully as it can easily cause a data leak if the provided path is an important "+
 		"API (like /api/v1/configuration) which isn't enforced by prom-label-proxy. NOTE: \"all\" matching paths like \"/\" or \"\" and regex are not allowed.")
 	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
-	flagset.Var(&extraHttpHeaders, "extra-http-header", "Additional HTTP headers to add to the upstream prometheus query in the format 'header: value'. Can be repeated multiple times for additional headers.")
+	flagset.Var(&extraHttpHeaders, "extra-http-header", "HTTP header to add to the upstream query in the format 'header: value'. Can be repeated multiple times.")
 	flagset.StringVar(&rewriteHostHeader, "rewrite-host-header-to", "", "Rewrite host header to supplied value when sending the query to the upstream URL.")
 
 	//nolint: errcheck // Parse() will exit on error.
