@@ -98,15 +98,9 @@ func WithErrorOnReplace() Option {
 	})
 }
 
-func WithExtraHttpHeaders(headers []string) Option {
+func WithExtraHttpHeader(key, value string) Option {
 	return optionFunc(func(o *options) {
-		o.extraHttpHeaders = make(map[string]string)
-		for _, headerArg := range headers {
-			header, val, found := strings.Cut(headerArg, ":")
-			if found {
-				o.extraHttpHeaders[strings.TrimSpace(header)] = strings.TrimSpace(val)
-			}
-		}
+		o.extraHttpHeaders[key] = value
 	})
 }
 
