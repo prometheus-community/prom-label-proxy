@@ -295,7 +295,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 				r.Out.Host = opt.rewriteHostHeader
 			}
 			for header, val := range opt.extraHttpHeaders {
-				r.Out.Header[header] = []string{val}
+				r.Out.Header.Set(header, val)
 			}
 		},
 	}
