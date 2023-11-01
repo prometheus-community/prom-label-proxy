@@ -276,7 +276,6 @@ func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler 
 }
 
 func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, opts ...Option) (*routes, error) {
-	//extraHttpHeaders []string, rewriteHostHeader string
 	opt := options{}
 	for _, o := range opts {
 		o.apply(&opt)
