@@ -113,13 +113,6 @@ func main() {
 		log.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
 	}
 
-	for _, headerArg := range extraHttpHeaders {
-		header, val, found := strings.Cut(headerArg, ":")
-		if !found || len(strings.TrimSpace(header)) == 0 || len(strings.TrimSpace(val)) == 0 {
-			log.Fatalf("extra-http-header %s is not in the format 'key:value'", headerArg)
-		}
-	}
-
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
 		collectors.NewGoCollector(),
@@ -137,8 +130,12 @@ func main() {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
 	}
 
-	if len(extraHttpHeaders) > 0 {
-		opts = append(opts, injectproxy.WithExtraHttpHeaders(extraHttpHeaders))
+	for _, headerArg := range extraHttpHeaders {
+		header, val, found := strings.Cut(headerArg, ":")
+		if !found || len(strings.TrimSpace(header)) == 0 || len(strings.TrimSpace(val)) == 0 {
+			log.Fatalf("extra-http-header %s is not in the format 'key:value'", headerArg)
+		}
+		opts = append(opts, injectproxy.WithExtraHttpHeader(header, val))
 	}
 
 	if len(rewriteHostHeader) > 0 {
