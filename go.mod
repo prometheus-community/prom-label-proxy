@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/efficientgo/core v1.0.0-rc.2
 	github.com/go-openapi/runtime v0.26.0
-	github.com/go-openapi/strfmt v0.21.7
+	github.com/go-openapi/strfmt v0.21.8
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a
 	github.com/oklog/run v1.1.0
 	github.com/prometheus/alertmanager v0.26.0
