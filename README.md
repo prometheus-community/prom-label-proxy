@@ -144,6 +144,30 @@ prom-label-proxy \
 
 `prom-label-proxy` will enforce the `tenant=~"prometheus|alertmanager"` label selector in all requests.
 
+You can match the label value  using a regular expression with the `-regex-match` option. For example:
+
+```
+prom-label-proxy \
+   -label-value '^foo-.+$' \
+   -label namespace \
+   -upstream http://demo.do.prometheus.io:9090 \
+   -insecure-listen-address 127.0.0.1:8080 \
+   -regex-match
+```
+
+> :warning: The above feature is experimental. Be careful when using this option, it may expose sensitive metrics if you use a too permissive expression.
+
+To error out when the query already contains a label matcher that differs from the one the proxy would inject, you can use the `-error-on-replace` option. For example:
+
+```
+prom-label-proxy \
+   -header-name X-Namespace \
+   -label namespace \
+   -upstream http://demo.do.prometheus.io:9090 \
+   -insecure-listen-address 127.0.0.1:8080 \
+   -error-on-replace
+```
+
 Once again for clarity: **this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or
 authorize the requesting entity in any way, this has to be built around this project.**
 
