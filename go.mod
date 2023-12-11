@@ -10,7 +10,7 @@ require (
 	github.com/oklog/run v1.1.0
 	github.com/prometheus/alertmanager v0.26.0
 	github.com/prometheus/client_golang v1.17.0
-	github.com/prometheus/prometheus v0.48.0
+	github.com/prometheus/prometheus v0.48.1
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 )
 
