@@ -49,10 +49,12 @@ type routes struct {
 }
 
 type options struct {
-	enableLabelAPIs  bool
-	passthroughPaths []string
-	errorOnReplace   bool
-	registerer       prometheus.Registerer
+	enableLabelAPIs   bool
+	passthroughPaths  []string
+	errorOnReplace    bool
+	registerer        prometheus.Registerer
+	extraHttpHeaders  map[string]string
+	rewriteHostHeader string
 }
 
 type Option interface {
@@ -93,6 +95,18 @@ func WithPassthroughPaths(paths []string) Option {
 func WithErrorOnReplace() Option {
 	return optionFunc(func(o *options) {
 		o.errorOnReplace = true
+	})
+}
+
+func WithExtraHttpHeader(key, value string) Option {
+	return optionFunc(func(o *options) {
+		o.extraHttpHeaders[key] = value
+	})
+}
+
+func WithRewriteHostHeader(host string) Option {
+	return optionFunc(func(o *options) {
+		o.rewriteHostHeader = host
 	})
 }
 
@@ -271,7 +285,19 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		opt.registerer = prometheus.NewRegistry()
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(upstream)
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(upstream)
+			if opt.rewriteHostHeader == "" {
+				r.Out.Host = r.In.Host
+			} else {
+				r.Out.Host = opt.rewriteHostHeader
+			}
+			for header, val := range opt.extraHttpHeaders {
+				r.Out.Header.Set(header, val)
+			}
+		},
+	}
 
 	r := &routes{
 		upstream:       upstream,
