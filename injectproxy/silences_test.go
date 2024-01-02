@@ -29,8 +29,9 @@ import (
 
 func TestListSilences(t *testing.T) {
 	for _, tc := range []struct {
-		labelv  []string
-		filters []string
+		labelv     []string
+		filters    []string
+		regexMatch bool
 
 		expCode    int
 		expFilters []string
@@ -74,11 +75,22 @@ func TestListSilences(t *testing.T) {
 			labelv:  []string{"default", "something"},
 			expCode: http.StatusUnprocessableEntity,
 		},
+		{
+			// Regex match
+			labelv:     []string{"tenant1-.*"},
+			regexMatch: true,
+			filters:    []string{`namespace=~"foo|default"`, `job="prometheus"`},
+			expCode:    http.StatusNotImplemented,
+		},
 	} {
 		t.Run(strings.Join(tc.filters, "&"), func(t *testing.T) {
 			m := newMockUpstream(checkQueryHandler("", "filter", tc.expFilters...))
 			defer m.Close()
-			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			var opts []Option
+			if tc.regexMatch {
+				opts = append(opts, WithRegexMatch())
+			}
+			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel}, opts...)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -234,9 +246,10 @@ func (c *chainedHandlers) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func TestDeleteSilence(t *testing.T) {
 	for _, tc := range []struct {
-		ID       string
-		labelv   []string
-		upstream http.Handler
+		ID         string
+		labelv     []string
+		upstream   http.Handler
+		regexMatch bool
 
 		expCode int
 		expBody []byte
@@ -308,11 +321,21 @@ func TestDeleteSilence(t *testing.T) {
 			labelv:  []string{"default", "something"},
 			expCode: http.StatusUnprocessableEntity,
 		},
+		{
+			// Regexp is not supported.
+			labelv:     []string{"default"},
+			regexMatch: true,
+			expCode:    http.StatusNotImplemented,
+		},
 	} {
 		t.Run("", func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			var opts []Option
+			if tc.regexMatch {
+				opts = append(opts, WithRegexMatch())
+			}
+			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel}, opts...)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

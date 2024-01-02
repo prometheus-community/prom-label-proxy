@@ -813,6 +813,7 @@ func TestQuery(t *testing.T) {
 		expPromQueryBody string
 		expResponse      []byte
 		errorOnReplace   bool
+		regexMatch       bool
 	}{
 		{
 			name:    `No "namespace" parameter returns an error`,
@@ -1121,6 +1122,60 @@ func TestQuery(t *testing.T) {
 			expPromQuery: `up{instance="localhost:9090",namespace="default"} + foo{namespace="default"}`,
 			expResponse:  okResponse,
 		},
+		{
+			name:         `HTTP header as regexp`,
+			headers:      http.Header{"namespace": []string{"tenant1-.*"}},
+			headerName:   "namespace",
+			regexMatch:   true,
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"tenant1-.*"} + foo{namespace="other",namespace=~"tenant1-.*"}`,
+			expResponse:  okResponse,
+		},
+		{
+			name:         `query param as regexp`,
+			queryParam:   "namespace",
+			labelv:       []string{"tenant1-.*"},
+			regexMatch:   true,
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="other"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"tenant1-.*"} + foo{namespace="other",namespace=~"tenant1-.*"}`,
+			expResponse:  okResponse,
+		},
+		{
+			name:         `HTTP header as regexp with same regexp in query`,
+			headers:      http.Header{"namespace": []string{"tenant1-.*"}},
+			headerName:   "namespace",
+			regexMatch:   true,
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="tenant1-.*"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"tenant1-.*"} + foo{namespace="tenant1-.*",namespace=~"tenant1-.*"}`,
+			expResponse:  okResponse,
+		},
+		{
+			name:       `HTTP header with invalid regexp with same regexp in query`,
+			headers:    http.Header{"namespace": []string{"tenant1-(.*"}},
+			headerName: "namespace",
+			regexMatch: true,
+			promQuery:  `up{instance="localhost:9090"} + foo{namespace="tenant1-.*"}`,
+			expCode:    http.StatusBadRequest,
+		},
+		{
+			name:       `Multiple regexp HTTP headers is invalid`,
+			headers:    http.Header{"namespace": []string{"tenant1", "tenant2"}},
+			headerName: "namespace",
+			regexMatch: true,
+			promQuery:  `up{instance="localhost:9090"} + foo{namespace="tenant1-.*"}`,
+			expCode:    http.StatusBadRequest,
+		},
+		{
+			name:       `Regex should not match empty string`,
+			headers:    http.Header{"namespace": []string{".*"}},
+			headerName: "namespace",
+			regexMatch: true,
+			promQuery:  `up{instance="localhost:9090"} + foo{namespace="tenant1-.*"}`,
+			expCode:    http.StatusBadRequest,
+		},
 	} {
 		for _, endpoint := range []string{"query", "query_range", "query_exemplars"} {
 			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
@@ -1139,6 +1194,9 @@ func TestQuery(t *testing.T) {
 
 				if tc.errorOnReplace {
 					opts = append(opts, WithErrorOnReplace())
+				}
+				if tc.regexMatch {
+					opts = append(opts, WithRegexMatch())
 				}
 
 				var labelEnforcer ExtractLabeler

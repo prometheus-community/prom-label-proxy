@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -64,6 +65,7 @@ func main() {
 		enableLabelAPIs        bool
 		unsafePassthroughPaths string // Comma-delimited string.
 		errorOnReplace         bool
+		regexMatch             bool
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -81,6 +83,7 @@ func main() {
 		"This option is checked after Prometheus APIs, you cannot override enforced API endpoints to be not enforced with this option. Use carefully as it can easily cause a data leak if the provided path is an important "+
 		"API (like /api/v1/configuration) which isn't enforced by prom-label-proxy. NOTE: \"all\" matching paths like \"/\" or \"\" and regex are not allowed.")
 	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
+	flagset.BoolVar(&regexMatch, "regex-match", false, "When specified, the tenant name is treated as a regular expression. In this case, only one tenant name should be provided.")
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
@@ -124,6 +127,24 @@ func main() {
 	}
 	if errorOnReplace {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
+	}
+
+	if regexMatch {
+		if len(labelValues) > 0 {
+			if len(labelValues) > 1 {
+				log.Fatalf("Regex match is limited to one label value")
+			}
+			compiledRegex, err := regexp.Compile(labelValues[0])
+			if err != nil {
+				log.Fatalf("Invalid regexp: %v", err.Error())
+				return
+			}
+			if compiledRegex.MatchString("") {
+				log.Fatalf("Regex should not match empty string")
+				return
+			}
+		}
+		opts = append(opts, injectproxy.WithRegexMatch())
 	}
 
 	var extractLabeler injectproxy.ExtractLabeler

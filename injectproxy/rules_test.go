@@ -388,7 +388,7 @@ func TestRules(t *testing.T) {
 			labelv:   []string{"not_present_gzip_requested"},
 			upstream: gzipHandler(validRules()),
 			reqHeaders: map[string][]string{
-				"Accept-Encoding": []string{"gzip"},
+				"Accept-Encoding": {"gzip"},
 			},
 
 			expCode: http.StatusOK,
