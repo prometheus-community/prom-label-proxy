@@ -1,3 +1,7 @@
+## 0.8.0 / 2024-01-02
+
+* [FEATURE] Add the `--regex-match` flag to filter with a regexp matcher. #171
+
 ## 0.7.0 / 2023-06-15
 
 * [FEATURE] Support filtering on multiple label values. #115
