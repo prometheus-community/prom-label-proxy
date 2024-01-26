@@ -1,13 +1,12 @@
 ---
 go:
     # This must match .circle/config.yml.
-    version: 1.20
+    version: 1.21
 repository:
     path: github.com/prometheus-community/prom-label-proxy
 build:
     binaries:
         - name: prom-label-proxy
-    flags: -tags 'netgo'
     # yamllint disable rule:line-length
     ldflags: |
         -X github.com/prometheus/common/version.Version={{.Version}}
