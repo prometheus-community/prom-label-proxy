@@ -1,3 +1,9 @@
+## 0.8.1 / 2024-01-28
+
+Internal change for library compatibility. No user-visible changes.
+
+* [CHANGE] Don't rely on slice labels #184
+
 ## 0.8.0 / 2024-01-02
 
 * [FEATURE] Add the `--regex-match` flag to filter with a regexp matcher. #171
