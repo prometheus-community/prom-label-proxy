@@ -40,7 +40,6 @@ const (
 type routes struct {
 	upstream *url.URL
 	handler  http.Handler
-	label    string
 	el       ExtractLabeler
 
 	mux            http.Handler
@@ -182,6 +181,7 @@ type ExtractLabeler interface {
 // HTTPFormEnforcer enforces a label value extracted from the HTTP form and query parameters.
 type HTTPFormEnforcer struct {
 	ParameterName string
+	LabelName     string
 }
 
 // ExtractLabel implements the ExtractLabeler interface.
@@ -214,7 +214,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			}
 		}
 
-		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
+		next.ServeHTTP(w, r.WithContext(WithLabelName(WithLabelValues(r.Context(), labelValues), hff.LabelName)))
 	})
 }
 
@@ -234,7 +234,8 @@ func (hff HTTPFormEnforcer) getLabelValues(r *http.Request) ([]string, error) {
 
 // HTTPHeaderEnforcer enforces a label value extracted from the HTTP headers.
 type HTTPHeaderEnforcer struct {
-	Name string
+	Name      string
+	LabelName string
 }
 
 // ExtractLabel implements the ExtractLabeler interface.
@@ -246,7 +247,7 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
+		next.ServeHTTP(w, r.WithContext(WithLabelName(WithLabelValues(r.Context(), labelValues), hhe.LabelName)))
 	})
 }
 
@@ -261,16 +262,19 @@ func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) 
 }
 
 // StaticLabelEnforcer enforces a static label value.
-type StaticLabelEnforcer []string
+type StaticLabelEnforcer struct {
+	Values    []string
+	LabelName string
+}
 
 // ExtractLabel implements the ExtractLabeler interface.
 func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next(w, r.WithContext(WithLabelValues(r.Context(), sle)))
+		next(w, r.WithContext(WithLabelName(WithLabelValues(r.Context(), sle.Values), sle.LabelName)))
 	})
 }
 
-func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, opts ...Option) (*routes, error) {
+func NewRoutes(upstream *url.URL, extractLabeler ExtractLabeler, opts ...Option) (*routes, error) {
 	opt := options{}
 	for _, o := range opts {
 		o.apply(&opt)
@@ -285,7 +289,6 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	r := &routes{
 		upstream:       upstream,
 		handler:        proxy,
-		label:          label,
 		el:             extractLabeler,
 		errorOnReplace: opt.errorOnReplace,
 		regexMatch:     opt.regexMatch,
@@ -412,7 +415,11 @@ func (r *routes) errorIfRegexpMatch(next http.HandlerFunc) http.HandlerFunc {
 
 type ctxKey int
 
-const keyLabel ctxKey = iota
+const (
+	keyLabel ctxKey = iota
+	keyLabelName
+	keyLabelForceRegex
+)
 
 // MustLabelValues returns labels (previously stored using WithLabelValue())
 // from the given context.
@@ -440,13 +447,47 @@ func MustLabelValue(ctx context.Context) string {
 	return v[0]
 }
 
-func labelValuesToRegexpString(labelValues []string) string {
+func MustLabelName(ctx context.Context) string {
+	label, ok := ctx.Value(keyLabelName).(string)
+	if !ok {
+		panic(fmt.Sprintf("can't find the %q value in the context", keyLabelName))
+	}
+	if label == "" {
+		panic(fmt.Sprintf("empty %q value in the context", keyLabelName))
+	}
+
+	return label
+}
+
+func MustLabelForceRegex(ctx context.Context) bool {
+	forceRegex, ok := ctx.Value(keyLabelForceRegex).(bool)
+	if !ok {
+		return false
+	}
+	return forceRegex
+}
+
+func labelValuesToRegexpString(labelValues []string, treatAsRegex bool) string {
 	lvs := make([]string, len(labelValues))
 	for i := range labelValues {
-		lvs[i] = regexp.QuoteMeta(labelValues[i])
+		if treatAsRegex {
+			lvs[i] = labelValues[i]
+		} else {
+			lvs[i] = regexp.QuoteMeta(labelValues[i])
+		}
 	}
 
 	return strings.Join(lvs, "|")
+}
+
+// WithForceRegexp stores if the label values should be treated as a regexp.
+func WithForceRegexp(ctx context.Context) context.Context {
+	return context.WithValue(ctx, keyLabelForceRegex, true)
+}
+
+// WithLabelName returns a new context with the given label name.
+func WithLabelName(ctx context.Context, label string) context.Context {
+	return context.WithValue(ctx, keyLabelName, label)
 }
 
 // WithLabelValues stores labels in the given context.
@@ -461,15 +502,16 @@ func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	var matcher *labels.Matcher
 
+	forceRegex := MustLabelForceRegex(req.Context())
 	if len(MustLabelValues(req.Context())) > 1 {
-		if r.regexMatch {
+		if r.regexMatch && !forceRegex {
 			prometheusAPIError(w, "Only one label value allowed with regex match", http.StatusBadRequest)
 			return
 		}
 		matcher = &labels.Matcher{
-			Name:  r.label,
+			Name:  MustLabelName(req.Context()),
 			Type:  labels.MatchRegexp,
-			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
+			Value: labelValuesToRegexpString(MustLabelValues(req.Context()), forceRegex),
 		}
 	} else {
 		matcherType := labels.MatchEqual
@@ -486,8 +528,11 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 			}
 			matcherType = labels.MatchRegexp
 		}
+		if forceRegex {
+			matcherType = labels.MatchRegexp
+		}
 		matcher = &labels.Matcher{
-			Name:  r.label,
+			Name:  MustLabelName(req.Context()),
 			Type:  matcherType,
 			Value: matcherValue,
 		}
@@ -576,9 +621,9 @@ func enforceQueryValues(e *Enforcer, v url.Values) (values string, noQuery bool,
 // See e.g https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metadata
 func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	matcher := &labels.Matcher{
-		Name:  r.label,
+		Name:  MustLabelName(req.Context()),
 		Type:  labels.MatchRegexp,
-		Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
+		Value: labelValuesToRegexpString(MustLabelValues(req.Context()), MustLabelForceRegex(req.Context())),
 	}
 
 	q := req.URL.Query()

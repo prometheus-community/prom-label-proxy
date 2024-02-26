@@ -91,7 +91,7 @@ func TestGetAlerts(t *testing.T) {
 			m := newMockUpstream(checkQueryHandler("", tc.queryParam, tc.expQueryValues...))
 			defer m.Close()
 
-			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			r, err := NewRoutes(m.url, HTTPFormEnforcer{ParameterName: proxyLabel, LabelName: proxyLabel})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

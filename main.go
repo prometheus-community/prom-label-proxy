@@ -150,7 +150,7 @@ func main() {
 	var extractLabeler injectproxy.ExtractLabeler
 	switch {
 	case len(labelValues) > 0:
-		extractLabeler = injectproxy.StaticLabelEnforcer(labelValues)
+		extractLabeler = injectproxy.StaticLabelEnforcer{Values: labelValues, LabelName: label}
 	case queryParam != "":
 		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam}
 	case headerName != "":
@@ -161,7 +161,7 @@ func main() {
 
 	{
 		// Run the insecure HTTP server.
-		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
+		routes, err := injectproxy.NewRoutes(upstreamURL, extractLabeler, opts...)
 		if err != nil {
 			log.Fatalf("Failed to create injectproxy Routes: %v", err)
 		}

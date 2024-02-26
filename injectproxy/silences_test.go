@@ -90,7 +90,7 @@ func TestListSilences(t *testing.T) {
 			if tc.regexMatch {
 				opts = append(opts, WithRegexMatch())
 			}
-			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel}, opts...)
+			r, err := NewRoutes(m.url, HTTPFormEnforcer{ParameterName: proxyLabel, LabelName: proxyLabel}, opts...)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -335,7 +335,7 @@ func TestDeleteSilence(t *testing.T) {
 			if tc.regexMatch {
 				opts = append(opts, WithRegexMatch())
 			}
-			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel}, opts...)
+			r, err := NewRoutes(m.url, HTTPFormEnforcer{ParameterName: proxyLabel, LabelName: proxyLabel}, opts...)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -537,7 +537,7 @@ func TestUpdateSilence(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			r, err := NewRoutes(m.url, HTTPFormEnforcer{ParameterName: proxyLabel, LabelName: proxyLabel})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -619,7 +619,7 @@ func TestGetAlertGroups(t *testing.T) {
 		t.Run(strings.Join(tc.filters, "&"), func(t *testing.T) {
 			m := newMockUpstream(checkQueryHandler("", tc.queryParam, tc.expQueryValues...))
 			defer m.Close()
-			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			r, err := NewRoutes(m.url, HTTPFormEnforcer{ParameterName: proxyLabel, LabelName: proxyLabel})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

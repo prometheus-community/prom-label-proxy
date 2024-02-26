@@ -70,8 +70,8 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 	if len(MustLabelValues(req.Context())) > 1 {
 		proxyLabelMatch = labels.Matcher{
 			Type:  labels.MatchRegexp,
-			Name:  r.label,
-			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
+			Name:  MustLabelName(req.Context()),
+			Value: labelValuesToRegexpString(MustLabelValues(req.Context()), MustLabelForceRegex(req.Context())),
 		}
 	} else {
 		matcherType := labels.MatchEqual
@@ -90,7 +90,7 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 		}
 		proxyLabelMatch = labels.Matcher{
 			Type:  matcherType,
-			Name:  r.label,
+			Name:  MustLabelName(req.Context()),
 			Value: matcherValue,
 		}
 	}
@@ -105,7 +105,7 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 
 		// Keep the original matcher in case of multi label values because
 		// the user might want to filter on a specific value.
-		if m.Name == r.label && proxyLabelMatch.Type != labels.MatchRegexp {
+		if m.Name == MustLabelName(req.Context()) && proxyLabelMatch.Type != labels.MatchRegexp {
 			continue
 		}
 
@@ -113,7 +113,7 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 	}
 
 	q["filter"] = modified
-	q.Del(r.label)
+	q.Del(MustLabelName(req.Context()))
 	req.URL.RawQuery = q.Encode()
 
 	r.handler.ServeHTTP(w, req)
@@ -138,18 +138,19 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !hasMatcherForLabel(existing.Matchers, r.label, lvalue) {
+		if !hasMatcherForLabel(existing.Matchers, MustLabelName(req.Context()), lvalue) {
 			prometheusAPIError(w, "forbidden", http.StatusForbidden)
 			return
 		}
 	}
 
 	var falsy bool
+	labelName := MustLabelName(req.Context())
 	modified := models.Matchers{
-		&models.Matcher{Name: &(r.label), Value: &lvalue, IsRegex: &falsy},
+		&models.Matcher{Name: &labelName, Value: &lvalue, IsRegex: &falsy},
 	}
 	for _, m := range sil.Matchers {
-		if m.Name != nil && *m.Name == r.label {
+		if m.Name != nil && *m.Name == labelName {
 			continue
 		}
 		modified = append(modified, m)
@@ -192,7 +193,7 @@ func (r *routes) deleteSilence(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if !hasMatcherForLabel(sil.Matchers, r.label, MustLabelValue(req.Context())) {
+	if !hasMatcherForLabel(sil.Matchers, MustLabelName(req.Context()), MustLabelValue(req.Context())) {
 		prometheusAPIError(w, "forbidden", http.StatusForbidden)
 		return
 	}

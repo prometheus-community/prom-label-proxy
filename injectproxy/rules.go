@@ -163,7 +163,7 @@ type alert struct {
 // modifyAPIResponse unwraps the Prometheus API response, passes the enforced
 // label value and the response to the given function and finally replaces the
 // result in the response.
-func modifyAPIResponse(f func([]string, *apiResponse) (interface{}, error)) func(*http.Response) error {
+func modifyAPIResponse(f func([]string, string, *apiResponse) (interface{}, error)) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		if resp.StatusCode != http.StatusOK {
 			// Pass non-200 responses as-is.
@@ -175,7 +175,7 @@ func modifyAPIResponse(f func([]string, *apiResponse) (interface{}, error)) func
 			return fmt.Errorf("can't decode API response: %w", err)
 		}
 
-		v, err := f(MustLabelValues(resp.Request.Context()), apir)
+		v, err := f(MustLabelValues(resp.Request.Context()), MustLabelName(resp.Request.Context()), apir)
 		if err != nil {
 			return err
 		}
@@ -197,7 +197,7 @@ func modifyAPIResponse(f func([]string, *apiResponse) (interface{}, error)) func
 	}
 }
 
-func (r *routes) filterRules(lvalues []string, resp *apiResponse) (interface{}, error) {
+func (r *routes) filterRules(lvalues []string, labelName string, resp *apiResponse) (interface{}, error) {
 	var rgs rulesData
 	if err := json.Unmarshal(resp.Data, &rgs); err != nil {
 		return nil, fmt.Errorf("can't decode rules data: %w", err)
@@ -207,8 +207,11 @@ func (r *routes) filterRules(lvalues []string, resp *apiResponse) (interface{}, 
 	for _, rg := range rgs.RuleGroups {
 		var rules []rule
 		for _, rule := range rg.Rules {
-			if lval := rule.Labels().Get(r.label); lval != "" && slices.Contains(lvalues, lval) {
-				rules = append(rules, rule)
+			for _, lbl := range rule.Labels() {
+				if lbl.Name == labelName && slices.Contains(lvalues, lbl.Value) {
+					rules = append(rules, rule)
+					break
+				}
 			}
 		}
 		if len(rules) > 0 {
@@ -220,7 +223,7 @@ func (r *routes) filterRules(lvalues []string, resp *apiResponse) (interface{}, 
 	return &rulesData{RuleGroups: filtered}, nil
 }
 
-func (r *routes) filterAlerts(lvalues []string, resp *apiResponse) (interface{}, error) {
+func (r *routes) filterAlerts(lvalues []string, labelName string, resp *apiResponse) (interface{}, error) {
 	var data alertsData
 	if err := json.Unmarshal(resp.Data, &data); err != nil {
 		return nil, fmt.Errorf("can't decode alerts data: %w", err)
@@ -228,8 +231,11 @@ func (r *routes) filterAlerts(lvalues []string, resp *apiResponse) (interface{},
 
 	filtered := []*alert{}
 	for _, alert := range data.Alerts {
-		if lval := alert.Labels.Get(r.label); lval != "" && slices.Contains(lvalues, lval) {
-			filtered = append(filtered, alert)
+		for _, lbl := range alert.Labels {
+			if lbl.Name == labelName && slices.Contains(lvalues, lbl.Value) {
+				filtered = append(filtered, alert)
+				break
+			}
 		}
 	}
 
