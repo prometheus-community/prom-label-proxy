@@ -581,28 +581,32 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
 	}
 
-	q := req.URL.Query()
-	if err := injectMatcher(q, matcher); err != nil {
-		return
-	}
+	var query url.Values = req.URL.Query()
+	var form url.Values
 
-	req.URL.RawQuery = q.Encode()
 	if req.Method == http.MethodPost {
 		if err := req.ParseForm(); err != nil {
 			return
 		}
 
-		q = req.PostForm
-		if err := injectMatcher(q, matcher); err != nil {
+		form = req.PostForm
+		if err := injectMatcher(form, matcher); err != nil {
 			return
 		}
 
 		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
 		_ = req.Body.Close()
-		newBody := q.Encode()
+		newBody := form.Encode()
 		req.Body = io.NopCloser(strings.NewReader(newBody))
 		req.ContentLength = int64(len(newBody))
 	}
+
+	if len(query) > 0 || len(form) == 0 {
+		if err := injectMatcher(query, matcher); err != nil {
+			return
+		}
+	}
+	req.URL.RawQuery = query.Encode()
 
 	r.handler.ServeHTTP(w, req)
 }
