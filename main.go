@@ -24,46 +24,58 @@ import (
 )
 
 func main() {
-	// Read PromQL query from standard input
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter PromQL query: ")
-	query, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
-		os.Exit(1)
+	for {
+		// Read PromQL query from standard input
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print("Enter PromQL query: ")
+		query, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Remove newline character from the end of the input
+		query = strings.TrimSpace(query)
+
+		// Parse the query into an expression (AST)
+		expr, err := parser.ParseExpr(query)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing PromQL: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Create an expression enforcer to
+		// Match label "foo" to value "bar"
+		fooMatcher := &labels.Matcher{
+			Name:  "foo",
+			Type:  labels.MatchEqual,
+			Value: "bar",
+		}
+
+		bingMatcher := &labels.Matcher{
+			Name:  "bing",
+			Type:  labels.MatchEqual,
+			Value: "bang",
+		}
+
+		// Create an instance of the Enforcer that replaces (see "false" value)
+		// label values
+		// Modify PromQL query
+		if err := injectproxy.NewEnforcer(false, fooMatcher).EnforceNode(expr); err != nil {
+			fmt.Fprintf(os.Stderr, "Error modifying PromQL: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := injectproxy.NewEnforcer(false, bingMatcher).EnforceNode(expr); err != nil {
+			fmt.Fprintf(os.Stderr, "Error modifying PromQL: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Use the potentially modified expression to render a
+		// modified PromQL query
+		modifiedQuery := expr.String()
+
+		// Use the expression to output a modified PromQL query
+		fmt.Println(modifiedQuery)
 	}
-
-	// Remove newline character from the end of the input
-	query = strings.TrimSpace(query)
-
-	// Parse the query into an expression (AST)
-	expr, err := parser.ParseExpr(query)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing PromQL: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Create an expression enforcer to
-	// Match label "foo" to value "bar"
-	matcher := &labels.Matcher{
-		Name:  "foo",
-		Type:  labels.MatchEqual,
-		Value: "bar",
-	}
-	// Create an instance of the Enforcer that replaces (see "false" value)
-	// label values
-	enf := injectproxy.NewEnforcer(false, matcher)
-
-	// Modify PromQL query
-	if err := enf.EnforceNode(expr); err != nil {
-		fmt.Fprintf(os.Stderr, "Error modifying PromQL: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Use the potentially modified expression to render a
-	// modified PromQL query
-	modifiedQuery := expr.String()
-
-	// Use the expression to output a modified PromQL query
-	fmt.Println(modifiedQuery)
 }
