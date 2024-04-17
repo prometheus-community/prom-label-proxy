@@ -1,0 +1,17 @@
+{
+  "status": "success",
+  "data": {
+    "alerts": [
+      {
+        "labels": {
+          "alertname": "Alert3",
+          "namespace": "ns2"
+        },
+        "annotations": {},
+        "state": "firing",
+        "activeAt": "2019-12-18T13:14:39.972915521+01:00",
+        "value": "0e+00"
+      }
+    ]
+  }
+}

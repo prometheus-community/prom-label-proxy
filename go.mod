@@ -12,6 +12,7 @@ require (
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/prometheus v0.50.1
 	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
+	gotest.tools/v3 v3.5.1
 )
 
 require (
@@ -31,6 +32,7 @@ require (
 	github.com/go-openapi/spec v0.20.14 // indirect
 	github.com/go-openapi/swag v0.22.9 // indirect
 	github.com/go-openapi/validate v0.23.0 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grafana/regexp v0.0.0-20221122212121-6b5c0a4cb7fd // indirect
 	github.com/josharian/intern v1.0.0 // indirect
