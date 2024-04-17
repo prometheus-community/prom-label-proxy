@@ -64,7 +64,9 @@ func validRules() http.Handler {
               "namespace": "ns1"
             },
             "health": "ok",
-            "type": "recording"
+            "type": "recording",
+            "evaluationTime": 0.000214303,
+            "lastEvaluation": "2024-04-29T14:23:52.403557247+02:00"
           },
           {
             "name": "metric2",
@@ -74,7 +76,9 @@ func validRules() http.Handler {
               "operation": "create"
             },
             "health": "ok",
-            "type": "recording"
+            "type": "recording",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:53.403557247+02:00"
           },
           {
             "name": "metric2",
@@ -84,7 +88,9 @@ func validRules() http.Handler {
               "operation": "update"
             },
             "health": "ok",
-            "type": "recording"
+            "type": "recording",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:54.403557247+02:00"
           },
           {
             "name": "metric2",
@@ -94,9 +100,12 @@ func validRules() http.Handler {
               "operation": "delete"
             },
             "health": "ok",
-            "type": "recording"
+            "type": "recording",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:53.603557247+02:00"
           },
           {
+            "state": "firing",
             "name": "Alert1",
             "query": "metric1{namespace=\"ns1\"} == 0",
             "duration": 0,
@@ -117,9 +126,12 @@ func validRules() http.Handler {
               }
             ],
             "health": "ok",
-            "type": "alerting"
+            "type": "alerting",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:53.803557247+02:00"
           },
           {
+            "state": "firing",
             "name": "Alert2",
             "query": "metric2{namespace=\"ns1\"} == 0",
             "duration": 0,
@@ -152,7 +164,9 @@ func validRules() http.Handler {
               }
             ],
             "health": "ok",
-            "type": "alerting"
+            "type": "alerting",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:53.903557247+02:00"
           }
         ],
         "interval": 10
@@ -168,9 +182,12 @@ func validRules() http.Handler {
               "namespace": "ns2"
             },
             "health": "ok",
-            "type": "recording"
+            "type": "recording",
+            "evaluationTime": 0.000214303,
+            "lastEvaluation": "2024-04-29T14:23:52.403557247+02:00"
           },
           {
+            "state": "inactive",
             "name": "Alert1",
             "query": "metric1{namespace=\"ns2\"} == 0",
             "duration": 0,
@@ -180,7 +197,9 @@ func validRules() http.Handler {
             "annotations": {},
             "alerts": [],
             "health": "ok",
-            "type": "alerting"
+            "type": "alerting",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.503557247+02:00"
           }
         ],
         "interval": 10
@@ -197,7 +216,9 @@ func validRules() http.Handler {
               "operation": "create"
             },
             "health": "ok",
-            "type": "recording"
+            "type": "recording",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.503557247+02:00"
           },
           {
             "name": "metric2",
@@ -207,7 +228,9 @@ func validRules() http.Handler {
               "operation": "update"
             },
             "health": "ok",
-            "type": "recording"
+            "type": "recording",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.603557247+02:00"
           },
           {
             "name": "metric2",
@@ -217,7 +240,9 @@ func validRules() http.Handler {
               "operation": "delete"
             },
             "health": "ok",
-            "type": "recording"
+            "type": "recording",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.643557247+02:00"
           },
           {
             "name": "metric3",
@@ -226,9 +251,12 @@ func validRules() http.Handler {
               "namespace": "ns2"
             },
             "health": "ok",
-            "type": "recording"
+            "type": "recording",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.683557247+02:00"
           },
           {
+            "state": "inactive",
             "name": "Alert2",
             "query": "metric2{namespace=\"ns2\"} == 0",
             "duration": 0,
@@ -238,9 +266,12 @@ func validRules() http.Handler {
             "annotations": {},
             "alerts": [],
             "health": "ok",
-            "type": "alerting"
+            "type": "alerting",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.803557247+02:00"
           },
           {
+            "state": "firing",
             "name": "Alert3",
             "query": "metric3{namespace=\"ns2\"} == 0",
             "duration": 0,
@@ -261,7 +292,9 @@ func validRules() http.Handler {
               }
             ],
             "health": "ok",
-            "type": "alerting"
+            "type": "alerting",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.903557247+02:00"
           }
         ],
         "interval": 10

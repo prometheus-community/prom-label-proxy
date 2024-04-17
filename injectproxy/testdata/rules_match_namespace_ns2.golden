@@ -13,18 +13,24 @@
               "namespace": "ns2"
             },
             "health": "ok",
+            "evaluationTime": 0.000214303,
+            "lastEvaluation": "2024-04-29T14:23:52.403557247+02:00",
             "type": "recording"
           },
           {
+            "state": "inactive",
             "name": "Alert1",
             "query": "metric1{namespace=\"ns2\"} == 0",
             "duration": 0,
+            "keepFiringFor": 0,
             "labels": {
               "namespace": "ns2"
             },
             "annotations": {},
             "alerts": [],
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.503557247+02:00",
             "type": "alerting"
           }
         ],
@@ -42,6 +48,8 @@
               "operation": "create"
             },
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.503557247+02:00",
             "type": "recording"
           },
           {
@@ -52,6 +60,8 @@
               "operation": "update"
             },
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.603557247+02:00",
             "type": "recording"
           },
           {
@@ -62,6 +72,8 @@
               "operation": "delete"
             },
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.643557247+02:00",
             "type": "recording"
           },
           {
@@ -71,24 +83,32 @@
               "namespace": "ns2"
             },
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.683557247+02:00",
             "type": "recording"
           },
           {
+            "state": "inactive",
             "name": "Alert2",
             "query": "metric2{namespace=\"ns2\"} == 0",
             "duration": 0,
+            "keepFiringFor": 0,
             "labels": {
               "namespace": "ns2"
             },
             "annotations": {},
             "alerts": [],
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.803557247+02:00",
             "type": "alerting"
           },
           {
+            "state": "firing",
             "name": "Alert3",
             "query": "metric3{namespace=\"ns2\"} == 0",
             "duration": 0,
+            "keepFiringFor": 0,
             "labels": {
               "namespace": "ns2"
             },
@@ -106,6 +126,8 @@
               }
             ],
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:52.903557247+02:00",
             "type": "alerting"
           }
         ],
