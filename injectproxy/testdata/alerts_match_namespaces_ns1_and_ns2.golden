@@ -1,0 +1,49 @@
+{
+  "status": "success",
+  "data": {
+    "alerts": [
+      {
+        "labels": {
+          "alertname": "Alert1",
+          "namespace": "ns1"
+        },
+        "annotations": {},
+        "state": "firing",
+        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+        "value": "0e+00"
+      },
+      {
+        "labels": {
+          "alertname": "Alert2",
+          "namespace": "ns1",
+          "operation": "update"
+        },
+        "annotations": {},
+        "state": "firing",
+        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+        "value": "0e+00"
+      },
+      {
+        "labels": {
+          "alertname": "Alert2",
+          "namespace": "ns1",
+          "operation": "delete"
+        },
+        "annotations": {},
+        "state": "firing",
+        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+        "value": "0e+00"
+      },
+      {
+        "labels": {
+          "alertname": "Alert3",
+          "namespace": "ns2"
+        },
+        "annotations": {},
+        "state": "firing",
+        "activeAt": "2019-12-18T13:14:39.972915521+01:00",
+        "value": "0e+00"
+      }
+    ]
+  }
+}
