@@ -1,6 +1,8 @@
 module github.com/prometheus-community/prom-label-proxy
 
-go 1.20
+go 1.21
+
+toolchain go1.21.9
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.2
@@ -8,7 +10,7 @@ require (
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a
 	github.com/oklog/run v1.1.0
-	github.com/prometheus/alertmanager v0.26.0
+	github.com/prometheus/alertmanager v0.27.0
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/prometheus v0.50.1
 	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
@@ -38,7 +40,6 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
