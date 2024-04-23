@@ -1,0 +1,111 @@
+{
+  "status": "success",
+  "data": {
+    "groups": [
+      {
+        "name": "group1",
+        "file": "testdata/rules1.yml",
+        "rules": [
+          {
+            "name": "metric1",
+            "query": "0",
+            "labels": {
+              "namespace": "ns1"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "metric2",
+            "query": "1",
+            "labels": {
+              "namespace": "ns1",
+              "operation": "create"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "metric2",
+            "query": "0",
+            "labels": {
+              "namespace": "ns1",
+              "operation": "update"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "metric2",
+            "query": "0",
+            "labels": {
+              "namespace": "ns1",
+              "operation": "delete"
+            },
+            "health": "ok",
+            "type": "recording"
+          },
+          {
+            "name": "Alert1",
+            "query": "metric1{namespace=\"ns1\"} == 0",
+            "duration": 0,
+            "labels": {
+              "namespace": "ns1"
+            },
+            "annotations": {},
+            "alerts": [
+              {
+                "labels": {
+                  "alertname": "Alert1",
+                  "namespace": "ns1"
+                },
+                "annotations": {},
+                "state": "firing",
+                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+                "value": "0e+00"
+              }
+            ],
+            "health": "ok",
+            "type": "alerting"
+          },
+          {
+            "name": "Alert2",
+            "query": "metric2{namespace=\"ns1\"} == 0",
+            "duration": 0,
+            "labels": {
+              "namespace": "ns1"
+            },
+            "annotations": {},
+            "alerts": [
+              {
+                "labels": {
+                  "alertname": "Alert2",
+                  "namespace": "ns1",
+                  "operation": "update"
+                },
+                "annotations": {},
+                "state": "firing",
+                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+                "value": "0e+00"
+              },
+              {
+                "labels": {
+                  "alertname": "Alert2",
+                  "namespace": "ns1",
+                  "operation": "delete"
+                },
+                "annotations": {},
+                "state": "firing",
+                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
+                "value": "0e+00"
+              }
+            ],
+            "health": "ok",
+            "type": "alerting"
+          }
+        ],
+        "interval": 10
+      }
+    ]
+  }
+}

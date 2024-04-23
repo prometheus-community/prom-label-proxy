@@ -22,6 +22,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"gotest.tools/v3/golden"
 )
 
 type gzipResponseWriter struct {
@@ -332,12 +334,12 @@ func TestRules(t *testing.T) {
 		reqHeaders http.Header
 
 		expCode int
-		expBody []byte
+		golden  string
 	}{
 		{
 			// No "namespace" parameter returns an error.
 			expCode: http.StatusBadRequest,
-			expBody: []byte(`{"error":"The \"namespace\" query parameter must be provided.","errorType":"prom-label-proxy","status":"error"}` + "\n"),
+			golden:  "rules_no_namespace_error.golden",
 		},
 		{
 			// non 200 status code from upstream is passed as-is.
@@ -348,7 +350,7 @@ func TestRules(t *testing.T) {
 			}),
 
 			expCode: http.StatusBadRequest,
-			expBody: []byte("error"),
+			golden:  "rules_upstream_error.golden",
 		},
 		{
 			// incomplete API response triggers a 502 error.
@@ -358,7 +360,7 @@ func TestRules(t *testing.T) {
 			}),
 
 			expCode: http.StatusBadGateway,
-			expBody: []byte(""),
+			golden:  "rules_incomplete_upstream_response.golden",
 		},
 		{
 			// invalid API response triggers a 502 error.
@@ -368,7 +370,7 @@ func TestRules(t *testing.T) {
 			}),
 
 			expCode: http.StatusBadGateway,
-			expBody: []byte(""),
+			golden:  "rules_invalid_upstream_response.golden",
 		},
 		{
 			// "namespace" parameter matching no rule.
@@ -376,12 +378,7 @@ func TestRules(t *testing.T) {
 			upstream: validRules(),
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "groups": []
-  }
-}`),
+			golden:  "rules_no_match.golden",
 		},
 		{
 			// Gzipped response should be handled when explictly asked by the original client.
@@ -392,12 +389,7 @@ func TestRules(t *testing.T) {
 			},
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "groups": []
-  }
-}`),
+			golden:  "rules_no_match_with_gzip_requested.golden",
 		},
 		{
 			// When the client doesn't ask explicitly for gzip encoding, the Go
@@ -407,477 +399,28 @@ func TestRules(t *testing.T) {
 			upstream: gzipHandler(validRules()),
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "groups": []
-  }
-}`),
+			golden:  "rules_no_match_with_gzip_not_requested.golden",
 		},
 		{
 			labelv:   []string{"ns1"},
 			upstream: validRules(),
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "groups": [
-      {
-        "name": "group1",
-        "file": "testdata/rules1.yml",
-        "rules": [
-          {
-            "name": "metric1",
-            "query": "0",
-            "labels": {
-              "namespace": "ns1"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "1",
-            "labels": {
-              "namespace": "ns1",
-              "operation": "create"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "0",
-            "labels": {
-              "namespace": "ns1",
-              "operation": "update"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "0",
-            "labels": {
-              "namespace": "ns1",
-              "operation": "delete"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "Alert1",
-            "query": "metric1{namespace=\"ns1\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns1"
-            },
-            "annotations": {},
-            "alerts": [
-              {
-                "labels": {
-                  "alertname": "Alert1",
-                  "namespace": "ns1"
-                },
-                "annotations": {},
-                "state": "firing",
-                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-                "value": "0e+00"
-              }
-            ],
-            "health": "ok",
-            "type": "alerting"
-          },
-          {
-            "name": "Alert2",
-            "query": "metric2{namespace=\"ns1\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns1"
-            },
-            "annotations": {},
-            "alerts": [
-              {
-                "labels": {
-                  "alertname": "Alert2",
-                  "namespace": "ns1",
-                  "operation": "update"
-                },
-                "annotations": {},
-                "state": "firing",
-                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-                "value": "0e+00"
-              },
-              {
-                "labels": {
-                  "alertname": "Alert2",
-                  "namespace": "ns1",
-                  "operation": "delete"
-                },
-                "annotations": {},
-                "state": "firing",
-                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-                "value": "0e+00"
-              }
-            ],
-            "health": "ok",
-            "type": "alerting"
-          }
-        ],
-        "interval": 10
-      }
-    ]
-  }
-}`),
+			golden:  "rules_match_namespace_ns1.golden",
 		},
 		{
 			labelv:   []string{"ns2"},
 			upstream: validRules(),
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "groups": [
-      {
-        "name": "group1",
-        "file": "testdata/rules2.yml",
-        "rules": [
-          {
-            "name": "metric1",
-            "query": "1",
-            "labels": {
-              "namespace": "ns2"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "Alert1",
-            "query": "metric1{namespace=\"ns2\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns2"
-            },
-            "annotations": {},
-            "alerts": [],
-            "health": "ok",
-            "type": "alerting"
-          }
-        ],
-        "interval": 10
-      },
-      {
-        "name": "group2",
-        "file": "testdata/rules2.yml",
-        "rules": [
-          {
-            "name": "metric2",
-            "query": "1",
-            "labels": {
-              "namespace": "ns2",
-              "operation": "create"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "2",
-            "labels": {
-              "namespace": "ns2",
-              "operation": "update"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "3",
-            "labels": {
-              "namespace": "ns2",
-              "operation": "delete"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric3",
-            "query": "0",
-            "labels": {
-              "namespace": "ns2"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "Alert2",
-            "query": "metric2{namespace=\"ns2\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns2"
-            },
-            "annotations": {},
-            "alerts": [],
-            "health": "ok",
-            "type": "alerting"
-          },
-          {
-            "name": "Alert3",
-            "query": "metric3{namespace=\"ns2\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns2"
-            },
-            "annotations": {},
-            "alerts": [
-              {
-                "labels": {
-                  "alertname": "Alert3",
-                  "namespace": "ns2"
-                },
-                "annotations": {},
-                "state": "firing",
-                "activeAt": "2019-12-18T13:14:39.972915521+01:00",
-                "value": "0e+00"
-              }
-            ],
-            "health": "ok",
-            "type": "alerting"
-          }
-        ],
-        "interval": 10
-      }
-    ]
-  }
-}`),
+			golden:  "rules_match_namespace_ns2.golden",
 		},
 		{
 			labelv:   []string{"ns1", "ns2"},
 			upstream: validRules(),
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "groups": [
-      {
-        "name": "group1",
-        "file": "testdata/rules1.yml",
-        "rules": [
-          {
-            "name": "metric1",
-            "query": "0",
-            "labels": {
-              "namespace": "ns1"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "1",
-            "labels": {
-              "namespace": "ns1",
-              "operation": "create"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "0",
-            "labels": {
-              "namespace": "ns1",
-              "operation": "update"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "0",
-            "labels": {
-              "namespace": "ns1",
-              "operation": "delete"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "Alert1",
-            "query": "metric1{namespace=\"ns1\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns1"
-            },
-            "annotations": {},
-            "alerts": [
-              {
-                "labels": {
-                  "alertname": "Alert1",
-                  "namespace": "ns1"
-                },
-                "annotations": {},
-                "state": "firing",
-                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-                "value": "0e+00"
-              }
-            ],
-            "health": "ok",
-            "type": "alerting"
-          },
-          {
-            "name": "Alert2",
-            "query": "metric2{namespace=\"ns1\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns1"
-            },
-            "annotations": {},
-            "alerts": [
-              {
-                "labels": {
-                  "alertname": "Alert2",
-                  "namespace": "ns1",
-                  "operation": "update"
-                },
-                "annotations": {},
-                "state": "firing",
-                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-                "value": "0e+00"
-              },
-              {
-                "labels": {
-                  "alertname": "Alert2",
-                  "namespace": "ns1",
-                  "operation": "delete"
-                },
-                "annotations": {},
-                "state": "firing",
-                "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-                "value": "0e+00"
-              }
-            ],
-            "health": "ok",
-            "type": "alerting"
-          }
-        ],
-        "interval": 10
-      },
-      {
-        "name": "group1",
-        "file": "testdata/rules2.yml",
-        "rules": [
-          {
-            "name": "metric1",
-            "query": "1",
-            "labels": {
-              "namespace": "ns2"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "Alert1",
-            "query": "metric1{namespace=\"ns2\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns2"
-            },
-            "annotations": {},
-            "alerts": [],
-            "health": "ok",
-            "type": "alerting"
-          }
-        ],
-        "interval": 10
-      },
-      {
-        "name": "group2",
-        "file": "testdata/rules2.yml",
-        "rules": [
-          {
-            "name": "metric2",
-            "query": "1",
-            "labels": {
-              "namespace": "ns2",
-              "operation": "create"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "2",
-            "labels": {
-              "namespace": "ns2",
-              "operation": "update"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric2",
-            "query": "3",
-            "labels": {
-              "namespace": "ns2",
-              "operation": "delete"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "metric3",
-            "query": "0",
-            "labels": {
-              "namespace": "ns2"
-            },
-            "health": "ok",
-            "type": "recording"
-          },
-          {
-            "name": "Alert2",
-            "query": "metric2{namespace=\"ns2\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns2"
-            },
-            "annotations": {},
-            "alerts": [],
-            "health": "ok",
-            "type": "alerting"
-          },
-          {
-            "name": "Alert3",
-            "query": "metric3{namespace=\"ns2\"} == 0",
-            "duration": 0,
-            "labels": {
-              "namespace": "ns2"
-            },
-            "annotations": {},
-            "alerts": [
-              {
-                "labels": {
-                  "alertname": "Alert3",
-                  "namespace": "ns2"
-                },
-                "annotations": {},
-                "state": "firing",
-                "activeAt": "2019-12-18T13:14:39.972915521+01:00",
-                "value": "0e+00"
-              }
-            ],
-            "health": "ok",
-            "type": "alerting"
-          }
-        ],
-        "interval": 10
-      }
-    ]
-  }
-}`),
+			golden:  "rules_match_namespaces_ns1_and_ns2.golden",
 		},
 	} {
 		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
@@ -917,22 +460,13 @@ func TestRules(t *testing.T) {
 
 			body, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode != http.StatusOK {
-				if string(body) != string(tc.expBody) {
-					t.Fatalf("expected: %q, got: %q", string(tc.expBody), string(body))
-				}
+				golden.Assert(t, string(body), tc.golden)
 				return
 			}
 
 			// We need to unmarshal/marshal the result to run deterministic comparisons.
 			got := normalizeAPIResponse(t, body)
-			expected := normalizeAPIResponse(t, tc.expBody)
-			if got != expected {
-				t.Logf("expected:")
-				t.Logf(expected)
-				t.Logf("got:")
-				t.Logf(got)
-				t.FailNow()
-			}
+			golden.Assert(t, got, tc.golden)
 		})
 	}
 }
@@ -943,12 +477,12 @@ func TestAlerts(t *testing.T) {
 		upstream http.Handler
 
 		expCode int
-		expBody []byte
+		golden  string
 	}{
 		{
 			// No "namespace" parameter returns an error.
 			expCode: http.StatusBadRequest,
-			expBody: []byte(`{"error":"The \"namespace\" query parameter must be provided.","errorType":"prom-label-proxy","status":"error"}` + "\n"),
+			golden:  "alerts_no_namespace_error.golden",
 		},
 		{
 			// non 200 status code from upstream is passed as-is.
@@ -959,7 +493,7 @@ func TestAlerts(t *testing.T) {
 			}),
 
 			expCode: http.StatusBadRequest,
-			expBody: []byte("error"),
+			golden:  "alerts_upstream_error.golden",
 		},
 		{
 			// incomplete API response triggers a 502 error.
@@ -969,7 +503,7 @@ func TestAlerts(t *testing.T) {
 			}),
 
 			expCode: http.StatusBadGateway,
-			expBody: []byte(""),
+			golden:  "alerts_incomplete_upstream_response.golden",
 		},
 		{
 			// invalid API response triggers a 502 error.
@@ -979,7 +513,7 @@ func TestAlerts(t *testing.T) {
 			}),
 
 			expCode: http.StatusBadGateway,
-			expBody: []byte(""),
+			golden:  "alerts_invalid_upstream_response.golden",
 		},
 		{
 			// "namespace" parameter matching no rule.
@@ -987,135 +521,28 @@ func TestAlerts(t *testing.T) {
 			upstream: validAlerts(),
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "alerts": []
-  }
-}`),
+			golden:  "alerts_no_match.golden",
 		},
 		{
 			labelv:   []string{"ns1"},
 			upstream: validAlerts(),
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "alerts": [
-      {
-        "labels": {
-          "alertname": "Alert1",
-          "namespace": "ns1"
-        },
-        "annotations": {},
-        "state": "firing",
-        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-        "value": "0e+00"
-      },
-      {
-        "labels": {
-          "alertname": "Alert2",
-          "namespace": "ns1",
-          "operation": "update"
-        },
-        "annotations": {},
-        "state": "firing",
-        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-        "value": "0e+00"
-      },
-      {
-        "labels": {
-          "alertname": "Alert2",
-          "namespace": "ns1",
-          "operation": "delete"
-        },
-        "annotations": {},
-        "state": "firing",
-        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-        "value": "0e+00"
-      }
-    ]
-  }
-}`),
+			golden:  "alerts_match_namespace_ns1.golden",
 		},
 		{
 			labelv:   []string{"ns2"},
 			upstream: validAlerts(),
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "alerts": [
-      {
-        "labels": {
-          "alertname": "Alert3",
-          "namespace": "ns2"
-        },
-        "annotations": {},
-        "state": "firing",
-        "activeAt": "2019-12-18T13:14:39.972915521+01:00",
-        "value": "0e+00"
-      }
-    ]
-  }
-}`),
+			golden:  "alerts_match_namespace_ns2.golden",
 		},
 		{
 			labelv:   []string{"ns1", "ns2"},
 			upstream: validAlerts(),
 
 			expCode: http.StatusOK,
-			expBody: []byte(`{
-  "status": "success",
-  "data": {
-    "alerts": [
-      {
-        "labels": {
-          "alertname": "Alert1",
-          "namespace": "ns1"
-        },
-        "annotations": {},
-        "state": "firing",
-        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-        "value": "0e+00"
-      },
-      {
-        "labels": {
-          "alertname": "Alert2",
-          "namespace": "ns1",
-          "operation": "update"
-        },
-        "annotations": {},
-        "state": "firing",
-        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-        "value": "0e+00"
-      },
-      {
-        "labels": {
-          "alertname": "Alert2",
-          "namespace": "ns1",
-          "operation": "delete"
-        },
-        "annotations": {},
-        "state": "firing",
-        "activeAt": "2019-12-18T13:14:44.543981127+01:00",
-        "value": "0e+00"
-      },
-      {
-        "labels": {
-          "alertname": "Alert3",
-          "namespace": "ns2"
-        },
-        "annotations": {},
-        "state": "firing",
-        "activeAt": "2019-12-18T13:14:39.972915521+01:00",
-        "value": "0e+00"
-      }
-    ]
-  }
-}`),
+			golden:  "alerts_match_namespaces_ns1_and_ns2.golden",
 		},
 	} {
 		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
@@ -1148,22 +575,13 @@ func TestAlerts(t *testing.T) {
 
 			body, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode != http.StatusOK {
-				if string(body) != string(tc.expBody) {
-					t.Fatalf("expected: %q, got: %q", string(tc.expBody), string(body))
-				}
+				golden.Assert(t, string(body), tc.golden)
 				return
 			}
 
 			// We need to unmarshal/marshal the result to run deterministic comparisons.
 			got := normalizeAPIResponse(t, body)
-			expected := normalizeAPIResponse(t, tc.expBody)
-			if got != expected {
-				t.Logf("expected:")
-				t.Logf(expected)
-				t.Logf("got:")
-				t.Logf(got)
-				t.FailNow()
-			}
+			golden.Assert(t, got, tc.golden)
 		})
 	}
 }
