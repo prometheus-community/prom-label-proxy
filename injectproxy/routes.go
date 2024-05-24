@@ -234,7 +234,8 @@ func (hff HTTPFormEnforcer) getLabelValues(r *http.Request) ([]string, error) {
 
 // HTTPHeaderEnforcer enforces a label value extracted from the HTTP headers.
 type HTTPHeaderEnforcer struct {
-	Name string
+	Name            string
+	ParseListSyntax bool
 }
 
 // ExtractLabel implements the ExtractLabeler interface.
@@ -251,7 +252,13 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 }
 
 func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) {
-	headerValues := removeEmptyValues(r.Header[hhe.Name])
+	headerValues := r.Header[hhe.Name]
+
+	if hhe.ParseListSyntax {
+		headerValues = trimValues(splitValues(headerValues, ","))
+	}
+
+	headerValues = removeEmptyValues(headerValues)
 
 	if len(headerValues) == 0 {
 		return nil, fmt.Errorf("missing HTTP header %q", hhe.Name)
@@ -670,12 +677,32 @@ func humanFriendlyErrorMessage(err error) string {
 	return fmt.Sprintf("%s%s.", strings.ToUpper(errMsg[:1]), errMsg[1:])
 }
 
+func splitValues(slice []string, sep string) []string {
+	for i := 0; i < len(slice); {
+		splitResult := strings.Split(slice[i], sep)
+
+		slice = append(slice[:i], append(splitResult, slice[i+1:]...)...)
+
+		i += len(splitResult)
+	}
+
+	return slice
+}
+
 func removeEmptyValues(slice []string) []string {
 	for i := 0; i < len(slice); i++ {
 		if slice[i] == "" {
 			slice = append(slice[:i], slice[i+1:]...)
 			i--
 		}
+	}
+
+	return slice
+}
+
+func trimValues(slice []string) []string {
+	for i := 0; i < len(slice); i++ {
+		slice[i] = strings.TrimSpace(slice[i])
 	}
 
 	return slice
