@@ -13,6 +13,8 @@
               "namespace": "ns1"
             },
             "health": "ok",
+            "evaluationTime": 0.000214303,
+            "lastEvaluation": "2024-04-29T14:23:52.403557247+02:00",
             "type": "recording"
           },
           {
@@ -23,6 +25,8 @@
               "operation": "create"
             },
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:53.403557247+02:00",
             "type": "recording"
           },
           {
@@ -33,6 +37,8 @@
               "operation": "update"
             },
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:54.403557247+02:00",
             "type": "recording"
           },
           {
@@ -43,12 +49,16 @@
               "operation": "delete"
             },
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:53.603557247+02:00",
             "type": "recording"
           },
           {
+            "state": "firing",
             "name": "Alert1",
             "query": "metric1{namespace=\"ns1\"} == 0",
             "duration": 0,
+            "keepFiringFor": 0,
             "labels": {
               "namespace": "ns1"
             },
@@ -66,12 +76,16 @@
               }
             ],
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:53.803557247+02:00",
             "type": "alerting"
           },
           {
+            "state": "firing",
             "name": "Alert2",
             "query": "metric2{namespace=\"ns1\"} == 0",
             "duration": 0,
+            "keepFiringFor": 0,
             "labels": {
               "namespace": "ns1"
             },
@@ -101,6 +115,8 @@
               }
             ],
             "health": "ok",
+            "evaluationTime": 0.000214,
+            "lastEvaluation": "2024-04-29T14:23:53.903557247+02:00",
             "type": "alerting"
           }
         ],
