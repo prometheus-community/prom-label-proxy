@@ -1,8 +1,6 @@
 module github.com/prometheus-community/prom-label-proxy
 
-go 1.21
-
-toolchain go1.21.9
+go 1.22
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.2
