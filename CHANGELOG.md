@@ -1,3 +1,7 @@
+## 0.9.0 / 2024-06-04
+
+* [ENHANCEMENT] Update /api/v1/{rules,alerts} responses. #214
+
 ## 0.8.1 / 2024-01-28
 
 Internal change for library compatibility. No user-visible changes.
