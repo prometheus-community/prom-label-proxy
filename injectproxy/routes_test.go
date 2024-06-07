@@ -808,12 +808,13 @@ func TestQuery(t *testing.T) {
 		promQueryBody  string
 		method         string
 
-		expCode          int
-		expPromQuery     string
-		expPromQueryBody string
-		expResponse      []byte
-		errorOnReplace   bool
-		regexMatch       bool
+		expCode              int
+		expPromQuery         string
+		expPromQueryBody     string
+		expResponse          []byte
+		errorOnReplace       bool
+		regexMatch           bool
+		headerUsesListSyntax bool
 	}{
 		{
 			name:    `No "namespace" parameter returns an error`,
@@ -1105,6 +1106,28 @@ func TestQuery(t *testing.T) {
 			expResponse:  okResponse,
 		},
 		{
+			name:         `HTTP header label with comma-separated values and list parsing disabled`,
+			headers:      http.Header{"namespace": []string{"default, second", "third"}},
+			headerName:   "namespace",
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="second"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"default, second|third"} + foo{namespace="second",namespace=~"default, second|third"}`,
+			expResponse:  okResponse,
+
+			headerUsesListSyntax: false,
+		},
+		{
+			name:         `HTTP header label with comma-separated values and list parsing enabled`,
+			headers:      http.Header{"namespace": []string{"default, second", "third"}},
+			headerName:   "namespace",
+			promQuery:    `up{instance="localhost:9090"} + foo{namespace="second"}`,
+			expCode:      http.StatusOK,
+			expPromQuery: `up{instance="localhost:9090",namespace=~"default|second|third"} + foo{namespace="second",namespace=~"default|second|third"}`,
+			expResponse:  okResponse,
+
+			headerUsesListSyntax: true,
+		},
+		{
 			name:         `multiple HTTP header with empty label value`,
 			headers:      http.Header{"namespace": []string{"default", ""}},
 			headerName:   "namespace",
@@ -1203,7 +1226,7 @@ func TestQuery(t *testing.T) {
 				if len(tc.staticLabelVal) > 0 {
 					labelEnforcer = StaticLabelEnforcer(tc.staticLabelVal)
 				} else if tc.headerName != "" {
-					labelEnforcer = HTTPHeaderEnforcer{Name: tc.headerName}
+					labelEnforcer = HTTPHeaderEnforcer{Name: tc.headerName, ParseListSyntax: tc.headerUsesListSyntax}
 				} else if tc.queryParam != "" {
 					labelEnforcer = HTTPFormEnforcer{ParameterName: tc.queryParam}
 				} else {
