@@ -14,11 +14,11 @@
 package injectproxy
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 )
 
 type checkFunc func(expression string, err error) error
@@ -34,32 +34,22 @@ func checks(cs ...checkFunc) checkFunc {
 	}
 }
 
-func hasError(want error) checkFunc {
+func noError() checkFunc {
 	return func(_ string, got error) error {
-		wantError, gotError := "<nil>", "<nil>"
-
-		if want != nil {
-			wantError = fmt.Sprintf("%q", want.Error())
-		}
-
 		if got != nil {
-			gotError = fmt.Sprintf("%q", got.Error())
-		}
-
-		if wantError != gotError {
-			return fmt.Errorf("want error %v, got %v", wantError, gotError)
+			return fmt.Errorf("want error <nil>, got %v", got)
 		}
 
 		return nil
 	}
 }
 
-func hasIllegalLabelMatcherError() checkFunc {
+func errorIs(want error) checkFunc {
 	return func(_ string, got error) error {
-		if _, ok := got.(IllegalLabelMatcherError); ok {
+		if errors.Is(got, want) {
 			return nil
 		}
-		return fmt.Errorf("want error of type IllegalLabelMatcherError, got %v", got)
+		return fmt.Errorf("want error of type %T, got %v", want, got)
 	}
 }
 
@@ -75,14 +65,14 @@ func hasExpression(want string) checkFunc {
 var tests = []struct {
 	name       string
 	expression string
-	enforcer   *Enforcer
+	enforcer   *PromQLEnforcer
 	check      checkFunc
 }{
 	// first check correct label insertion
 	{
 		name:       "expressions add label",
 		expression: `round(metric1{label="baz"},3)`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			false,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -96,7 +86,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasError(nil),
+			noError(),
 			hasExpression(`round(metric1{label="baz",namespace="NS",pod="POD"}, 3)`),
 		),
 	},
@@ -104,7 +94,7 @@ var tests = []struct {
 	{
 		name:       "aggregate add label",
 		expression: `sum by (pod) (metric1{label="baz"})`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			false,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -118,7 +108,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasError(nil),
+			noError(),
 			hasExpression(`sum by (pod) (metric1{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
@@ -126,7 +116,7 @@ var tests = []struct {
 	{
 		name:       "binary expression add label",
 		expression: `metric1{} + sum by (pod) (metric2{label="baz"})`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			false,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -140,7 +130,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasError(nil),
+			noError(),
 			hasExpression(`metric1{namespace="NS",pod="POD"} + sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
@@ -148,7 +138,7 @@ var tests = []struct {
 	{
 		name:       "binary expression with vector matching add label",
 		expression: `metric1{} + on(pod,namespace) sum by (pod) (metric2{label="baz"})`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			false,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -162,7 +152,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasError(nil),
+			noError(),
 			hasExpression(`metric1{namespace="NS",pod="POD"} + on (pod, namespace) sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
@@ -171,7 +161,7 @@ var tests = []struct {
 	{
 		name:       "expressions error on non-matching label value",
 		expression: `round(metric1{label="baz",pod="POD",namespace="bar"},3)`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			true,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -185,14 +175,14 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasIllegalLabelMatcherError(),
+			errorIs(ErrIllegalLabelMatcher),
 		),
 	},
 
 	{
 		name:       "aggregate error on non-matching label value",
 		expression: `sum by (pod) (metric1{label="baz",pod="foo",namespace="bar"})`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			true,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -206,14 +196,14 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasIllegalLabelMatcherError(),
+			errorIs(ErrIllegalLabelMatcher),
 		),
 	},
 
 	{
 		name:       "binary expression error on non-matching label value",
 		expression: `metric1{pod="baz"} + sum by (pod) (metric2{label="baz",pod="foo",namespace="bar"})`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			true,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -227,14 +217,14 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasIllegalLabelMatcherError(),
+			errorIs(ErrIllegalLabelMatcher),
 		),
 	},
 
 	{
 		name:       "binary expression with vector matching error on non-matching label value",
 		expression: `metric1{pod="baz"} + on (pod,namespace) sum by (pod) (metric2{label="baz",pod="foo",namespace="bar"})`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			true,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -248,7 +238,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
-			hasIllegalLabelMatcherError(),
+			errorIs(ErrIllegalLabelMatcher),
 		),
 	},
 	// and lastly check that passing the label matcher we would inject
@@ -256,7 +246,7 @@ var tests = []struct {
 	{
 		name:       "expressions unchanged with matching label value",
 		expression: `round(metric1{label="baz",pod="POD",namespace="NS"},3)`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			false,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -270,6 +260,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
+			noError(),
 			hasExpression(`round(metric1{label="baz",namespace="NS",pod="POD"}, 3)`),
 		),
 	},
@@ -277,7 +268,7 @@ var tests = []struct {
 	{
 		name:       "aggregate unchanged with matching label value",
 		expression: `sum by (pod) (metric1{label="baz",pod="POD",namespace="NS"})`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			false,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -291,6 +282,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
+			noError(),
 			hasExpression(`sum by (pod) (metric1{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
@@ -298,7 +290,7 @@ var tests = []struct {
 	{
 		name:       "binary expression unchanged with matching label value",
 		expression: `metric1{pod="POD"} + sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			false,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -312,6 +304,7 @@ var tests = []struct {
 			},
 		),
 		check: checks(
+			noError(),
 			hasExpression(`metric1{namespace="NS",pod="POD"} + sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
 		),
 	},
@@ -319,7 +312,7 @@ var tests = []struct {
 	{
 		name:       "binary expression with vector matching unchanged with matching label value",
 		expression: `metric1{pod="POD"} + on (pod,namespace) sum by (pod) (metric2{label="baz",pod="POD",namespace="NS"})`,
-		enforcer: NewEnforcer(
+		enforcer: NewPromQLEnforcer(
 			false,
 			&labels.Matcher{
 				Name:  "namespace",
@@ -333,22 +326,33 @@ var tests = []struct {
 			},
 		),
 		check: checks(
+			noError(),
 			hasExpression(`metric1{namespace="NS",pod="POD"} + on (pod, namespace) sum by (pod) (metric2{label="baz",namespace="NS",pod="POD"})`),
+		),
+	},
+	{
+		name:       "invalid PromQL expression",
+		expression: `metric1{pod="baz"`,
+		enforcer: NewPromQLEnforcer(
+			false,
+			&labels.Matcher{
+				Name:  "namespace",
+				Type:  labels.MatchEqual,
+				Value: "NS",
+			},
+		),
+		check: checks(
+			errorIs(ErrQueryParse),
 		),
 	},
 }
 
-func TestEnforceNode(t *testing.T) {
+func TestEnforce(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			e, err := parser.ParseExpr(tc.expression)
-			if err != nil {
+			got, err := tc.enforcer.Enforce(tc.expression)
+			if err := tc.check(got, err); err != nil {
 				t.Fatal(err)
-			}
-
-			err = tc.enforcer.EnforceNode(e)
-			if err := tc.check(e.String(), err); err != nil {
-				t.Error(err)
 			}
 		})
 	}

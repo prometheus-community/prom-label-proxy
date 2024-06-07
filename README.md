@@ -144,7 +144,7 @@ prom-label-proxy \
 
 `prom-label-proxy` will enforce the `tenant=~"prometheus|alertmanager"` label selector in all requests.
 
-You can match the label value  using a regular expression with the `-regex-match` option. For example:
+You can match the label value using a regular expression with the `-regex-match` option. For example:
 
 ```
 prom-label-proxy \

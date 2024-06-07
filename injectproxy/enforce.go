@@ -14,40 +14,59 @@
 package injectproxy
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
-type Enforcer struct {
+// PromQLEnforcer can enforce label matchers in PromQL expressions.
+type PromQLEnforcer struct {
 	labelMatchers  map[string]*labels.Matcher
 	errorOnReplace bool
 }
 
-func NewEnforcer(errorOnReplace bool, ms ...*labels.Matcher) *Enforcer {
+func NewPromQLEnforcer(errorOnReplace bool, ms ...*labels.Matcher) *PromQLEnforcer {
 	entries := make(map[string]*labels.Matcher)
 
 	for _, matcher := range ms {
 		entries[matcher.Name] = matcher
 	}
 
-	return &Enforcer{
+	return &PromQLEnforcer{
 		labelMatchers:  entries,
 		errorOnReplace: errorOnReplace,
 	}
 }
 
-type IllegalLabelMatcherError struct {
-	msg string
-}
+var (
+	// ErrQueryParse is returned when the input query is invalid.
+	ErrQueryParse = errors.New("failed to parse query string")
 
-func (e IllegalLabelMatcherError) Error() string { return e.msg }
+	// ErrIllegalLabelMatcher is returned when the input query contains a conflicting label matcher.
+	ErrIllegalLabelMatcher = errors.New("conflicting label matcher")
 
-func newIllegalLabelMatcherError(existing string, replacement string) IllegalLabelMatcherError {
-	return IllegalLabelMatcherError{
-		msg: fmt.Sprintf("label matcher value (%s) conflicts with injected value (%s)", existing, replacement),
+	// ErrEnforceLabel is returned when the label matchers couldn't be enforced.
+	ErrEnforceLabel = errors.New("failed to enforce label")
+)
+
+// Enforce the label matchers in a PromQL expression.
+func (ms *PromQLEnforcer) Enforce(q string) (string, error) {
+	expr, err := parser.ParseExpr(q)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrQueryParse, err)
 	}
+
+	if err := ms.EnforceNode(expr); err != nil {
+		if errors.Is(err, ErrIllegalLabelMatcher) {
+			return "", err
+		}
+
+		return "", fmt.Errorf("%w: %w", ErrEnforceLabel, err)
+	}
+
+	return expr.String(), nil
 }
 
 // EnforceNode walks the given node recursively
@@ -57,7 +76,7 @@ func newIllegalLabelMatcherError(existing string, replacement string) IllegalLab
 // their label enforcer is being potentially modified.
 // If a node's label matcher has the same name as a label matcher
 // of the given enforcer, then it will be replaced.
-func (ms Enforcer) EnforceNode(node parser.Node) error {
+func (ms PromQLEnforcer) EnforceNode(node parser.Node) error {
 	switch n := node.(type) {
 	case *parser.EvalStmt:
 		if err := ms.EnforceNode(n.Expr); err != nil {
@@ -140,14 +159,14 @@ func (ms Enforcer) EnforceNode(node parser.Node) error {
 // * if errorOnReplace is true, an error is returned,
 // * if errorOnReplace is false and the label matcher type is '=', the existing matcher is silently replaced.
 // * otherwise the existing matcher is preserved.
-func (ms Enforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.Matcher, error) {
+func (ms PromQLEnforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.Matcher, error) {
 	var res []*labels.Matcher
 
 	for _, target := range targets {
 		if matcher, ok := ms.labelMatchers[target.Name]; ok {
 			// matcher.String() returns something like "labelfoo=value"
 			if ms.errorOnReplace && matcher.String() != target.String() {
-				return res, newIllegalLabelMatcherError(matcher.String(), target.String())
+				return res, fmt.Errorf("%w: label matcher value %q conflicts with injected value %q", ErrIllegalLabelMatcher, matcher.String(), target.String())
 			}
 
 			// Drop the existing matcher only if the enforced matcher is an
