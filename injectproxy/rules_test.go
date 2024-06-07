@@ -365,6 +365,7 @@ func TestRules(t *testing.T) {
 		labelv     []string
 		upstream   http.Handler
 		reqHeaders http.Header
+		opts       []Option
 
 		expCode int
 		golden  string
@@ -455,11 +456,32 @@ func TestRules(t *testing.T) {
 			expCode: http.StatusOK,
 			golden:  "rules_match_namespaces_ns1_and_ns2.golden",
 		},
+		{
+			labelv:   []string{"ns1|ns2"},
+			upstream: validRules(),
+			opts:     []Option{WithRegexMatch()},
+
+			expCode: http.StatusOK,
+			golden:  "rules_match_namespaces_ns1_and_ns2.golden",
+		},
+		{
+			labelv:   []string{"ns1|ns2", "ns3"},
+			upstream: validRules(),
+			opts:     []Option{WithRegexMatch()},
+
+			expCode: http.StatusBadGateway,
+			golden:  "rules_invalid_upstream_response.golden",
+		},
 	} {
 		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			r, err := NewRoutes(
+				m.url,
+				proxyLabel,
+				HTTPFormEnforcer{ParameterName: proxyLabel},
+				tc.opts...,
+			)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -508,6 +530,7 @@ func TestAlerts(t *testing.T) {
 	for _, tc := range []struct {
 		labelv   []string
 		upstream http.Handler
+		opts     []Option
 
 		expCode int
 		golden  string
@@ -577,11 +600,32 @@ func TestAlerts(t *testing.T) {
 			expCode: http.StatusOK,
 			golden:  "alerts_match_namespaces_ns1_and_ns2.golden",
 		},
+		{
+			labelv:   []string{"ns1|ns2"},
+			upstream: validAlerts(),
+			opts:     []Option{WithRegexMatch()},
+
+			expCode: http.StatusOK,
+			golden:  "alerts_match_namespaces_ns1_and_ns2.golden",
+		},
+		{
+			labelv:   []string{"ns1", "ns2"},
+			upstream: validAlerts(),
+			opts:     []Option{WithRegexMatch()},
+
+			expCode: http.StatusBadGateway,
+			golden:  "alerts_invalid_upstream_response.golden",
+		},
 	} {
-		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s=%#v", proxyLabel, tc.labelv), func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
-			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			r, err := NewRoutes(
+				m.url,
+				proxyLabel,
+				HTTPFormEnforcer{ParameterName: proxyLabel},
+				tc.opts...,
+			)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

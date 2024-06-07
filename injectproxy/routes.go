@@ -378,6 +378,9 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
 		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
 	}
+	//FIXME: when ModifyResponse returns an error, the default ErrorHandler is
+	//called which returns 502 Bad Gateway. It'd be more appropriate to treat
+	//the error and return 400 in case of bad input for instance.
 	proxy.ModifyResponse = r.ModifyResponse
 	return r, nil
 }
@@ -577,6 +580,46 @@ func enforceQueryValues(e *PromQLEnforcer, v url.Values) (values string, noQuery
 	return v.Encode(), true, nil
 }
 
+func (r *routes) newLabelMatcher(vals ...string) (*labels.Matcher, error) {
+	if r.regexMatch {
+		if len(vals) != 1 {
+			return nil, errors.New("only one label value allowed with regex match")
+		}
+
+		re := vals[0]
+		compiledRegex, err := regexp.Compile(re)
+		if err != nil {
+			return nil, fmt.Errorf("invalid regex: %w", err)
+		}
+
+		if compiledRegex.MatchString("") {
+			return nil, errors.New("regex should not match empty string")
+		}
+
+		m, err := labels.NewMatcher(labels.MatchRegexp, r.label, re)
+		if err != nil {
+			return nil, err
+		}
+
+		return m, nil
+	}
+
+	if len(vals) == 1 {
+		return &labels.Matcher{
+			Name:  r.label,
+			Type:  labels.MatchEqual,
+			Value: vals[0],
+		}, nil
+	}
+
+	m, err := labels.NewMatcher(labels.MatchRegexp, r.label, labelValuesToRegexpString(vals))
+	if err != nil {
+		return nil, err
+	}
+
+	return m, nil
+}
+
 // matcher modifies all the match[] HTTP parameters to match on the tenant label.
 // If none was provided, a tenant label matcher matcher is injected.
 // This works for non-query Prometheus API endpoints like /api/v1/series,
@@ -584,14 +627,15 @@ func enforceQueryValues(e *PromQLEnforcer, v url.Values) (values string, noQuery
 // multiple matchers.
 // See e.g https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metadata
 func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
-	matcher := &labels.Matcher{
-		Name:  r.label,
-		Type:  labels.MatchRegexp,
-		Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
+	matcher, err := r.newLabelMatcher(MustLabelValues(req.Context())...)
+	if err != nil {
+		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	q := req.URL.Query()
 	if err := injectMatcher(q, matcher); err != nil {
+		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

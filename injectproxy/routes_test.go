@@ -34,6 +34,7 @@ func checkParameterAbsent(param string, next http.Handler) http.Handler {
 			prometheusAPIError(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
 			return
 		}
+
 		if len(kvs[param]) != 0 {
 			prometheusAPIError(w, fmt.Sprintf("unexpected parameter %q", param), http.StatusInternalServerError)
 			return
@@ -264,6 +265,7 @@ func TestMatch(t *testing.T) {
 	for _, tc := range []struct {
 		labelv  []string
 		matches []string
+		opts    []Option
 
 		expCode  int
 		expMatch []string
@@ -277,7 +279,7 @@ func TestMatch(t *testing.T) {
 			// No "match" parameter.
 			labelv:   []string{"default"},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{namespace=~"default"}`},
+			expMatch: []string{`{namespace="default"}`},
 			expBody:  okResponse,
 		},
 		{
@@ -285,7 +287,7 @@ func TestMatch(t *testing.T) {
 			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus",__name__=~"job:.*"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace=~"default"}`},
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
 			expBody:  okResponse,
 		},
 		{
@@ -309,7 +311,7 @@ func TestMatch(t *testing.T) {
 			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default",namespace=~"default"}`},
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default",namespace="default"}`},
 			expBody:  okResponse,
 		},
 		{
@@ -317,7 +319,7 @@ func TestMatch(t *testing.T) {
 			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus"}`, `{__name__=~"job:.*"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",namespace=~"default"}`, `{__name__=~"job:.*",namespace=~"default"}`},
+			expMatch: []string{`{job="prometheus",namespace="default"}`, `{__name__=~"job:.*",namespace="default"}`},
 			expBody:  okResponse,
 		},
 		{
@@ -336,6 +338,42 @@ func TestMatch(t *testing.T) {
 			},
 			expBody: okResponse,
 		},
+		{
+			// Many "match" parameters with a single regex value.
+			labelv: []string{".+-monitoring"},
+			matches: []string{
+				`{job="prometheus"}`,
+				`{__name__=~"job:.*"}`,
+				`{namespace="something"}`,
+			},
+			opts: []Option{WithRegexMatch()},
+
+			expCode: http.StatusOK,
+			expMatch: []string{
+				`{job="prometheus",namespace=~".+-monitoring"}`,
+				`{__name__=~"job:.*",namespace=~".+-monitoring"}`,
+				`{namespace="something",namespace=~".+-monitoring"}`,
+			},
+			expBody: okResponse,
+		},
+		{
+			// A single "match" parameter with multiple regex values.
+			labelv: []string{"default", "something"},
+			matches: []string{
+				`{job="prometheus"}`,
+			},
+			opts:    []Option{WithRegexMatch()},
+			expCode: http.StatusBadRequest,
+		},
+		{
+			// A single "match" parameter with a regex value matching the empty string.
+			labelv: []string{".*"},
+			matches: []string{
+				`{job="prometheus"}`,
+			},
+			opts:    []Option{WithRegexMatch()},
+			expCode: http.StatusBadRequest,
+		},
 	} {
 		for _, u := range []string{
 			"http://prometheus.example.com/federate",
@@ -351,7 +389,12 @@ func TestMatch(t *testing.T) {
 				)
 				defer m.Close()
 
-				r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel}, WithEnabledLabelsAPI())
+				r, err := NewRoutes(
+					m.url,
+					proxyLabel,
+					HTTPFormEnforcer{ParameterName: proxyLabel},
+					append([]Option{WithEnabledLabelsAPI()}, tc.opts...)...,
+				)
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -382,6 +425,7 @@ func TestMatch(t *testing.T) {
 					t.Logf("%s", string(body))
 					t.FailNow()
 				}
+
 				if resp.StatusCode != http.StatusOK {
 					return
 				}
@@ -411,7 +455,7 @@ func TestMatchWithPost(t *testing.T) {
 			// No "match" parameter.
 			labelv:   []string{"default"},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{namespace=~"default"}`},
+			expMatch: []string{`{namespace="default"}`},
 			expBody:  okResponse,
 		},
 		{
@@ -419,7 +463,7 @@ func TestMatchWithPost(t *testing.T) {
 			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus",__name__=~"job:.*"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace=~"default"}`},
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
 			expBody:  okResponse,
 		},
 		{
@@ -443,7 +487,7 @@ func TestMatchWithPost(t *testing.T) {
 			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus",__name__=~"job:.*",namespace="default"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default",namespace=~"default"}`},
+			expMatch: []string{`{job="prometheus",__name__=~"job:.*",namespace="default",namespace="default"}`},
 			expBody:  okResponse,
 		},
 		{
@@ -451,7 +495,7 @@ func TestMatchWithPost(t *testing.T) {
 			labelv:   []string{"default"},
 			matches:  []string{`{job="prometheus"}`, `{__name__=~"job:.*"}`},
 			expCode:  http.StatusOK,
-			expMatch: []string{`{job="prometheus",namespace=~"default"}`, `{__name__=~"job:.*",namespace=~"default"}`},
+			expMatch: []string{`{job="prometheus",namespace="default"}`, `{__name__=~"job:.*",namespace="default"}`},
 			expBody:  okResponse,
 		},
 		{
@@ -546,14 +590,14 @@ func TestSeries(t *testing.T) {
 		{
 			name:        `No "match[]" parameter returns 200 with empty body`,
 			labelv:      []string{"default"},
-			expMatch:    []string{`{namespace=~"default"}`},
+			expMatch:    []string{`{namespace="default"}`},
 			expResponse: okResponse,
 			expCode:     http.StatusOK,
 		},
 		{
 			name:        `No "match[]" parameter returns 200 with empty body for POSTs`,
 			labelv:      []string{"default"},
-			expMatch:    []string{`{namespace=~"default"}`},
+			expMatch:    []string{`{namespace="default"}`},
 			expResponse: okResponse,
 			expCode:     http.StatusOK,
 		},
@@ -562,7 +606,7 @@ func TestSeries(t *testing.T) {
 			labelv:      []string{"default"},
 			promQuery:   "up",
 			expCode:     http.StatusOK,
-			expMatch:    []string{`{__name__="up",namespace=~"default"}`},
+			expMatch:    []string{`{__name__="up",namespace="default"}`},
 			expResponse: okResponse,
 		},
 		{
@@ -586,7 +630,7 @@ func TestSeries(t *testing.T) {
 			labelv:      []string{"default"},
 			promQuery:   `up{instance="localhost:9090"}`,
 			expCode:     http.StatusOK,
-			expMatch:    []string{`{instance="localhost:9090",__name__="up",namespace=~"default"}`},
+			expMatch:    []string{`{instance="localhost:9090",__name__="up",namespace="default"}`},
 			expResponse: okResponse,
 		},
 		{
@@ -679,7 +723,7 @@ func TestSeriesWithPost(t *testing.T) {
 			name:        `No "match[]" parameter returns 200 with empty body`,
 			labelv:      []string{"default"},
 			method:      http.MethodPost,
-			expMatch:    []string{`{namespace=~"default"}`},
+			expMatch:    []string{`{namespace="default"}`},
 			expResponse: okResponse,
 			expCode:     http.StatusOK,
 		},
@@ -687,7 +731,7 @@ func TestSeriesWithPost(t *testing.T) {
 			name:        `No "match[]" parameter returns 200 with empty body for POSTs`,
 			method:      http.MethodPost,
 			labelv:      []string{"default"},
-			expMatch:    []string{`{namespace=~"default"}`},
+			expMatch:    []string{`{namespace="default"}`},
 			expResponse: okResponse,
 			expCode:     http.StatusOK,
 		},
@@ -697,7 +741,7 @@ func TestSeriesWithPost(t *testing.T) {
 			promQueryBody: "up",
 			method:        http.MethodPost,
 			expCode:       http.StatusOK,
-			expMatch:      []string{`{__name__="up",namespace=~"default"}`},
+			expMatch:      []string{`{__name__="up",namespace="default"}`},
 			expResponse:   okResponse,
 		},
 		{
@@ -724,7 +768,7 @@ func TestSeriesWithPost(t *testing.T) {
 			promQueryBody: `up{instance="localhost:9090"}`,
 			method:        http.MethodPost,
 			expCode:       http.StatusOK,
-			expMatch:      []string{`{instance="localhost:9090",__name__="up",namespace=~"default"}`},
+			expMatch:      []string{`{instance="localhost:9090",__name__="up",namespace="default"}`},
 			expResponse:   okResponse,
 		},
 		{

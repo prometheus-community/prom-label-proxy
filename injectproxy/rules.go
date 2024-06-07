@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/model/labels"
-	"golang.org/x/exp/slices"
 )
 
 type apiResponse struct {
@@ -210,14 +209,20 @@ func (r *routes) filterRules(lvalues []string, resp *apiResponse) (interface{}, 
 		return nil, fmt.Errorf("can't decode rules data: %w", err)
 	}
 
+	m, err := r.newLabelMatcher(lvalues...)
+	if err != nil {
+		return nil, err
+	}
+
 	filtered := []*ruleGroup{}
 	for _, rg := range rgs.RuleGroups {
 		var rules []rule
 		for _, rule := range rg.Rules {
-			if lval := rule.Labels().Get(r.label); lval != "" && slices.Contains(lvalues, lval) {
+			if lval := rule.Labels().Get(r.label); lval != "" && m.Matches(lval) {
 				rules = append(rules, rule)
 			}
 		}
+
 		if len(rules) > 0 {
 			rg.Rules = rules
 			filtered = append(filtered, rg)
@@ -233,9 +238,14 @@ func (r *routes) filterAlerts(lvalues []string, resp *apiResponse) (interface{},
 		return nil, fmt.Errorf("can't decode alerts data: %w", err)
 	}
 
+	m, err := r.newLabelMatcher(lvalues...)
+	if err != nil {
+		return nil, err
+	}
+
 	filtered := []*alert{}
 	for _, alert := range data.Alerts {
-		if lval := alert.Labels.Get(r.label); lval != "" && slices.Contains(lvalues, lval) {
+		if lval := alert.Labels.Get(r.label); lval != "" && m.Matches(lval) {
 			filtered = append(filtered, alert)
 		}
 	}

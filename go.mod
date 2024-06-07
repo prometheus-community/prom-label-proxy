@@ -11,7 +11,6 @@ require (
 	github.com/prometheus/alertmanager v0.27.0
 	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/prometheus v0.52.1
-	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
 	gotest.tools/v3 v3.5.1
 )
 

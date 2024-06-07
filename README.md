@@ -204,11 +204,11 @@ NOTE: When the `/api/v1/labels` and `/api/v1/label/<name>/values` endpoints were
 
 ### Rules endpoint
 
-The proxy requests the `/api/v1/rules` Prometheus endpoint, discards the rules that don't contain an exact match of the label and returns the modified response to the client.
+The proxy requests the `/api/v1/rules` Prometheus endpoint, discards the rules that don't contain an exact match of the label(s) and returns the modified response to the client.
 
 ### Alerts endpoint
 
-The proxy requests the `/api/v1/alerts` Prometheus endpoint, discards the rules that don't contain an exact match of the label and returns the modified response to the client.
+The proxy requests the `/api/v1/alerts` Prometheus endpoint, discards the rules that don't contain an exact match of the label(s) and returns the modified response to the client.
 
 ### Silences endpoint
 
