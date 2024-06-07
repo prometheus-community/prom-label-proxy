@@ -124,9 +124,11 @@ func main() {
 	if enableLabelAPIs {
 		opts = append(opts, injectproxy.WithEnabledLabelsAPI())
 	}
+
 	if len(unsafePassthroughPaths) > 0 {
 		opts = append(opts, injectproxy.WithPassthroughPaths(strings.Split(unsafePassthroughPaths, ",")))
 	}
+
 	if errorOnReplace {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
 	}
@@ -136,16 +138,19 @@ func main() {
 			if len(labelValues) > 1 {
 				log.Fatalf("Regex match is limited to one label value")
 			}
+
 			compiledRegex, err := regexp.Compile(labelValues[0])
 			if err != nil {
 				log.Fatalf("Invalid regexp: %v", err.Error())
 				return
 			}
+
 			if compiledRegex.MatchString("") {
 				log.Fatalf("Regex should not match empty string")
 				return
 			}
 		}
+
 		opts = append(opts, injectproxy.WithRegexMatch())
 	}
 

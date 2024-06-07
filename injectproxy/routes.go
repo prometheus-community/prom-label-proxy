@@ -16,6 +16,7 @@ package injectproxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -473,6 +474,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 			prometheusAPIError(w, "Only one label value allowed with regex match", http.StatusBadRequest)
 			return
 		}
+
 		matcher = &labels.Matcher{
 			Name:  r.label,
 			Type:  labels.MatchRegexp,
@@ -493,6 +495,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 			}
 			matcherType = labels.MatchRegexp
 		}
+
 		matcher = &labels.Matcher{
 			Name:  r.label,
 			Type:  matcherType,
@@ -500,7 +503,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	e := NewEnforcer(r.errorOnReplace, matcher)
+	e := NewPromQLEnforcer(r.errorOnReplace, matcher)
 
 	// The `query` can come in the URL query string and/or the POST body.
 	// For this reason, we need to try to enforcing in both places.
@@ -509,14 +512,15 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	// enforce in both places.
 	q, found1, err := enforceQueryValues(e, req.URL.Query())
 	if err != nil {
-		switch err.(type) {
-		case IllegalLabelMatcherError:
+		switch {
+		case errors.Is(err, ErrIllegalLabelMatcher):
 			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
-		case queryParseError:
+		case errors.Is(err, ErrQueryParse):
 			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
-		case enforceLabelError:
+		case errors.Is(err, ErrEnforceLabel):
 			prometheusAPIError(w, err.Error(), http.StatusInternalServerError)
 		}
+
 		return
 	}
 	req.URL.RawQuery = q
@@ -529,16 +533,18 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		}
 		q, found2, err = enforceQueryValues(e, req.PostForm)
 		if err != nil {
-			switch err.(type) {
-			case IllegalLabelMatcherError:
+			switch {
+			case errors.Is(err, ErrIllegalLabelMatcher):
 				prometheusAPIError(w, err.Error(), http.StatusBadRequest)
-			case queryParseError:
+			case errors.Is(err, ErrQueryParse):
 				prometheusAPIError(w, err.Error(), http.StatusBadRequest)
-			case enforceLabelError:
+			case errors.Is(err, ErrEnforceLabel):
 				prometheusAPIError(w, err.Error(), http.StatusInternalServerError)
 			}
+
 			return
 		}
+
 		// We are replacing request body, close previous one (ParseForm ensures it is read fully and not nil).
 		_ = req.Body.Close()
 		req.Body = io.NopCloser(strings.NewReader(q))
@@ -553,33 +559,29 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
 }
 
-func enforceQueryValues(e *Enforcer, v url.Values) (values string, noQuery bool, err error) {
+func enforceQueryValues(e *PromQLEnforcer, v url.Values) (values string, noQuery bool, err error) {
 	// If no values were given or no query is present,
 	// e.g. because the query came in the POST body
 	// but the URL query string was passed, then finish early.
 	if v.Get(queryParam) == "" {
 		return v.Encode(), false, nil
 	}
-	expr, err := parser.ParseExpr(v.Get(queryParam))
+
+	q, err := e.Enforce(v.Get(queryParam))
 	if err != nil {
-		queryParseError := newQueryParseError(err)
-		return "", true, queryParseError
+		return "", true, err
 	}
 
-	if err := e.EnforceNode(expr); err != nil {
-		if _, ok := err.(IllegalLabelMatcherError); ok {
-			return "", true, err
-		}
-		enforceLabelError := newEnforceLabelError(err)
-		return "", true, enforceLabelError
-	}
+	v.Set(queryParam, q)
 
-	v.Set(queryParam, expr.String())
 	return v.Encode(), true, nil
 }
 
-// matcher ensures all the provided match[] if any has label injected. If none was provided, single matcher is injected.
-// This works for non-query Prometheus APIs like: /api/v1/series, /api/v1/label/<name>/values, /api/v1/labels and /federate support multiple matchers.
+// matcher modifies all the match[] HTTP parameters to match on the tenant label.
+// If none was provided, a tenant label matcher matcher is injected.
+// This works for non-query Prometheus API endpoints like /api/v1/series,
+// /api/v1/label/<name>/values, /api/v1/labels and /federate which support
+// multiple matchers.
 // See e.g https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metadata
 func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	matcher := &labels.Matcher{
@@ -641,30 +643,6 @@ func matchersToString(ms ...*labels.Matcher) string {
 		el = append(el, m.String())
 	}
 	return fmt.Sprintf("{%v}", strings.Join(el, ","))
-}
-
-type queryParseError struct {
-	msg string
-}
-
-func (e queryParseError) Error() string {
-	return e.msg
-}
-
-func newQueryParseError(err error) queryParseError {
-	return queryParseError{msg: fmt.Sprintf("error parsing query string %q", err.Error())}
-}
-
-type enforceLabelError struct {
-	msg string
-}
-
-func (e enforceLabelError) Error() string {
-	return e.msg
-}
-
-func newEnforceLabelError(err error) enforceLabelError {
-	return enforceLabelError{msg: fmt.Sprintf("error enforcing label %q", err.Error())}
 }
 
 // humanFriendlyErrorMessage returns an error message with a capitalized first letter
