@@ -1,3 +1,8 @@
+## 0.10.0 / 2024-06-12
+
+* [FEATURE] Add the `header-uses-list-syntax` flag to split the tenant header value on commas. #223
+* [ENHANCEMENT] Support regex matcher for non-query Prometheus endpoints. #226
+
 ## 0.9.0 / 2024-06-04
 
 * [ENHANCEMENT] Update /api/v1/{rules,alerts} responses. #214
