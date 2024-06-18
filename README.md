@@ -157,7 +157,7 @@ prom-label-proxy \
 
 > :warning: The above feature is experimental. Be careful when using this option, it may expose sensitive metrics if you use a too permissive expression.
 
-To error out when the query already contains a label matcher that differs from the one the proxy would inject, you can use the `-error-on-replace` option. For example:
+To error out when the query already contains a label matcher that conflicts with the one the proxy would inject, you can use the `-error-on-replace` option. For example:
 
 ```
 prom-label-proxy \
