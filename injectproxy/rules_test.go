@@ -469,7 +469,7 @@ func TestRules(t *testing.T) {
 			upstream: validRules(),
 			opts:     []Option{WithRegexMatch()},
 
-			expCode: http.StatusBadGateway,
+			expCode: http.StatusBadRequest,
 			golden:  "rules_invalid_upstream_response.golden",
 		},
 	} {
@@ -513,7 +513,10 @@ func TestRules(t *testing.T) {
 				t.Fatalf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
 			}
 
-			body, _ := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("expected no error, got %s", err)
+			}
 			if resp.StatusCode != http.StatusOK {
 				golden.Assert(t, string(body), tc.golden)
 				return
@@ -613,7 +616,7 @@ func TestAlerts(t *testing.T) {
 			upstream: validAlerts(),
 			opts:     []Option{WithRegexMatch()},
 
-			expCode: http.StatusBadGateway,
+			expCode: http.StatusBadRequest,
 			golden:  "alerts_invalid_upstream_response.golden",
 		},
 	} {
@@ -650,7 +653,10 @@ func TestAlerts(t *testing.T) {
 				t.Fatalf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
 			}
 
-			body, _ := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("expected no error, got %s", err)
+			}
 			if resp.StatusCode != http.StatusOK {
 				golden.Assert(t, string(body), tc.golden)
 				return

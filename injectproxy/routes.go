@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -48,6 +49,8 @@ type routes struct {
 	modifiers      map[string]func(*http.Response) error
 	errorOnReplace bool
 	regexMatch     bool
+
+	logger *log.Logger
 }
 
 type options struct {
@@ -297,6 +300,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		el:             extractLabeler,
 		errorOnReplace: opt.errorOnReplace,
 		regexMatch:     opt.regexMatch,
+		logger:         log.Default(),
 	}
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
 
@@ -378,10 +382,10 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
 		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
 	}
-	//FIXME: when ModifyResponse returns an error, the default ErrorHandler is
-	//called which returns 502 Bad Gateway. It'd be more appropriate to treat
-	//the error and return 400 in case of bad input for instance.
 	proxy.ModifyResponse = r.ModifyResponse
+	proxy.ErrorHandler = r.errorHandler
+	proxy.ErrorLog = log.Default()
+
 	return r, nil
 }
 
@@ -395,7 +399,17 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 		// Return the server's response unmodified.
 		return nil
 	}
+
 	return m(resp)
+}
+
+func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
+	r.logger.Printf("http: proxy error: %v", err)
+	if errors.Is(err, errModifyResponseFailed) {
+		rw.WriteHeader(http.StatusBadRequest)
+	}
+
+	rw.WriteHeader(http.StatusBadGateway)
 }
 
 func enforceMethods(h http.HandlerFunc, methods ...string) http.HandlerFunc {
