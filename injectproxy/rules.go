@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -166,6 +167,10 @@ type alert struct {
 	Value           string        `json:"value"`
 }
 
+// errModifyResponseFailed is returned when the proxy failed to modify the
+// response from the backend.
+var errModifyResponseFailed = errors.New("failed to process the API response")
+
 // modifyAPIResponse unwraps the Prometheus API response, passes the enforced
 // label value and the response to the given function and finally replaces the
 // result in the response.
@@ -178,23 +183,24 @@ func modifyAPIResponse(f func([]string, *apiResponse) (interface{}, error)) func
 
 		apir, err := getAPIResponse(resp)
 		if err != nil {
-			return fmt.Errorf("can't decode API response: %w", err)
+			return fmt.Errorf("can't decode the response: %w", err)
 		}
 
 		v, err := f(MustLabelValues(resp.Request.Context()), apir)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: %w", errModifyResponseFailed, err)
 		}
 
 		b, err := json.Marshal(v)
 		if err != nil {
-			return fmt.Errorf("can't replace data: %w", err)
+			return fmt.Errorf("can't encode the data: %w", err)
 		}
+
 		apir.Data = json.RawMessage(b)
 
 		var buf bytes.Buffer
 		if err = json.NewEncoder(&buf).Encode(apir); err != nil {
-			return fmt.Errorf("can't encode API response: %w", err)
+			return fmt.Errorf("can't encode the response: %w", err)
 		}
 		resp.Body = io.NopCloser(&buf)
 		resp.Header["Content-Length"] = []string{fmt.Sprint(buf.Len())}
