@@ -21,6 +21,15 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 )
 
+func mustNewMatcher(t labels.MatchType, n, v string) *labels.Matcher {
+	m, err := labels.NewMatcher(t, n, v)
+	if err != nil {
+		panic(err)
+	}
+
+	return m
+}
+
 type checkFunc func(expression string, err error) error
 
 func checks(cs ...checkFunc) checkFunc {
@@ -353,6 +362,634 @@ func TestEnforce(t *testing.T) {
 			got, err := tc.enforcer.Enforce(tc.expression)
 			if err := tc.check(got, err); err != nil {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestEnforceWithErrOnReplace(t *testing.T) {
+	type subTestCase struct {
+		labelSelector string
+		exp           string
+		err           bool
+	}
+
+	for _, tc := range []struct {
+		enforcedMatcher *labels.Matcher
+		stcs            []subTestCase
+	}{
+		// Equal matcher enforcer.
+		{
+			enforcedMatcher: mustNewMatcher(labels.MatchEqual, "job", "foo"),
+			stcs: []subTestCase{
+				// No selector in the expression for the enforced label.
+				{
+					``,
+					`up{job="foo"}`,
+					false,
+				},
+
+				// Equal label selector in the expression.
+				{
+					`job=""`,
+					``,
+					true,
+				},
+				{
+					`job="foo"`,
+					`up{job="foo"}`,
+					false,
+				},
+				{
+					`job="bar"`,
+					``,
+					true,
+				},
+				{
+					`job="fred"`,
+					``,
+					true,
+				},
+
+				// Not equal label selector in the expression.
+				{
+					`job!=""`,
+					`up{job="foo"}`,
+					false,
+				},
+				{
+					`job!="foo"`,
+					``,
+					true,
+				},
+				{
+					`job!="bar"`,
+					`up{job="foo"}`,
+					false,
+				},
+				{
+					`job!="fred"`,
+					`up{job="foo"}`,
+					false,
+				},
+
+				// Regexp label selector in the expression.
+				{
+					`job=~""`,
+					``,
+					true,
+				},
+				{
+					`job=~"foo"`,
+					`up{job="foo"}`,
+					false,
+				},
+				{
+					`job=~"bar"`,
+					``,
+					true,
+				},
+				{
+					`job=~"fred"`,
+					``,
+					true,
+				},
+				{
+					`job=~"foo|fred"`,
+					`up{job="foo"}`,
+					false,
+				},
+				{
+					`job=~"foo|bar"`,
+					`up{job="foo"}`,
+					false,
+				},
+
+				// Not-regexp label selector in the expression.
+				{
+					`job!~""`,
+					`up{job="foo"}`,
+					false,
+				},
+				{
+					`job!~"foo"`,
+					``,
+					true,
+				},
+				{
+					`job!~"bar"`,
+					`up{job="foo"}`,
+					false,
+				},
+				{
+					`job!~"fred"`,
+					`up{job="foo"}`,
+					false,
+				},
+				{
+					`job!~"foo|fred"`,
+					``,
+					true,
+				},
+				{
+					`job!~"foo|bar"`,
+					``,
+					true,
+				},
+			},
+		},
+
+		// Not equal matcher enforcer.
+		{
+			enforcedMatcher: mustNewMatcher(labels.MatchNotEqual, "job", "foo"),
+			stcs: []subTestCase{
+				// No selector in the expression for the enforced label.
+				{
+					``,
+					`up{job!="foo"}`,
+					false,
+				},
+
+				// Equal label selector in the expression.
+				{
+					`job=""`,
+					`up{job!="foo",job=""}`,
+					false,
+				},
+				{
+					`job="foo"`,
+					``,
+					true,
+				},
+				{
+					`job="bar"`,
+					`up{job!="foo",job="bar"}`,
+					false,
+				},
+				{
+					`job="fred"`,
+					`up{job!="foo",job="fred"}`,
+					false,
+				},
+
+				// Not equal label selector in the expression.
+				{
+					`job!=""`,
+					`up{job!="",job!="foo"}`,
+					false,
+				},
+				{
+					`job!="foo"`,
+					`up{job!="foo"}`,
+					false,
+				},
+				{
+					`job!="bar"`,
+					`up{job!="bar",job!="foo"}`,
+					false,
+				},
+				{
+					`job!="fred"`,
+					`up{job!="foo",job!="fred"}`,
+					false,
+				},
+
+				// Regexp label selector in the expression.
+				{
+					`job=~""`,
+					`up{job!="foo",job=~""}`,
+					false,
+				},
+				{
+					// up{job!="foo",job=~"foo"} would return no result.
+					`job=~"foo"`,
+					``,
+					true,
+				},
+				{
+					`job=~"bar"`,
+					`up{job!="foo",job=~"bar"}`,
+					false,
+				},
+				{
+					`job=~"fred"`,
+					`up{job!="foo",job=~"fred"}`,
+					false,
+				},
+				{
+					`job=~"foo|fred"`,
+					`up{job!="foo",job=~"foo|fred"}`,
+					false,
+				},
+				{
+					`job=~"foo|bar"`,
+					`up{job!="foo",job=~"foo|bar"}`,
+					false,
+				},
+
+				// Not-regexp label selector in the expression.
+				{
+					`job!~""`,
+					`up{job!="foo",job!~""}`,
+					false,
+				},
+				{
+					`job!~"foo"`,
+					`up{job!="foo",job!~"foo"}`,
+					false,
+				},
+				{
+					`job!~"bar"`,
+					`up{job!="foo",job!~"bar"}`,
+					false,
+				},
+				{
+					`job!~"fred"`,
+					`up{job!="foo",job!~"fred"}`,
+					false,
+				},
+				{
+					`job!~"foo|fred"`,
+					`up{job!="foo",job!~"foo|fred"}`,
+					false,
+				},
+				{
+					`job!~"foo|bar"`,
+					`up{job!="foo",job!~"foo|bar"}`,
+					false,
+				},
+			},
+		},
+
+		// Regexp matcher enforcer.
+		{
+			enforcedMatcher: mustNewMatcher(labels.MatchRegexp, "job", "foo|bar"),
+			stcs: []subTestCase{
+				// No selector in the expression for the enforced label.
+				{
+					``,
+					`up{job=~"foo|bar"}`,
+					false,
+				},
+
+				// Equal label selector in the expression.
+				{
+					`job=""`,
+					``,
+					true,
+				},
+				{
+					`job="foo"`,
+					`up{job="foo",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job="bar"`,
+					`up{job="bar",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job="fred"`,
+					``,
+					true,
+				},
+
+				// Not equal label selector in the expression.
+				{
+					`job!=""`,
+					`up{job!="",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!="foo"`,
+					`up{job!="foo",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!="bar"`,
+					`up{job!="bar",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!="fred"`,
+					`up{job!="fred",job=~"foo|bar"}`,
+					false,
+				},
+
+				// Regexp label selector in the expression.
+				{
+					`job=~""`,
+					``,
+					true,
+				},
+				{
+					`job=~"foo"`,
+					`up{job=~"foo",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job=~"bar"`,
+					`up{job=~"bar",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job=~"fred"`,
+					`up{job=~"foo|bar",job=~"fred"}`,
+					true,
+				},
+				{
+					`job=~"foo|fred"`,
+					`up{job=~"foo|bar",job=~"foo|fred"}`,
+					false,
+				},
+				{
+					`job=~"foo|bar"`,
+					`up{job=~"foo|bar"}`,
+					false,
+				},
+
+				// Not-regexp label selector in the expression.
+				{
+					`job!~""`,
+					`up{job!~"",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!~"foo"`,
+					`up{job!~"foo",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!~"bar"`,
+					`up{job!~"bar",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!~"fred"`,
+					`up{job!~"fred",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!~"foo|fred"`,
+					`up{job!~"foo|fred",job=~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!~"foo|bar"`,
+					``,
+					true,
+				},
+			},
+		},
+
+		// Not regexp matcher enforcer.
+		{
+			enforcedMatcher: mustNewMatcher(labels.MatchNotRegexp, "job", "foo|bar"),
+			stcs: []subTestCase{
+				// No selector in the expression for the enforced label.
+				{
+					``,
+					`up{job!~"foo|bar"}`,
+					false,
+				},
+
+				// Equal label selector in the expression.
+				{
+					`job=""`,
+					``,
+					true,
+				},
+				{
+					`job="foo"`,
+					`up{job!~"foo|bar",job="foo"}`,
+					false,
+				},
+				{
+					`job="bar"`,
+					`up{job!~"foo|bar",job="bar"}`,
+					false,
+				},
+				{
+					`job="fred"`,
+					`up{job!~"foo|bar",job="fred"}`,
+					false,
+				},
+
+				// Not equal label selector in the expression.
+				{
+					`job!=""`,
+					`up{job!="",job!~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!="foo"`,
+					`up{job!="foo",job!~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!="bar"`,
+					`up{job!="bar",job!~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!="fred"`,
+					`up{job!="fred",job!~"foo|bar"}`,
+					false,
+				},
+
+				// Regexp label selector in the expression.
+				{
+					`job=~""`,
+					``,
+					true,
+				},
+				{
+					// up{job!~"foo|bar",job=~"foo"} would return no result.
+					`job=~"foo"`,
+					``,
+					true,
+				},
+				{
+					// up{job!~"foo|bar",job=~"bar"} would return no result.
+					`job=~"bar"`,
+					``,
+					true,
+				},
+				{
+					`job=~"fred"`,
+					`up{job!~"foo|bar",job=~"fred"}`,
+					false,
+				},
+				{
+					`job=~"foo|fred"`,
+					`up{job!~"foo|bar",job=~"foo|fred"}`,
+					false,
+				},
+				{
+					`job=~"foo|bar"`,
+					``,
+					true,
+				},
+
+				// Not-regexp label selector in the expression.
+				{
+					`job!~""`,
+					`up{job!~"",job!~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!~"foo"`,
+					`up{job!~"foo",job!~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!~"bar"`,
+					`up{job!~"bar",job!~"foo|bar"}`,
+					false,
+				},
+				{
+					`job!~"fred"`,
+					`up{job!~"foo|bar",job!~"fred"}`,
+					false,
+				},
+				{
+					`job!~"foo|fred"`,
+					`up{job!~"foo|bar",job!~"foo|fred"}`,
+					false,
+				},
+				{
+					`job!~"foo|bar"`,
+					`up{job!~"foo|bar"}`,
+					false,
+				},
+			},
+		},
+
+		// More edge cases.
+		{
+			enforcedMatcher: mustNewMatcher(labels.MatchRegexp, "job", "foo|foo"),
+			stcs: []subTestCase{
+				{
+					`job!="foo"`,
+					``,
+					true,
+				},
+				{
+					`job=""`,
+					``,
+					true,
+				},
+				{
+					`job="foo"`,
+					`up{job="foo",job=~"foo|foo"}`,
+					false,
+				},
+				{
+					`job="foo",job="foo"`,
+					`up{job="foo",job="foo",job=~"foo|foo"}`,
+					false,
+				},
+				{
+					`job=~"foo"`,
+					`up{job=~"foo",job=~"foo|foo"}`,
+					false,
+				},
+				{
+					`job!~"foo"`,
+					``,
+					true,
+				},
+				{
+					`job!~""`,
+					`up{job!~"",job=~"foo|foo"}`,
+					false,
+				},
+			},
+		},
+
+		// Regexp matcher enforcer which doesn't compile to a list of strings.
+		{
+			enforcedMatcher: mustNewMatcher(labels.MatchRegexp, "job", "foo.*"),
+			stcs: []subTestCase{
+				{
+					// In theory, it should translate to
+					// `up{job!="foo",job=~"foo.*"}` but the enforcer can't
+					// understand (yet) that both matchers are compatible.
+					`job!="foo"`,
+					``,
+					true,
+				},
+				{
+					`job=""`,
+					``,
+					true,
+				},
+				{
+					`job="foo"`,
+					`up{job="foo",job=~"foo.*"}`,
+					false,
+				},
+				{
+					`job="foo",job="foo"`,
+					`up{job="foo",job="foo",job=~"foo.*"}`,
+					false,
+				},
+				{
+					// In theory, it should translate to
+					// `up{job=~"foo",job=~"foo.*"}` but the enforcer can't
+					// understand (yet) that both matchers are compatible.
+					`job=~"foo"`,
+					``,
+					true,
+				},
+				{
+					// In theory, it should translate to
+					// `up{job!~"foo",job=~"foo.*"}` but the enforcer can't
+					// understand (yet) that both matchers are compatible.
+					`job!~"foo"`,
+					``,
+					true,
+				},
+				{
+					`job!~"foo.*"`,
+					``,
+					true,
+				},
+				{
+					`job!~""`,
+					`up{job!~"",job=~"foo.*"}`,
+					false,
+				},
+			},
+		},
+	} {
+		t.Run(fmt.Sprintf("enforcer=%q", tc.enforcedMatcher.String()), func(t *testing.T) {
+			enforcer := NewPromQLEnforcer(true, tc.enforcedMatcher)
+
+			for _, stc := range tc.stcs {
+				expr := fmt.Sprintf("up{%s}", stc.labelSelector)
+				t.Run(expr, func(t *testing.T) {
+					got, err := enforcer.Enforce(expr)
+					if stc.err {
+						if err == nil {
+							t.Fatalf("expected error, got nil")
+						}
+
+						if !errors.Is(err, ErrIllegalLabelMatcher) {
+							t.Fatalf("expected err,ErrIllegalLabelMatcher error, got %s", err)
+						}
+
+						return
+					}
+
+					if err != nil {
+						t.Fatalf("expected no error, got %s", err.Error())
+					}
+
+					if got != stc.exp {
+						t.Fatalf("expected expression %q, got %q", stc.exp, got)
+					}
+				})
 			}
 		})
 	}
