@@ -182,7 +182,7 @@ func (ms PromQLEnforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.M
 			// enforced matchers can return some result. If the combined
 			// matchers return no result, the function returns an error.
 			//
-			// For instance, when te enforced matcher is 'tenant="bar"':
+			// For instance, when the enforced matcher is 'tenant="bar"':
 			// * and the expression's selector is 'tenant="foo"' then the
 			// result is always empty.
 			// * and the expression's selector is 'tenant!="foo"' then the
@@ -223,15 +223,39 @@ func (ms PromQLEnforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.M
 				}
 
 			case labels.MatchRegexp:
+				frm, _ := labels.NewFastRegexMatcher(matcher.Value)
 				switch target.Type {
 				case labels.MatchEqual:
 					ok = matcher.Matches(target.Value)
 				case labels.MatchNotEqual:
-					ok = true
+					if frm != nil {
+						for _, sm := range frm.SetMatches() {
+							if target.Matches(sm) {
+								ok = true
+								break
+							}
+						}
+					}
+					ok = ok || (target.Value == "" && !matcher.Matches(""))
 				case labels.MatchRegexp:
-					ok = target.Value != ""
+					if frm != nil {
+						for _, sm := range frm.SetMatches() {
+							if target.Matches(sm) {
+								ok = true
+								break
+							}
+						}
+					}
 				case labels.MatchNotRegexp:
-					ok = target.Value != matcher.Value
+					if frm != nil {
+						for _, sm := range frm.SetMatches() {
+							if target.Matches(sm) {
+								ok = true
+								break
+							}
+						}
+					}
+					ok = ok || (target.Value == "" && !matcher.Matches(""))
 				}
 
 			case labels.MatchNotRegexp:

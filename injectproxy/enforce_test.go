@@ -695,7 +695,7 @@ func TestEnforceWithErrOnReplace(t *testing.T) {
 				{
 					`job=~"fred"`,
 					`up{job=~"foo|bar",job=~"fred"}`,
-					false,
+					true,
 				},
 				{
 					`job=~"foo|fred"`,
@@ -860,6 +860,104 @@ func TestEnforceWithErrOnReplace(t *testing.T) {
 				{
 					`job!~"foo|bar"`,
 					`up{job!~"foo|bar"}`,
+					false,
+				},
+			},
+		},
+
+		// More edge cases.
+		{
+			enforcedMatcher: mustNewMatcher(labels.MatchRegexp, "job", "foo|foo"),
+			stcs: []subTestCase{
+				{
+					`job!="foo"`,
+					``,
+					true,
+				},
+				{
+					`job=""`,
+					``,
+					true,
+				},
+				{
+					`job="foo"`,
+					`up{job="foo",job=~"foo|foo"}`,
+					false,
+				},
+				{
+					`job="foo",job="foo"`,
+					`up{job="foo",job="foo",job=~"foo|foo"}`,
+					false,
+				},
+				{
+					`job=~"foo"`,
+					`up{job=~"foo",job=~"foo|foo"}`,
+					false,
+				},
+				{
+					`job!~"foo"`,
+					``,
+					true,
+				},
+				{
+					`job!~""`,
+					`up{job!~"",job=~"foo|foo"}`,
+					false,
+				},
+			},
+		},
+
+		// Regexp matcher enforcer which doesn't compile to a list of strings.
+		{
+			enforcedMatcher: mustNewMatcher(labels.MatchRegexp, "job", "foo.*"),
+			stcs: []subTestCase{
+				{
+					// In theory, it should translate to
+					// `up{job!="foo",job=~"foo.*"}` but the enforcer can't
+					// understand (yet) that both matchers are compatible.
+					`job!="foo"`,
+					``,
+					true,
+				},
+				{
+					`job=""`,
+					``,
+					true,
+				},
+				{
+					`job="foo"`,
+					`up{job="foo",job=~"foo.*"}`,
+					false,
+				},
+				{
+					`job="foo",job="foo"`,
+					`up{job="foo",job="foo",job=~"foo.*"}`,
+					false,
+				},
+				{
+					// In theory, it should translate to
+					// `up{job=~"foo",job=~"foo.*"}` but the enforcer can't
+					// understand (yet) that both matchers are compatible.
+					`job=~"foo"`,
+					``,
+					true,
+				},
+				{
+					// In theory, it should translate to
+					// `up{job!~"foo",job=~"foo.*"}` but the enforcer can't
+					// understand (yet) that both matchers are compatible.
+					`job!~"foo"`,
+					``,
+					true,
+				},
+				{
+					`job!~"foo.*"`,
+					``,
+					true,
+				},
+				{
+					`job!~""`,
+					`up{job!~"",job=~"foo.*"}`,
 					false,
 				},
 			},
