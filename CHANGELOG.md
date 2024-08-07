@@ -1,3 +1,9 @@
+## 0.11.0 / 2024-08-07
+
+* [CHANGE] Return a 400 response code when the upstream response can't be modified. #228
+* [CHANGE] Make `-error-on-replace` more cooperating. #233
+* [FEATURE] Add the `-rules-with-active-alerts` flag to return rules with matching active alerts. #237
+
 ## 0.10.0 / 2024-06-12
 
 * [FEATURE] Add the `header-uses-list-syntax` flag to split the tenant header value on commas. #223
