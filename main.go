@@ -67,6 +67,7 @@ func main() {
 		errorOnReplace         bool
 		regexMatch             bool
 		headerUsesListSyntax   bool
+		rulesWithActiveAlerts  bool
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -86,6 +87,7 @@ func main() {
 	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
 	flagset.BoolVar(&regexMatch, "regex-match", false, "When specified, the tenant name is treated as a regular expression. In this case, only one tenant name should be provided.")
 	flagset.BoolVar(&headerUsesListSyntax, "header-uses-list-syntax", false, "When specified, the header line value will be parsed as a comma-separated list. This allows a single tenant header line to specify multiple tenant names.")
+	flagset.BoolVar(&rulesWithActiveAlerts, "rules-with-active-alerts", false, "When true, the proxy will return alerting rules with active alerts matching the tenant label even when the tenant label isn't present in the rule's labels.")
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
@@ -131,6 +133,10 @@ func main() {
 
 	if errorOnReplace {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
+	}
+
+	if rulesWithActiveAlerts {
+		opts = append(opts, injectproxy.WithActiveAlerts())
 	}
 
 	if regexMatch {

@@ -206,6 +206,17 @@ NOTE: When the `/api/v1/labels` and `/api/v1/label/<name>/values` endpoints were
 
 The proxy requests the `/api/v1/rules` Prometheus endpoint, discards the rules that don't contain an exact match of the label(s) and returns the modified response to the client.
 
+To return alerting rules which have active alerts matching the label(s), you can use the `-rules-with-active-alerts` option. For example:
+
+```
+prom-label-proxy \
+   -header-name X-Namespace \
+   -label namespace \
+   -upstream http://demo.do.prometheus.io:9090 \
+   -insecure-listen-address 127.0.0.1:8080 \
+   -rules-with-active-alerts
+```
+
 ### Alerts endpoint
 
 The proxy requests the `/api/v1/alerts` Prometheus endpoint, discards the rules that don't contain an exact match of the label(s) and returns the modified response to the client.
