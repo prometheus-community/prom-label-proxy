@@ -340,7 +340,7 @@ func TestDeleteSilence(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			u, err := url.Parse(fmt.Sprintf("http://alertmanager.example.com/api/v2/silence/" + tc.ID))
+			u, err := url.Parse(fmt.Sprintf("http://alertmanager.example.com/api/v2/silence/%s", tc.ID))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
