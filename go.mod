@@ -12,7 +12,7 @@ require (
 	github.com/oklog/run v1.1.0
 	github.com/prometheus/alertmanager v0.27.0
 	github.com/prometheus/client_golang v1.20.5
-	github.com/prometheus/prometheus v0.55.0
+	github.com/prometheus/prometheus v0.55.1
 	gotest.tools/v3 v3.5.1
 )
 
