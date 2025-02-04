@@ -23,6 +23,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gotest.tools/v3/assert"
 )
 
 var okResponse = []byte(`ok`)
@@ -1332,5 +1334,46 @@ func TestQuery(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestOptionsHTTPMethod(t *testing.T) {
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Add("Access-Control-Allow-Origin", "*")
+		w.Write(okResponse)
+	}))
+	defer m.Close()
+	r, err := NewRoutes(m.url, proxyLabel, StaticLabelEnforcer{proxyLabel})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, tcase := range []struct {
+		url     string
+		method  string
+		expCode int
+	}{
+		{
+			url: "http://prometheus.example.com/api/v1/query", method: http.MethodOptions,
+			expCode: http.StatusOK,
+		},
+		{
+			url: "http://prometheus.example.com/foo/bar", method: http.MethodOptions,
+			expCode: http.StatusNotFound,
+		},
+	} {
+		t.Run(tcase.url, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest(tcase.method, tcase.url, nil))
+			resp := w.Result()
+
+			if resp.StatusCode != tcase.expCode {
+				b, err := io.ReadAll(resp.Body)
+				fmt.Println(string(b), err)
+				t.Fatalf("expected status code %v, got %d", tcase.expCode, resp.StatusCode)
+			} else if resp.StatusCode == http.StatusOK {
+				assert.Equal(t, resp.Header.Get("Access-Control-Allow-Origin"), "*")
+			}
+		})
 	}
 }
