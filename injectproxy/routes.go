@@ -388,9 +388,20 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 
 	r.mux = mux
+
+	rulesPath, err := url.JoinPath(upstream.Path, "/api/v1/rules")
+	if err != nil {
+		return nil, err
+	}
+
+	alertsPath, err := url.JoinPath(upstream.Path, "/api/v1/alerts")
+	if err != nil {
+		return nil, err
+	}
+
 	r.modifiers = map[string]func(*http.Response) error{
-		upstream.Path + "/api/v1/rules":  modifyAPIResponse(r.filterRules),
-		upstream.Path + "/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
+		rulesPath:  modifyAPIResponse(r.filterRules),
+		alertsPath: modifyAPIResponse(r.filterAlerts),
 	}
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
