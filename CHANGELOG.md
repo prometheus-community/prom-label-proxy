@@ -1,3 +1,7 @@
+## 0.11.1 / 2025-05-12
+
+Rebuild with the latest Go compiler (`go1.24.3`).
+
 ## 0.11.0 / 2024-08-07
 
 * [CHANGE] Return a 400 response code when the upstream response can't be modified. #228
