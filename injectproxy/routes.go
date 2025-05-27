@@ -315,21 +315,21 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
 
 	errs := merrors.New(
-		mux.Handle("/federate", r.el.ExtractLabel(enforceMethods(r.matcher, "GET"))),
-		mux.Handle("/api/v1/query", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
-		mux.Handle("/api/v1/query_range", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
-		mux.Handle("/api/v1/alerts", r.el.ExtractLabel(enforceMethods(r.passthrough, "GET"))),
-		mux.Handle("/api/v1/rules", r.el.ExtractLabel(enforceMethods(r.passthrough, "GET"))),
-		mux.Handle("/api/v1/series", r.el.ExtractLabel(enforceMethods(r.matcher, "GET", "POST"))),
-		mux.Handle("/api/v1/query_exemplars", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
+		mux.Handle("/federate", r.el.ExtractLabel(r.enforceMethods(r.matcher, "GET"))),
+		mux.Handle("/api/v1/query", r.el.ExtractLabel(r.enforceMethods(r.query, "GET", "POST"))),
+		mux.Handle("/api/v1/query_range", r.el.ExtractLabel(r.enforceMethods(r.query, "GET", "POST"))),
+		mux.Handle("/api/v1/alerts", r.el.ExtractLabel(r.enforceMethods(r.passthrough, "GET"))),
+		mux.Handle("/api/v1/rules", r.el.ExtractLabel(r.enforceMethods(r.passthrough, "GET"))),
+		mux.Handle("/api/v1/series", r.el.ExtractLabel(r.enforceMethods(r.matcher, "GET", "POST"))),
+		mux.Handle("/api/v1/query_exemplars", r.el.ExtractLabel(r.enforceMethods(r.query, "GET", "POST"))),
 	)
 
 	if opt.enableLabelAPIs {
 		errs.Add(
-			mux.Handle("/api/v1/labels", r.el.ExtractLabel(enforceMethods(r.matcher, "GET", "POST"))),
+			mux.Handle("/api/v1/labels", r.el.ExtractLabel(r.enforceMethods(r.matcher, "GET", "POST"))),
 			// Full path is /api/v1/label/<label_name>/values but http mux does not support patterns.
 			// This is fine though as we don't care about name for matcher injector.
-			mux.Handle("/api/v1/label/", r.el.ExtractLabel(enforceMethods(r.matcher, "GET"))),
+			mux.Handle("/api/v1/label/", r.el.ExtractLabel(r.enforceMethods(r.matcher, "GET"))),
 		)
 	}
 
@@ -338,7 +338,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		// semantics of the Silences API don't support multi-label matchers.
 		mux.Handle("/api/v2/silences", r.el.ExtractLabel(
 			r.errorIfRegexpMatch(
-				enforceMethods(
+				r.enforceMethods(
 					assertSingleLabelValue(r.silences),
 					"GET", "POST",
 				),
@@ -346,14 +346,14 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		)),
 		mux.Handle("/api/v2/silence/", r.el.ExtractLabel(
 			r.errorIfRegexpMatch(
-				enforceMethods(
+				r.enforceMethods(
 					assertSingleLabelValue(r.deleteSilence),
 					"DELETE",
 				),
 			),
 		)),
-		mux.Handle("/api/v2/alerts/groups", r.el.ExtractLabel(enforceMethods(r.enforceFilterParameter, "GET"))),
-		mux.Handle("/api/v2/alerts", r.el.ExtractLabel(enforceMethods(r.alerts, "GET"))),
+		mux.Handle("/api/v2/alerts/groups", r.el.ExtractLabel(r.enforceMethods(r.enforceFilterParameter, "GET"))),
+		mux.Handle("/api/v2/alerts", r.el.ExtractLabel(r.enforceMethods(r.alerts, "GET"))),
 	)
 
 	errs.Add(
@@ -422,8 +422,12 @@ func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error
 	rw.WriteHeader(http.StatusBadGateway)
 }
 
-func enforceMethods(h http.HandlerFunc, methods ...string) http.HandlerFunc {
+func (r *routes) enforceMethods(h http.HandlerFunc, methods ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method == http.MethodOptions {
+			r.passthrough(w, req)
+			return
+		}
 		for _, m := range methods {
 			if m == req.Method {
 				h(w, req)
