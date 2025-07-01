@@ -1334,3 +1334,68 @@ func TestQuery(t *testing.T) {
 		}
 	}
 }
+
+func TestBypassQueries(t *testing.T) {
+	// Test bypass functionality by creating a full routes setup
+	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query().Get("query")
+		t.Logf("Mock handler called with query: %s", query)
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(query)) // Return the query so we can check it
+	})
+
+	// Create a mock upstream
+	m := newMockUpstream(mockHandler)
+	defer m.Close()
+
+	enforcer := HTTPFormEnforcer{ParameterName: "tenant"}
+	bypassQueries := []string{"1+1", "up"}
+
+	t.Logf("Creating routes with bypass queries: %v", bypassQueries)
+
+	// Create routes with bypass queries
+	routes, err := NewRoutes(m.url, "namespace", enforcer, WithBypassQueries(bypassQueries))
+	if err != nil {
+		t.Fatalf("Failed to create routes: %v", err)
+	}
+
+	endpoints := []string{"/api/v1/query", "/api/v1/query_range"}
+
+	for _, endpoint := range endpoints {
+		t.Run(endpoint, func(t *testing.T) {
+			// Test bypass queries - should NOT have label injection
+			for _, bypassQuery := range bypassQueries {
+				t.Logf("Testing bypass query: %s", bypassQuery)
+				req := httptest.NewRequest("GET", fmt.Sprintf("%s?query=%s&tenant=%s", endpoint, url.QueryEscape(bypassQuery), enforcer.ParameterName), nil)
+				w := httptest.NewRecorder()
+				routes.ServeHTTP(w, req)
+
+				t.Logf("Response status: %d, body: %s", w.Code, w.Body.String())
+				if w.Code != http.StatusOK {
+					t.Errorf("Expected status OK, got %d", w.Code)
+				}
+				body := w.Body.String()
+				if body != bypassQuery {
+					t.Errorf("Expected '%s' (bypassed query), got '%s'", bypassQuery, body)
+				}
+			}
+
+			// Test non-bypass query - should have label injection
+			t.Logf("Testing non-bypass query: rate(http_requests_total[5m])")
+			req := httptest.NewRequest("GET", fmt.Sprintf("%s?query=rate(http_requests_total[5m])&tenant=test", endpoint), nil)
+			w := httptest.NewRecorder()
+			routes.ServeHTTP(w, req)
+
+			t.Logf("Response status: %d, body: %s", w.Code, w.Body.String())
+			if w.Code != http.StatusOK {
+				t.Errorf("Expected status OK, got %d", w.Code)
+			}
+
+			body := w.Body.String()
+			if !strings.Contains(body, `namespace="test"`) {
+				t.Errorf("Expected query with label injection containing 'namespace=\"test\"', got '%s'", body)
+			}
+		})
+	}
+}

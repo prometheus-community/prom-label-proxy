@@ -68,6 +68,7 @@ func main() {
 		regexMatch             bool
 		headerUsesListSyntax   bool
 		rulesWithActiveAlerts  bool
+		bypassQueries          arrayFlags
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -88,6 +89,7 @@ func main() {
 	flagset.BoolVar(&regexMatch, "regex-match", false, "When specified, the tenant name is treated as a regular expression. In this case, only one tenant name should be provided.")
 	flagset.BoolVar(&headerUsesListSyntax, "header-uses-list-syntax", false, "When specified, the header line value will be parsed as a comma-separated list. This allows a single tenant header line to specify multiple tenant names.")
 	flagset.BoolVar(&rulesWithActiveAlerts, "rules-with-active-alerts", false, "When true, the proxy will return alerting rules with active alerts matching the tenant label even when the tenant label isn't present in the rule's labels.")
+	flagset.Var(&bypassQueries, "bypass-query", "A query to bypass the proxy. This can be a PromQL query or a label selector. It can be repeated in which case the proxy will bypass all matching queries.")
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
@@ -158,6 +160,10 @@ func main() {
 		}
 
 		opts = append(opts, injectproxy.WithRegexMatch())
+	}
+
+	if len(bypassQueries) > 0 {
+		opts = append(opts, injectproxy.WithBypassQueries(bypassQueries))
 	}
 
 	var extractLabeler injectproxy.ExtractLabeler

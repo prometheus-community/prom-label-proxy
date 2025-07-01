@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -50,6 +51,7 @@ type routes struct {
 	errorOnReplace        bool
 	regexMatch            bool
 	rulesWithActiveAlerts bool
+	bypassQueries         []string
 
 	logger *log.Logger
 }
@@ -61,6 +63,7 @@ type options struct {
 	registerer            prometheus.Registerer
 	regexMatch            bool
 	rulesWithActiveAlerts bool
+	bypassQueries         []string
 }
 
 type Option interface {
@@ -115,6 +118,13 @@ func WithActiveAlerts() Option {
 func WithRegexMatch() Option {
 	return optionFunc(func(o *options) {
 		o.regexMatch = true
+	})
+}
+
+// WithBypassQueries configures routes to bypass certain queries
+func WithBypassQueries(queries []string) Option {
+	return optionFunc(func(o *options) {
+		o.bypassQueries = queries
 	})
 }
 
@@ -192,7 +202,57 @@ type ExtractLabeler interface {
 	ExtractLabel(next http.HandlerFunc) http.Handler
 }
 
-// HTTPFormEnforcer enforces a label value extracted from the HTTP form and query parameters.
+// bypassHandler wraps an existing handler and checks for bypass queries before delegating
+func bypassHandler(bypassQueries []string, upstream http.Handler, enforcerChain http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only check for bypass queries if bypass queries are configured
+		if len(bypassQueries) > 0 {
+			qry, err := extractQueryParam(r)
+			if err == nil {
+				if slices.Contains(bypassQueries, qry) {
+					// if bypass query is found, serve the request without enforcement
+					upstream.ServeHTTP(w, r)
+					return
+				}
+			}
+		}
+
+		// Otherwise continue with normal processing
+		enforcerChain.ServeHTTP(w, r)
+	})
+}
+
+// extractQueryParam extracts the query parameter from either the URL query parameters or the POST body
+func extractQueryParam(req *http.Request) (string, error) {
+	// Try to get query from URL query parameters first
+	if q := req.URL.Query().Get("query"); q != "" {
+		return q, nil
+	}
+
+	// For POST requests, we need to peek at the body without consuming it
+	if req.Method == http.MethodPost && req.Body != nil {
+		bodyBytes, err := io.ReadAll(req.Body)
+		if err != nil {
+			return "", fmt.Errorf("failed to read request body: %w", err)
+		}
+
+		// Restore the body so it can be read again later
+		req.Body = io.NopCloser(strings.NewReader(string(bodyBytes)))
+
+		form, err := url.ParseQuery(string(bodyBytes))
+		if err != nil {
+			return "", fmt.Errorf("failed to parse form data: %w", err)
+		}
+
+		if q := form.Get("query"); q != "" {
+			return q, nil
+		}
+	}
+
+	return "", fmt.Errorf("no query parameter found in URL or form data")
+}
+
+// HTTPFormEnforcer enforces a label value extracted from the HTTP form parameters.
 type HTTPFormEnforcer struct {
 	ParameterName string
 }
@@ -310,14 +370,15 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		errorOnReplace:        opt.errorOnReplace,
 		regexMatch:            opt.regexMatch,
 		rulesWithActiveAlerts: opt.rulesWithActiveAlerts,
+		bypassQueries:         opt.bypassQueries,
 		logger:                log.Default(),
 	}
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
 
 	errs := merrors.New(
 		mux.Handle("/federate", r.el.ExtractLabel(enforceMethods(r.matcher, "GET"))),
-		mux.Handle("/api/v1/query", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
-		mux.Handle("/api/v1/query_range", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
+		mux.Handle("/api/v1/query", bypassHandler(r.bypassQueries, r.handler, r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST")))),
+		mux.Handle("/api/v1/query_range", bypassHandler(r.bypassQueries, r.handler, r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST")))),
 		mux.Handle("/api/v1/alerts", r.el.ExtractLabel(enforceMethods(r.passthrough, "GET"))),
 		mux.Handle("/api/v1/rules", r.el.ExtractLabel(enforceMethods(r.passthrough, "GET"))),
 		mux.Handle("/api/v1/series", r.el.ExtractLabel(enforceMethods(r.matcher, "GET", "POST"))),
