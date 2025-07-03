@@ -135,7 +135,6 @@ func newStrictMux(m mux) *strictMux {
 		m,
 		map[string]struct{}{},
 	}
-
 }
 
 // Handle is like HTTP mux handle but it does not allow to register paths that are shared with previously registered paths.
@@ -389,14 +388,21 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 	r.mux = mux
 
-	rulesPath, err := url.JoinPath(upstream.Path, "/api/v1/rules")
-	if err != nil {
-		return nil, err
-	}
+	rulesPath := "/api/v1/rules"
+	alertsPath := "/api/v1/alerts"
 
-	alertsPath, err := url.JoinPath(upstream.Path, "/api/v1/alerts")
-	if err != nil {
-		return nil, err
+	if upstream.Path != "" {
+		var err error
+
+		rulesPath, err = url.JoinPath(upstream.Path, rulesPath)
+		if err != nil {
+			return nil, err
+		}
+
+		alertsPath, err = url.JoinPath(upstream.Path, alertsPath)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	r.modifiers = map[string]func(*http.Response) error{
