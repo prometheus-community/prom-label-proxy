@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"testing"
 
 	"gotest.tools/v3/golden"
@@ -43,6 +44,50 @@ func gzipHandler(next http.Handler) http.Handler {
 		w.Header().Del("Content-Length")
 		w.Header().Set("Content-Encoding", "gzip")
 		next.ServeHTTP(&gzipResponseWriter{Writer: gz, ResponseWriter: w}, r)
+	})
+}
+
+func validRulesWithLabelMatchers(exp ...string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if err := req.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		matchers := req.Form["match[]"]
+		if !reflect.DeepEqual(matchers, exp) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write(fmt.Appendf(nil, "invalid matchers:\n- expected: %q\n- got: %q", exp, matchers))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+  "status": "success",
+  "data": {
+    "groups": [
+      {
+        "name": "group1",
+        "file": "testdata/rules1.yml",
+        "rules": [
+          {
+            "name": "metric1",
+            "query": "0",
+            "labels": {
+              "namespace": "ns1"
+            },
+            "health": "ok",
+            "type": "recording",
+            "evaluationTime": 0.000214303,
+            "lastEvaluation": "2024-04-29T14:23:52.403557247+02:00"
+          }
+        ],
+        "interval": 10
+      }
+    ]
+  }
+}`))
 	})
 }
 
@@ -557,6 +602,14 @@ func TestRules(t *testing.T) {
 			expCode: http.StatusOK,
 			golden:  "rules_with_active_alerts.golden",
 		},
+		{
+			labelv:   []string{"ns1"},
+			upstream: validRulesWithLabelMatchers("{namespace=\"ns1\"}"),
+			opts:     []Option{WithLabelMatchersForRulesAPI()},
+
+			expCode: http.StatusOK,
+			golden:  "rules_with_label_matchers.golden",
+		},
 	} {
 		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
@@ -595,6 +648,10 @@ func TestRules(t *testing.T) {
 			resp := w.Result()
 
 			if resp.StatusCode != tc.expCode {
+				b, err := io.ReadAll(resp.Body)
+				if err == nil {
+					t.Logf("body: %s", b)
+				}
 				t.Fatalf("expected status code %d, got %d", tc.expCode, resp.StatusCode)
 			}
 

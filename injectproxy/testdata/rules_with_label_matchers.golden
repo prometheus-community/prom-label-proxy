@@ -1,0 +1,25 @@
+{
+  "status": "success",
+  "data": {
+    "groups": [
+      {
+        "name": "group1",
+        "file": "testdata/rules1.yml",
+        "rules": [
+          {
+            "name": "metric1",
+            "query": "0",
+            "labels": {
+              "namespace": "ns1"
+            },
+            "health": "ok",
+            "type": "recording",
+            "evaluationTime": 0.000214303,
+            "lastEvaluation": "2024-04-29T14:23:52.403557247+02:00"
+          }
+        ],
+        "interval": 10
+      }
+    ]
+  }
+}

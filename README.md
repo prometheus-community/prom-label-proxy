@@ -217,6 +217,8 @@ prom-label-proxy \
    -rules-with-active-alerts
 ```
 
+If the upstream supports label matchers (Prometheus >= v2.54.0 and Thanos >= v0.25.0), you can use the `-enable-label-matchers-for-rules-api` option to filter the result at the source which is more efficient.
+
 ### Alerts endpoint
 
 The proxy requests the `/api/v1/alerts` Prometheus endpoint, discards the rules that don't contain an exact match of the label(s) and returns the modified response to the client.

@@ -55,12 +55,13 @@ type routes struct {
 }
 
 type options struct {
-	enableLabelAPIs       bool
-	passthroughPaths      []string
-	errorOnReplace        bool
-	registerer            prometheus.Registerer
-	regexMatch            bool
-	rulesWithActiveAlerts bool
+	enableLabelAPIs          bool
+	passthroughPaths         []string
+	errorOnReplace           bool
+	registerer               prometheus.Registerer
+	regexMatch               bool
+	rulesWithActiveAlerts    bool
+	labelMatchersForRulesAPI bool
 }
 
 type Option interface {
@@ -108,6 +109,13 @@ func WithErrorOnReplace() Option {
 func WithActiveAlerts() Option {
 	return optionFunc(func(o *options) {
 		o.rulesWithActiveAlerts = true
+	})
+}
+
+// WithLabelMatchersForRulesAPI instructs the proxy to use label matchers when querying the Rules API.
+func WithLabelMatchersForRulesAPI() Option {
+	return optionFunc(func(o *options) {
+		o.labelMatchersForRulesAPI = true
 	})
 }
 
@@ -319,10 +327,15 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		mux.Handle("/api/v1/query", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
 		mux.Handle("/api/v1/query_range", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
 		mux.Handle("/api/v1/alerts", r.el.ExtractLabel(enforceMethods(r.passthrough, "GET"))),
-		mux.Handle("/api/v1/rules", r.el.ExtractLabel(enforceMethods(r.passthrough, "GET"))),
 		mux.Handle("/api/v1/series", r.el.ExtractLabel(enforceMethods(r.matcher, "GET", "POST"))),
 		mux.Handle("/api/v1/query_exemplars", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
 	)
+
+	if opt.labelMatchersForRulesAPI {
+		errs.Add(mux.Handle("/api/v1/rules", r.el.ExtractLabel(enforceMethods(r.matcher, "GET"))))
+	} else {
+		errs.Add(mux.Handle("/api/v1/rules", r.el.ExtractLabel(enforceMethods(r.passthrough, "GET"))))
+	}
 
 	if opt.enableLabelAPIs {
 		errs.Add(
@@ -389,9 +402,12 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 	r.mux = mux
 	r.modifiers = map[string]func(*http.Response) error{
-		"/api/v1/rules":  modifyAPIResponse(r.filterRules),
 		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
 	}
+	if !opt.labelMatchersForRulesAPI {
+		r.modifiers["/api/v1/rules"] = modifyAPIResponse(r.filterRules)
+	}
+
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
 	proxy.ErrorLog = log.Default()

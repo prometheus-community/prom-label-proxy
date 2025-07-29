@@ -55,19 +55,20 @@ func (i *arrayFlags) Set(value string) error {
 
 func main() {
 	var (
-		insecureListenAddress  string
-		internalListenAddress  string
-		upstream               string
-		queryParam             string
-		headerName             string
-		label                  string
-		labelValues            arrayFlags
-		enableLabelAPIs        bool
-		unsafePassthroughPaths string // Comma-delimited string.
-		errorOnReplace         bool
-		regexMatch             bool
-		headerUsesListSyntax   bool
-		rulesWithActiveAlerts  bool
+		insecureListenAddress    string
+		internalListenAddress    string
+		upstream                 string
+		queryParam               string
+		headerName               string
+		label                    string
+		labelValues              arrayFlags
+		enableLabelAPIs          bool
+		unsafePassthroughPaths   string // Comma-delimited string.
+		errorOnReplace           bool
+		regexMatch               bool
+		headerUsesListSyntax     bool
+		rulesWithActiveAlerts    bool
+		labelMatchersForRulesAPI bool
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -88,6 +89,7 @@ func main() {
 	flagset.BoolVar(&regexMatch, "regex-match", false, "When specified, the tenant name is treated as a regular expression. In this case, only one tenant name should be provided.")
 	flagset.BoolVar(&headerUsesListSyntax, "header-uses-list-syntax", false, "When specified, the header line value will be parsed as a comma-separated list. This allows a single tenant header line to specify multiple tenant names.")
 	flagset.BoolVar(&rulesWithActiveAlerts, "rules-with-active-alerts", false, "When true, the proxy will return alerting rules with active alerts matching the tenant label even when the tenant label isn't present in the rule's labels.")
+	flagset.BoolVar(&labelMatchersForRulesAPI, "enable-label-matchers-for-rules-api", false, "When true, the proxy uses label matchers when querying the /api/v1/rules endpoint. NOTE: Enable with care because filtering by label matcher is not implemented in older versions of Prometheus (>= 2.54.0 required) and Thanos (>= v0.25.0 required). If not implemented by upstream, the response will not be filtered accordingly.")
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
@@ -137,6 +139,10 @@ func main() {
 
 	if rulesWithActiveAlerts {
 		opts = append(opts, injectproxy.WithActiveAlerts())
+	}
+
+	if labelMatchersForRulesAPI {
+		opts = append(opts, injectproxy.WithLabelMatchersForRulesAPI())
 	}
 
 	if regexMatch {

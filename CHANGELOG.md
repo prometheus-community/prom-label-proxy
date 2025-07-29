@@ -1,3 +1,7 @@
+## Unreleased
+
+* [ENHANCEMENT] Add the `-enable-label-matchers-for-rules-api` flag to filter rules using label matchers. #xxx
+
 ## 0.11.1 / 2025-05-12
 
 Rebuild with the latest Go compiler (`go1.24.3`).
