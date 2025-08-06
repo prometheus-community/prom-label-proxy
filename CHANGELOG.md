@@ -1,6 +1,8 @@
 ## Unreleased
 
-* [ENHANCEMENT] Add the `-enable-label-matchers-for-rules-api` flag to filter rules using label matchers. #xxx
+* [ENHANCEMENT] Add the `-enable-promql-duration-expression-parsing` flag to support arithmetic for durations in PromQL expressions. #297
+* [ENHANCEMENT] Add the `-enable-promql-experimental-functions` flag to support experimental functions in PromQL expressions. #297
+* [ENHANCEMENT] Add the `-enable-label-matchers-for-rules-api` flag to filter rules using label matchers. #295
 
 ## 0.11.1 / 2025-05-12
 
