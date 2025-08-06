@@ -1,4 +1,4 @@
-## Unreleased
+## 0.12.0 / 2025-08-06
 
 * [ENHANCEMENT] Add the `-enable-promql-duration-expression-parsing` flag to support arithmetic for durations in PromQL expressions. #297
 * [ENHANCEMENT] Add the `-enable-promql-experimental-functions` flag to support experimental functions in PromQL expressions. #297
