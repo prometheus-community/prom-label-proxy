@@ -510,40 +510,10 @@ func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
-	var matcher *labels.Matcher
-
-	if len(MustLabelValues(req.Context())) > 1 {
-		if r.regexMatch {
-			prometheusAPIError(w, "Only one label value allowed with regex match", http.StatusBadRequest)
-			return
-		}
-
-		matcher = &labels.Matcher{
-			Name:  r.label,
-			Type:  labels.MatchRegexp,
-			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
-		}
-	} else {
-		matcherType := labels.MatchEqual
-		matcherValue := MustLabelValue(req.Context())
-		if r.regexMatch {
-			compiledRegex, err := regexp.Compile(matcherValue)
-			if err != nil {
-				prometheusAPIError(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if compiledRegex.MatchString("") {
-				prometheusAPIError(w, "Regex should not match empty string", http.StatusBadRequest)
-				return
-			}
-			matcherType = labels.MatchRegexp
-		}
-
-		matcher = &labels.Matcher{
-			Name:  r.label,
-			Type:  matcherType,
-			Value: matcherValue,
-		}
+	matcher, err := r.newLabelMatcher(MustLabelValues(req.Context())...)
+	if err != nil {
+		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	e := NewPromQLEnforcer(r.errorOnReplace, matcher)
@@ -636,28 +606,18 @@ func (r *routes) newLabelMatcher(vals ...string) (*labels.Matcher, error) {
 			return nil, errors.New("regex should not match empty string")
 		}
 
-		m, err := labels.NewMatcher(labels.MatchRegexp, r.label, re)
-		if err != nil {
-			return nil, err
-		}
-
-		return m, nil
+		return labels.NewMatcher(labels.MatchRegexp, r.label, re)
 	}
 
 	if len(vals) == 1 {
-		return &labels.Matcher{
-			Name:  r.label,
-			Type:  labels.MatchEqual,
-			Value: vals[0],
-		}, nil
+		return labels.NewMatcher(
+			labels.MatchEqual,
+			r.label,
+			vals[0],
+		)
 	}
 
-	m, err := labels.NewMatcher(labels.MatchRegexp, r.label, labelValuesToRegexpString(vals))
-	if err != nil {
-		return nil, err
-	}
-
-	return m, nil
+	return labels.NewMatcher(labels.MatchRegexp, r.label, labelValuesToRegexpString(vals))
 }
 
 // matcher modifies all the match[] HTTP parameters to match on the tenant label.
