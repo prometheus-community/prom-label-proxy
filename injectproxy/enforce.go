@@ -16,6 +16,7 @@ package injectproxy
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -229,30 +230,21 @@ func (ms PromQLEnforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.M
 					ok = matcher.Matches(target.Value)
 				case labels.MatchNotEqual:
 					if frm != nil {
-						for _, sm := range frm.SetMatches() {
-							if target.Matches(sm) {
-								ok = true
-								break
-							}
+						if slices.ContainsFunc(frm.SetMatches(), target.Matches) {
+							ok = true
 						}
 					}
 					ok = ok || (target.Value == "" && !matcher.Matches(""))
 				case labels.MatchRegexp:
 					if frm != nil {
-						for _, sm := range frm.SetMatches() {
-							if target.Matches(sm) {
-								ok = true
-								break
-							}
+						if slices.ContainsFunc(frm.SetMatches(), target.Matches) {
+							ok = true
 						}
 					}
 				case labels.MatchNotRegexp:
 					if frm != nil {
-						for _, sm := range frm.SetMatches() {
-							if target.Matches(sm) {
-								ok = true
-								break
-							}
+						if slices.ContainsFunc(frm.SetMatches(), target.Matches) {
+							ok = true
 						}
 					}
 					ok = ok || (target.Value == "" && !matcher.Matches(""))
@@ -267,11 +259,8 @@ func (ms PromQLEnforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.M
 				case labels.MatchRegexp:
 					frm, _ := labels.NewFastRegexMatcher(target.Value)
 					if frm != nil {
-						for _, sm := range frm.SetMatches() {
-							if matcher.Matches(sm) {
-								ok = true
-								break
-							}
+						if slices.ContainsFunc(frm.SetMatches(), matcher.Matches) {
+							ok = true
 						}
 					}
 					ok = ok && (target.Value != "" || !matcher.Matches(""))
