@@ -24,6 +24,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -440,11 +441,9 @@ func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error
 
 func enforceMethods(h http.HandlerFunc, methods ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		for _, m := range methods {
-			if m == req.Method {
-				h(w, req)
-				return
-			}
+		if slices.Contains(methods, req.Method) {
+			h(w, req)
+			return
 		}
 		http.NotFound(w, req)
 	}
@@ -763,7 +762,7 @@ func removeEmptyValues(slice []string) []string {
 }
 
 func trimValues(slice []string) []string {
-	for i := 0; i < len(slice); i++ {
+	for i := range slice {
 		slice[i] = strings.TrimSpace(slice[i])
 	}
 
