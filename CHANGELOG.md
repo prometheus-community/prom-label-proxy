@@ -1,3 +1,7 @@
+## 0.12.1 / 2025-09-11
+
+* [BUGFIX] Don't panic on `error-on-replace` with multiple values. #300
+
 ## 0.12.0 / 2025-08-06
 
 * [ENHANCEMENT] Add the `-enable-promql-duration-expression-parsing` flag to support arithmetic for durations in PromQL expressions. #297
