@@ -1,7 +1,7 @@
 ---
 go:
     # This must match .circle/config.yml.
-    version: 1.24
+    version: 1.25
 repository:
     path: github.com/prometheus-community/prom-label-proxy
 build:
