@@ -15,7 +15,6 @@ package injectproxy
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"sort"
@@ -41,10 +41,12 @@ const (
 )
 
 type routes struct {
-	upstream *url.URL
-	handler  http.Handler
-	label    string
-	el       ExtractLabeler
+	upstream      *url.URL
+	handler       http.Handler
+	logsHandler   http.Handler
+	tracesHandler http.Handler
+	label         string
+	el            ExtractLabeler
 
 	mux                   http.Handler
 	modifiers             map[string]func(*http.Response) error
@@ -311,9 +313,33 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 
+	logsUrlFromEnv := os.Getenv("LOGS_URL")
+	logsURL, err := url.Parse(logsUrlFromEnv)
+	if err != nil {
+		log.Fatalf("Failed to build parse logs URL: %v", err)
+	}
+
+	if logsURL.Scheme != "http" && logsURL.Scheme != "https" {
+		log.Fatalf("Invalid scheme for logs URL %q, only 'http' and 'https' are supported", upstream)
+	}
+	logsHandler := httputil.NewSingleHostReverseProxy(logsURL)
+
+	tracesUrlFromEnv := os.Getenv("TRACES_URL")
+	tracesURL, err := url.Parse(tracesUrlFromEnv)
+	if err != nil {
+		log.Fatalf("Failed to build parse traces URL: %v", err)
+	}
+
+	if tracesURL.Scheme != "http" && tracesURL.Scheme != "https" {
+		log.Fatalf("Invalid scheme for traces URL %q, only 'http' and 'https' are supported", upstream)
+	}
+	tracesHandler := httputil.NewSingleHostReverseProxy(tracesURL)
+
 	r := &routes{
 		upstream:              upstream,
 		handler:               proxy,
+		logsHandler:           logsHandler,
+		tracesHandler:         tracesHandler,
 		label:                 label,
 		el:                    extractLabeler,
 		errorOnReplace:        opt.errorOnReplace,
@@ -370,9 +396,20 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		mux.Handle("/api/v2/alerts", r.el.ExtractLabel(enforceMethods(r.alerts, "GET"))),
 	)
 
+	//errs.Add(
+	//	mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	//		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	//	})),
+	//)
+
 	errs.Add(
-		mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		mux.Handle("/logs", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			req.URL.Path = "/"
+			r.logsHandler.ServeHTTP(w, req)
+		})),
+		mux.Handle("/traces", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			req.URL.Path = "/"
+			r.tracesHandler.ServeHTTP(w, req)
 		})),
 	)
 

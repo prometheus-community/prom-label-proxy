@@ -15,6 +15,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"syscall"
@@ -186,6 +189,11 @@ func main() {
 
 	var g run.Group
 	{
+		specialTables := map[string]string{
+			"logs":   "otel_logs",
+			"traces": "otel_traces",
+		}
+
 		// Run the insecure HTTP server.
 		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
 		if err != nil {
@@ -193,7 +201,56 @@ func main() {
 		}
 
 		mux := http.NewServeMux()
-		mux.Handle("/", routes)
+
+		// Health check endpoints (don’t wrap with /prom/)
+		mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		})
+
+		mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		})
+
+		mux.Handle("/telemetry/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Strip /prom/ prefix
+			path := strings.TrimPrefix(r.URL.Path, "/telemetry/")
+			parts := strings.SplitN(path, "/", 2)
+			if len(parts) < 2 {
+				http.Error(w, "invalid path", http.StatusBadRequest)
+				return
+			}
+
+			uidcid := parts[0]
+			resp, err := authorize(r, uidcid)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusForbidden)
+				return
+			}
+
+			rest := "/" + strings.TrimPrefix(parts[1], "/")
+			restParts := strings.SplitN(strings.TrimPrefix(rest, "/"), "/", 2)
+			secondSegment := restParts[0]
+			if table, ok := specialTables[secondSegment]; ok {
+				tenant := "default"
+				if resp.ClientOrg == "true" {
+					tenant = resp.Owner
+				}
+
+				updateQueryParams(r, getDBName(tenant, resp.ClusterName), table)
+			} else {
+				// normal Prometheus path
+				q := r.URL.Query()
+				if resp.ClientOrg == "true" {
+					q.Set("tenant_id", resp.Owner)
+				} else {
+					q.Set("tenant_id", "default")
+				}
+				r.URL.RawQuery = q.Encode()
+			}
+
+			r.URL.Path = "/" + strings.TrimPrefix(parts[1], "/")
+			routes.ServeHTTP(w, r)
+		}))
 
 		l, err := net.Listen("tcp", insecureListenAddress)
 		if err != nil {
@@ -250,4 +307,79 @@ func main() {
 		}
 		log.Print("Caught signal; exiting gracefully...")
 	}
+}
+
+type authResp struct {
+	Owner       string `json:"owner"`
+	ClusterName string `json:"clusterName"`
+	ClientOrg   string `json:"clientOrg"`
+}
+
+func authorize(req *http.Request, uidcid string) (*authResp, error) {
+	apiUrl, ok := os.LookupEnv("PLATFORM_APISERVER_DOMAIN")
+	if !ok {
+		return nil, errors.New("PLATFORM_APISERVER_DOMAIN env variable not set")
+	}
+	apiUrl = strings.TrimSuffix(apiUrl, "/")
+
+	u, err := url.Parse(apiUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	u.Path = path.Join(u.Path, "api/v1/trickster/auth", uidcid, "/api/v1/query")
+	r2, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	r2.Header = req.Header
+	if csrf, err := req.Cookie("_csrf"); err == nil {
+		r2.Header.Set("X-Csrf-Token", csrf.Value)
+	}
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+	resp, err := client.Do(r2)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d", resp.StatusCode)
+	}
+
+	var data authResp
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, fmt.Errorf("failed to parse auth response: %w", err)
+	}
+	return &data, nil
+}
+
+var fromRe = regexp.MustCompile(`(?i)\b(from|join)\s+([a-zA-Z0-9_\.]+)`)
+
+func updateQueryParams(r *http.Request, database, table string) {
+	q := r.URL.Query()
+	q.Set("database", database)
+
+	if query := q.Get("query"); query != "" {
+		query = fromRe.ReplaceAllString(query, fmt.Sprintf("${1} %s", table))
+		q.Set("query", query)
+	}
+
+	r.URL.RawQuery = q.Encode()
+}
+
+func getDBName(tenant, clusterName string) string {
+	rgx := regexp.MustCompile(`[^a-zA-Z0-9]`)
+	if tenant == "default" {
+		return rgx.ReplaceAllString("default_"+clusterName, "_")
+	}
+	return rgx.ReplaceAllString(tenant, "_")
 }
