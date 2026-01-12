@@ -16,7 +16,9 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
@@ -36,7 +38,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/prometheus/promql/parser"
 
+	"github.com/prometheus-community/prom-label-proxy/certauth"
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
+	"github.com/prometheus-community/prom-label-proxy/tlsconfig"
 )
 
 type arrayFlags []string
@@ -75,6 +79,12 @@ func main() {
 		labelMatchersForRulesAPI        bool
 		promQLDurationExpressionParsing bool
 		promQLExperimentalFunctions     bool
+		// Server TLS flags
+		tlsCertFile       string
+		tlsKeyFile        string
+		tlsCAFile         string
+		requireClientCert bool
+		certAuthOU        string
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -98,6 +108,12 @@ func main() {
 	flagset.BoolVar(&labelMatchersForRulesAPI, "enable-label-matchers-for-rules-api", false, "When true, the proxy uses label matchers when querying the /api/v1/rules endpoint. NOTE: Enable with care because filtering by label matcher is not implemented in older versions of Prometheus (>= 2.54.0 required) and Thanos (>= v0.25.0 required). If not implemented by upstream, the response will not be filtered accordingly.")
 	flagset.BoolVar(&promQLDurationExpressionParsing, "enable-promql-duration-expression-parsing", false, "When true, the proxy supports arithmetic for durations in PromQL expressions.")
 	flagset.BoolVar(&promQLExperimentalFunctions, "enable-promql-experimental-functions", false, "When true, the proxy supports experimental functions in PromQL expressions.")
+	// Server TLS flags
+	flagset.StringVar(&tlsCertFile, "tls-cert-file", "", "Path to the server certificate for mTLS.")
+	flagset.StringVar(&tlsKeyFile, "tls-key-file", "", "Path to the server key for mTLS.")
+	flagset.StringVar(&tlsCAFile, "tls-ca-file", "", "Path to the CA certificate for verifying client certificates.")
+	flagset.BoolVar(&requireClientCert, "require-client-cert", false, "When true, requires a client certificate for all requests.")
+	flagset.StringVar(&certAuthOU, "cert-auth-ou", "", "Required OU field in client certificate for authorization (e.g. EnableTenant=true).")
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
@@ -211,8 +227,44 @@ func main() {
 			_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		})
 
+		// Handler for push endpoints without tenant in path.
+		// It extracts the tenant ID from the client certificate's Common Name.
+		pushHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !requireClientCert {
+				http.Error(w, "Client certificate required for this endpoint", http.StatusForbidden)
+				return
+			}
+			// Identity extraction: Prefer Thanos-Tenant header, fallback to Cert CN if needed.
+			tenant := r.Header.Get("Thanos-Tenant")
+			if tenant == "" {
+				tenant = "default"
+			}
+			// If the identified tenant is not "default", verify the certificate has the required OU.
+			if tenant != "default" && certAuthOU != "" {
+				if ok := certauth.HasOU(r.TLS, certAuthOU); !ok {
+					http.Error(w, fmt.Sprintf("Certificate missing required OU for non-default tenant %s", tenant), http.StatusForbidden)
+					return
+				}
+			}
+
+			isClickHouse := r.URL.Path == "/logs" || r.URL.Path == "/traces"
+			if isClickHouse {
+				chUser := os.Getenv("CLICKHOUSE_USER")
+				chPass := os.Getenv("CLICKHOUSE_PASSWORD")
+				if chUser != "" && chPass != "" {
+					r.Header.Set("X-Clickhouse-User", chUser)
+					r.Header.Set("X-Clickhouse-Key", chPass)
+				}
+			}
+
+			routes.ServeHTTP(w, r)
+		})
+
+		mux.Handle("/api/v1/receive", pushHandler)
+		mux.Handle("/v1/logs", pushHandler)
+		mux.Handle("/v1/traces", pushHandler)
+
 		mux.Handle("/telemetry/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Strip /prom/ prefix
 			path := strings.TrimPrefix(r.URL.Path, "/telemetry/")
 			parts := strings.SplitN(path, "/", 2)
 			if len(parts) < 2 {
@@ -252,9 +304,34 @@ func main() {
 			routes.ServeHTTP(w, r)
 		}))
 
-		l, err := net.Listen("tcp", insecureListenAddress)
-		if err != nil {
-			log.Fatalf("Failed to listen on insecure address: %v", err)
+		var l net.Listener
+		if tlsCertFile != "" && tlsKeyFile != "" {
+			clientAuth := tls.NoClientCert
+			if requireClientCert {
+				// Use VerifyClientCertIfGiven so that non-mTLS clients (like queries) can still connect.
+				// We will enforce the presence of a certificate manually in the handlers that need it.
+				clientAuth = tls.VerifyClientCertIfGiven
+			}
+
+			tlsConfig, err := tlsconfig.NewServerTLSConfig(tlsconfig.ServerConfig{
+				CertFile:   tlsCertFile,
+				KeyFile:    tlsKeyFile,
+				CAFile:     tlsCAFile,
+				ClientAuth: clientAuth,
+			})
+			if err != nil {
+				log.Fatalf("Failed to create server TLS config: %v", err)
+			}
+			l, err = tls.Listen("tcp", insecureListenAddress, tlsConfig)
+			if err != nil {
+				log.Fatalf("Failed to listen on address %s with TLS: %v", insecureListenAddress, err)
+			}
+		} else {
+			l, err = net.Listen("tcp", insecureListenAddress)
+			if err != nil {
+				log.Fatalf("Failed to listen on insecure address: %v", err)
+			}
+			log.Printf("Listening insecurely on %v", l.Addr())
 		}
 
 		srv := &http.Server{Handler: mux}
@@ -382,4 +459,12 @@ func getDBName(tenant, clusterName string) string {
 		return rgx.ReplaceAllString("default_"+clusterName, "_")
 	}
 	return rgx.ReplaceAllString(tenant, "_")
+}
+
+func encodeCertPEM(cert *x509.Certificate) []byte {
+	block := pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: cert.Raw,
+	}
+	return pem.EncodeToMemory(&block)
 }
