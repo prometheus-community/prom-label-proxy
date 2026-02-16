@@ -193,8 +193,8 @@ github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/prometheus/alertmanager v0.31.0 h1:DQW02uIUNNiAa9AD9VA5xaFw5D+xrV+bocJc4gN9bEU=
-github.com/prometheus/alertmanager v0.31.0/go.mod h1:zWPQwhbLt2ybee8rL921UONeQ59Oncash+m/hGP17tU=
+github.com/prometheus/alertmanager v0.31.1 h1:eAmIC42lzbWslHkMt693T36qdxfyZULswiHr681YS3Q=
+github.com/prometheus/alertmanager v0.31.1/go.mod h1:zWPQwhbLt2ybee8rL921UONeQ59Oncash+m/hGP17tU=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
 github.com/prometheus/client_golang v1.0.0/go.mod h1:db9x61etRT2tGnBNRi70OPL5FsnadC4Ky3P0J6CfImo=
 github.com/prometheus/client_golang v1.5.1/go.mod h1:e9GMxYsXl05ICDXkRhurwBS4Q3OK1iX/F2sw+iXX5zU=
