@@ -65,6 +65,7 @@ func main() {
 		labelValues                     arrayFlags
 		enableLabelAPIs                 bool
 		unsafePassthroughPaths          string // Comma-delimited string.
+		insecureSkipVerify				bool
 		errorOnReplace                  bool
 		regexMatch                      bool
 		headerUsesListSyntax            bool
@@ -88,6 +89,7 @@ func main() {
 	flagset.StringVar(&unsafePassthroughPaths, "unsafe-passthrough-paths", "", "Comma delimited allow list of exact HTTP path segments that should be allowed to hit upstream URL without any enforcement. "+
 		"This option is checked after Prometheus APIs, you cannot override enforced API endpoints to be not enforced with this option. Use carefully as it can easily cause a data leak if the provided path is an important "+
 		"API (like /api/v1/configuration) which isn't enforced by prom-label-proxy. NOTE: \"all\" matching paths like \"/\" or \"\" and regex are not allowed.")
+	flagset.BoolVar(&insecureSkipVerify, "insecure-skip-verify", false, "When specified, the proxy will bypass validation of the server's TLS/SSL certificate")
 	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
 	flagset.BoolVar(&regexMatch, "regex-match", false, "When specified, the tenant name is treated as a regular expression. In this case, only one tenant name should be provided.")
 	flagset.BoolVar(&headerUsesListSyntax, "header-uses-list-syntax", false, "When specified, the header line value will be parsed as a comma-separated list. This allows a single tenant header line to specify multiple tenant names.")
@@ -136,6 +138,10 @@ func main() {
 
 	if len(unsafePassthroughPaths) > 0 {
 		opts = append(opts, injectproxy.WithPassthroughPaths(strings.Split(unsafePassthroughPaths, ",")))
+	}
+
+	if insecureSkipVerify {
+		opts = append(opts, injectproxy.WithInsecureSkipVerify())
 	}
 
 	if errorOnReplace {

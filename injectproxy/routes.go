@@ -98,6 +98,13 @@ func WithPassthroughPaths(paths []string) Option {
 	})
 }
 
+// insecureSkipVerify configures proxy to bypass validation of the server's TLS/SSL certificate.
+func WithInsecureSkipVerify(paths []string) Option {
+	return optionFunc(func(o *options) {
+		o.insecureSkipVerify = true
+	})
+}
+
 // WithErrorOnReplace causes the proxy to return 400 if a label matcher we want to
 // inject is present in the query already and matches something different
 func WithErrorOnReplace() Option {
@@ -407,6 +414,15 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 	if !opt.labelMatchersForRulesAPI {
 		r.modifiers["/api/v1/rules"] = modifyAPIResponse(r.filterRules)
+	}
+
+	// Configure tls for proxy
+	tlsConfig := &tls.Config{}
+	if opt.insecureSkipVerify {
+		tlsConfig.InsecureSkipVerify = opt.insecureSkipVerify
+	}
+	proxy.Transport = &http.Transport{
+    	TLSClientConfig: tlsConfig,
 	}
 
 	proxy.ModifyResponse = r.ModifyResponse
