@@ -420,9 +420,8 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 	// Configure tls for proxy
 	tlsConfig := &tls.Config{}
-	if opt.insecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = opt.insecureSkipVerify
-	}
+	tlsConfig.InsecureSkipVerify = opt.insecureSkipVerify
+
 	proxy.Transport = &http.Transport{
 		TLSClientConfig: tlsConfig,
 	}
