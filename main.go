@@ -65,7 +65,7 @@ func main() {
 		labelValues                     arrayFlags
 		enableLabelAPIs                 bool
 		unsafePassthroughPaths          string // Comma-delimited string.
-		insecureSkipVerify				bool
+		insecureSkipVerify              bool
 		errorOnReplace                  bool
 		regexMatch                      bool
 		headerUsesListSyntax            bool
