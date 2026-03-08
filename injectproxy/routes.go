@@ -15,6 +15,8 @@ package injectproxy
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,10 +43,11 @@ const (
 )
 
 type routes struct {
-	upstream *url.URL
-	handler  http.Handler
-	label    string
-	el       ExtractLabeler
+	upstream  *url.URL
+	handler   http.Handler
+	transport *http.Transport
+	label     string
+	el        ExtractLabeler
 
 	mux                   http.Handler
 	modifiers             map[string]func(*http.Response) error
@@ -56,6 +59,7 @@ type routes struct {
 }
 
 type options struct {
+	upstreamCaCert			 string
 	enableLabelAPIs          bool
 	passthroughPaths         []string
 	errorOnReplace           bool
@@ -79,6 +83,13 @@ func (f optionFunc) apply(o *options) {
 func WithPrometheusRegistry(reg prometheus.Registerer) Option {
 	return optionFunc(func(o *options) {
 		o.registerer = reg
+	})
+}
+
+// WithUpstreamCaCert configures the proxy to use the custom ca certificate for the upstream.
+func WithUpstreamCaCert(caCert string) Option {
+	return optionFunc(func(o *options) {
+		o.upstreamCaCert = caCert
 	})
 }
 
@@ -314,6 +325,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	r := &routes{
 		upstream:              upstream,
 		handler:               proxy,
+		transport:             http.DefaultTransport.(*http.Transport).Clone(),
 		label:                 label,
 		el:                    extractLabeler,
 		errorOnReplace:        opt.errorOnReplace,
@@ -409,6 +421,25 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		r.modifiers["/api/v1/rules"] = modifyAPIResponse(r.filterRules)
 	}
 
+	if opt.upstreamCaCert != "" {
+		caCert, err := os.ReadFile(otp.upstreamCaCert)
+	
+		if err != nil {
+			return nil, fmt.Errorf("Failed to read CA certificate: %v", err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+			return nil, fmt.Errorf("Failed to append CA cert to pool. Check if the PEM file is valid.")
+		}
+
+		
+		r.transport.TLSClientConfig = &tls.Config{
+			RootCAs: caCertPool,
+		}
+	}
+ 
+	proxy.Transport = r.transport
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
 	proxy.ErrorLog = log.Default()
