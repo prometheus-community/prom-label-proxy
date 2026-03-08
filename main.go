@@ -133,7 +133,7 @@ func main() {
 
 	opts := []injectproxy.Option{injectproxy.WithPrometheusRegistry(reg)}
 	if upstreamCaCert != "" {
-		opts = append(opts, injectproxy.WithupstreamCaCert(upstreamCaCert)
+		opts = append(opts, injectproxy.WithupstreamCaCert(upstreamCaCert))
 	}
 	
 	if enableLabelAPIs {
