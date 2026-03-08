@@ -56,7 +56,7 @@ type routes struct {
 	regexMatch            bool
 	rulesWithActiveAlerts bool
 
-	logger  *log.Logger
+	logger *log.Logger
 }
 
 type options struct {
