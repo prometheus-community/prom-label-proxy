@@ -135,7 +135,7 @@ func main() {
 	if upstreamCaCert != "" {
 		opts = append(opts, injectproxy.WithUpstreamCaCert(upstreamCaCert))
 	}
-	
+
 	if enableLabelAPIs {
 		opts = append(opts, injectproxy.WithEnabledLabelsAPI())
 	}

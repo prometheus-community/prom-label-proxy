@@ -434,12 +434,11 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 			return nil, fmt.Errorf("failed to append CA cert to pool")
 		}
 
-		
 		r.transport.TLSClientConfig = &tls.Config{
 			RootCAs: caCertPool,
 		}
 	}
- 
+
 	proxy.Transport = r.transport
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
