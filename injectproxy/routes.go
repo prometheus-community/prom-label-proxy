@@ -426,12 +426,12 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		caCert, err := os.ReadFile(opt.upstreamCaCert)
 	
 		if err != nil {
-			return nil, fmt.Errorf("Failed to read CA certificate: %v", err)
+			return nil, fmt.Errorf("failed to read CA certificate: %v", err)
 		}
 
 		caCertPool := x509.NewCertPool()
 		if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
-			return nil, fmt.Errorf("Failed to append CA cert to pool. Check if the PEM file is valid.")
+			return nil, fmt.Errorf("failed to append CA cert to pool. Check if the PEM file is valid.")
 		}
 
 		
