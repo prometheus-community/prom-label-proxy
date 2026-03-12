@@ -15,6 +15,7 @@ package injectproxy
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,6 +59,7 @@ type routes struct {
 type options struct {
 	enableLabelAPIs          bool
 	passthroughPaths         []string
+	insecureSkipVerify       bool
 	errorOnReplace           bool
 	registerer               prometheus.Registerer
 	regexMatch               bool
@@ -95,6 +97,13 @@ func WithEnabledLabelsAPI() Option {
 func WithPassthroughPaths(paths []string) Option {
 	return optionFunc(func(o *options) {
 		o.passthroughPaths = paths
+	})
+}
+
+// insecureSkipVerify configures proxy to bypass validation of the server's TLS/SSL certificate.
+func WithInsecureSkipVerify() Option {
+	return optionFunc(func(o *options) {
+		o.insecureSkipVerify = true
 	})
 }
 
@@ -407,6 +416,14 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 	if !opt.labelMatchersForRulesAPI {
 		r.modifiers["/api/v1/rules"] = modifyAPIResponse(r.filterRules)
+	}
+
+	// Configure tls for proxy
+	tlsConfig := &tls.Config{}
+	tlsConfig.InsecureSkipVerify = opt.insecureSkipVerify
+
+	proxy.Transport = &http.Transport{
+		TLSClientConfig: tlsConfig,
 	}
 
 	proxy.ModifyResponse = r.ModifyResponse
