@@ -418,13 +418,12 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		r.modifiers["/api/v1/rules"] = modifyAPIResponse(r.filterRules)
 	}
 
-	// Configure tls for proxy
-	tlsConfig := &tls.Config{}
-	tlsConfig.InsecureSkipVerify = opt.insecureSkipVerify
-
-	proxy.Transport = &http.Transport{
-		TLSClientConfig: tlsConfig,
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: opt.insecureSkipVerify,
 	}
+
+	proxy.Transport = transport
 
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
