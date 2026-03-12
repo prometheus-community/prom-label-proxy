@@ -81,7 +81,7 @@ func main() {
 	flagset.StringVar(&queryParam, "query-param", "", "Name of the HTTP parameter that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given. If the flag isn't defined and neither -header-name nor -label-value is set, it will default to the value of the -label flag.")
 	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
-	flagset.StringVar(&upstreamCaCert, "upstream-ca-cert", "", "The upstream ca certificate.")
+	flagset.StringVar(&upstreamCaCert, "upstream-ca-cert", "", "The upstream ca certificate file.")
 	flagset.StringVar(&label, "label", "", "The label name to enforce in all proxied PromQL queries.")
 	flagset.Var(&labelValues, "label-value", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given. It can be repeated in which case the proxy will enforce the union of values.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
