@@ -424,7 +424,6 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 	if opt.upstreamCaCert != "" {
 		caCert, err := os.ReadFile(opt.upstreamCaCert)
-
 		if err != nil {
 			return nil, fmt.Errorf("failed to read CA certificate: %v", err)
 		}
