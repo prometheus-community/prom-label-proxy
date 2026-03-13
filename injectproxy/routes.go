@@ -443,7 +443,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 		r.transport.TLSClientConfig = &tls.Config{
 			RootCAs:            caCertPool,
-      InsecureSkipVerify: opt.insecureSkipVerify
+			InsecureSkipVerify: opt.insecureSkipVerify,
 		}
 	}
 
