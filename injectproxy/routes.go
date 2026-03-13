@@ -430,6 +430,11 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		r.modifiers["/api/v1/rules"] = modifyAPIResponse(r.filterRules)
 	}
 
+	// Configure tls for proxy
+	r.transport.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: opt.insecureSkipVerify,
+	}
+
 	if opt.upstreamCaCert != "" {
 		caCert, err := os.ReadFile(opt.upstreamCaCert)
 		if err != nil {
@@ -441,10 +446,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 			return nil, fmt.Errorf("failed to append CA cert to pool")
 		}
 
-		r.transport.TLSClientConfig = &tls.Config{
-			RootCAs:            caCertPool,
-			InsecureSkipVerify: opt.insecureSkipVerify,
-		}
+		r.transport.TLSClientConfig.RootCAs = caCertPool
 	}
 
 	proxy.Transport = r.transport
