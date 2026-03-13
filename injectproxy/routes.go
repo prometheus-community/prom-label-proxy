@@ -63,6 +63,7 @@ type options struct {
 	upstreamCaCert           string
 	enableLabelAPIs          bool
 	passthroughPaths         []string
+	insecureSkipVerify       bool
 	errorOnReplace           bool
 	registerer               prometheus.Registerer
 	regexMatch               bool
@@ -107,6 +108,13 @@ func WithEnabledLabelsAPI() Option {
 func WithPassthroughPaths(paths []string) Option {
 	return optionFunc(func(o *options) {
 		o.passthroughPaths = paths
+	})
+}
+
+// insecureSkipVerify configures proxy to bypass validation of the server's TLS/SSL certificate.
+func WithInsecureSkipVerify() Option {
+	return optionFunc(func(o *options) {
+		o.insecureSkipVerify = true
 	})
 }
 
@@ -434,7 +442,8 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		}
 
 		r.transport.TLSClientConfig = &tls.Config{
-			RootCAs: caCertPool,
+			RootCAs:            caCertPool,
+      InsecureSkipVerify: opt.insecureSkipVerify
 		}
 	}
 
