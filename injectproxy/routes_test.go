@@ -1276,13 +1276,13 @@ func TestQuery(t *testing.T) {
 
 				var labelEnforcer ExtractLabeler
 				if len(tc.staticLabelVal) > 0 {
-					labelEnforcer = StaticLabelEnforcer(tc.staticLabelVal)
+					labelEnforcer = StaticLabelEnforcer(LabelValues: tc.staticLabelVal, Label: proxyLabel}
 				} else if tc.headerName != "" {
-					labelEnforcer = HTTPHeaderEnforcer{Name: tc.headerName, ParseListSyntax: tc.headerUsesListSyntax}
+					labelEnforcer = HTTPHeaderEnforcer{Name: tc.headerName, Label: proxyLabel, ParseListSyntax: tc.headerUsesListSyntax}
 				} else if tc.queryParam != "" {
-					labelEnforcer = HTTPFormEnforcer{ParameterName: tc.queryParam}
+					labelEnforcer = HTTPFormEnforcer{ParameterName: tc.queryParam, Label: proxyLabel}
 				} else {
-					labelEnforcer = HTTPFormEnforcer{ParameterName: proxyLabel}
+					labelEnforcer = HTTPFormEnforcer{ParameterName: proxyLabel, Label: proxyLabel}
 				}
 
 				r, err := NewRoutes(m.url, proxyLabel, labelEnforcer, opts...)
@@ -1300,7 +1300,7 @@ func TestQuery(t *testing.T) {
 					for _, lv := range tc.labelv {
 						q.Add(tc.queryParam, lv)
 					}
-				} else if len(tc.staticLabelVal) == 0 && tc.headerName == "" && len(tc.labelv) > 0 {
+				} else if len(tc.staticLabelVal.) == 0 && tc.headerName == "" && len(tc.labelv) > 0 {
 					for _, lv := range tc.labelv {
 						q.Add(proxyLabel, lv)
 					}
