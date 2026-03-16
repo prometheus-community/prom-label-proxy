@@ -108,7 +108,7 @@ func main() {
 	flagset.Parse(os.Args[1:])
 	defer klog.Flush()
 
-	opts := &slog.HandlerOptions{
+	slogOpts := &slog.HandlerOptions{
 		AddSource: false,
 		Level:     slog.LevelDebug,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
@@ -122,7 +122,7 @@ func main() {
 		},
 	}
 
-	handler := slog.NewTextHandler(os.Stderr, opts)
+	handler := slog.NewTextHandler(os.Stderr, slogOpts)
 	logger := slog.New(handler)
 	klog.SetSlogLogger(logger)
 
