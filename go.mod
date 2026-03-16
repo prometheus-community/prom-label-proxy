@@ -12,6 +12,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/prometheus v0.310.0
 	gotest.tools/v3 v3.5.2
+	k8s.io/klog/v2 v2.130.1
 )
 
 require (
