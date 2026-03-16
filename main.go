@@ -18,7 +18,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"k8s.io/klog/v2"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -26,6 +26,8 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+
+	"k8s.io/klog/v2"
 
 	"github.com/metalmatze/signal/internalserver"
 	"github.com/oklog/run"
@@ -105,6 +107,24 @@ func main() {
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
 	defer klog.Flush()
+
+	opts := &slog.HandlerOptions{
+		AddSource: false,
+		Level:     slog.LevelDebug,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.LevelKey {
+				level := a.Value.Any().(slog.Level)
+				if level < slog.LevelInfo {
+					a.Value = slog.StringValue("DEBUG")
+				}
+			}
+			return a
+		},
+	}
+
+	handler := slog.NewTextHandler(os.Stderr, opts)
+	logger := slog.New(handler)
+	klog.SetSlogLogger(logger)
 
 	if label == "" {
 		klog.Fatal("-label flag cannot be empty")

@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"k8s.io/klog/v2"
 	"io"
 	"log"
 	"net/http"
@@ -31,6 +30,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"k8s.io/klog/v2"
 
 	"github.com/efficientgo/core/merrors"
 	"github.com/metalmatze/signal/server/signalhttp"

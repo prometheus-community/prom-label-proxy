@@ -15,8 +15,9 @@ package injectproxy
 
 import (
 	"encoding/json"
-	"k8s.io/klog/v2"
 	"net/http"
+
+	"k8s.io/klog/v2"
 )
 
 func prometheusAPIError(w http.ResponseWriter, errorMessage string, code int) {
