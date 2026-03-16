@@ -702,9 +702,12 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 }
 
 func injectMatcher(q url.Values, matcher *labels.Matcher) error {
+	origMatchers := append([]string(nil), q[matchersParam]...)
+	
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
+		klog.V(2).InfoS("Successfully injected matcher", "originalMatchers", origMatchers, "enforcedMatchers", q[matchersParam])
 		return nil
 	}
 
@@ -712,12 +715,14 @@ func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	for i, m := range matchers {
 		ms, err := parser.ParseMetricSelector(m)
 		if err != nil {
+			klog.V(2).ErrorS(err, "Failed to parse metric selector during matcher injection", "matcher", m)
 			return err
 		}
 
 		matchers[i] = matchersToString(append(ms, matcher)...)
 	}
 	q[matchersParam] = matchers
+	klog.V(2).InfoS("Successfully injected matchers", "originalMatchers", origMatchers, "enforcedMatchers", q[matchersParam])
 
 	return nil
 }
