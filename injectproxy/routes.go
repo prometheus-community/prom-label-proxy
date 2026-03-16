@@ -429,7 +429,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 
 	// Configure tls for proxy
-	transport = http.DefaultTransport.(*http.Transport).Clone()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: opt.insecureSkipVerify,
 	}
