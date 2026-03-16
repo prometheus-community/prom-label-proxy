@@ -316,7 +316,7 @@ func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) 
 }
 
 // StaticLabelEnforcer enforces a static label value.
-type StaticLabelEnforcer struct{
+type StaticLabelEnforcer struct {
 	Label       string
 	LabelValues []string
 }
@@ -714,7 +714,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 
 func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	origMatchers := append([]string(nil), q[matchersParam]...)
-	
+
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))

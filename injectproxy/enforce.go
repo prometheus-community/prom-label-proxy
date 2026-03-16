@@ -17,9 +17,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-
 	"k8s.io/klog/v2"
-	
+
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 )
