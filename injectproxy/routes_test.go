@@ -1276,7 +1276,7 @@ func TestQuery(t *testing.T) {
 
 				var labelEnforcer ExtractLabeler
 				if len(tc.staticLabelVal) > 0 {
-					labelEnforcer = StaticLabelEnforcer(LabelValues: tc.staticLabelVal, Label: proxyLabel}
+					labelEnforcer = StaticLabelEnforcer{LabelValues: tc.staticLabelVal, Label: proxyLabel}
 				} else if tc.headerName != "" {
 					labelEnforcer = HTTPHeaderEnforcer{Name: tc.headerName, Label: proxyLabel, ParseListSyntax: tc.headerUsesListSyntax}
 				} else if tc.queryParam != "" {
