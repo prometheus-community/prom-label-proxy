@@ -16,6 +16,7 @@ package injectproxy
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"sort"
@@ -57,6 +59,7 @@ type routes struct {
 }
 
 type options struct {
+	upstreamCaCert           string
 	enableLabelAPIs          bool
 	passthroughPaths         []string
 	insecureSkipVerify       bool
@@ -81,6 +84,13 @@ func (f optionFunc) apply(o *options) {
 func WithPrometheusRegistry(reg prometheus.Registerer) Option {
 	return optionFunc(func(o *options) {
 		o.registerer = reg
+	})
+}
+
+// WithUpstreamCaCert configures the proxy to use the custom ca certificate for the upstream.
+func WithUpstreamCaCert(caCert string) Option {
+	return optionFunc(func(o *options) {
+		o.upstreamCaCert = caCert
 	})
 }
 
@@ -419,13 +429,26 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 
 	// Configure tls for proxy
-	tlsConfig := &tls.Config{}
-	tlsConfig.InsecureSkipVerify = opt.insecureSkipVerify
-
-	proxy.Transport = &http.Transport{
-		TLSClientConfig: tlsConfig,
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: opt.insecureSkipVerify,
 	}
 
+	if opt.upstreamCaCert != "" {
+		caCert, err := os.ReadFile(opt.upstreamCaCert)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA certificate: %v", err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+			return nil, fmt.Errorf("failed to append CA cert to pool")
+		}
+
+		transport.TLSClientConfig.RootCAs = caCertPool
+	}
+
+	proxy.Transport = transport
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
 	proxy.ErrorLog = log.Default()
