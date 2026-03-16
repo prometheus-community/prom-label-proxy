@@ -1300,7 +1300,7 @@ func TestQuery(t *testing.T) {
 					for _, lv := range tc.labelv {
 						q.Add(tc.queryParam, lv)
 					}
-				} else if len(tc.staticLabelVal.) == 0 && tc.headerName == "" && len(tc.labelv) > 0 {
+				} else if len(tc.staticLabelVal) == 0 && tc.headerName == "" && len(tc.labelv) > 0 {
 					for _, lv := range tc.labelv {
 						q.Add(proxyLabel, lv)
 					}
