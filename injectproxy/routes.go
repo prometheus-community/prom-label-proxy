@@ -44,11 +44,10 @@ const (
 )
 
 type routes struct {
-	upstream  *url.URL
-	handler   http.Handler
-	transport *http.Transport
-	label     string
-	el        ExtractLabeler
+	upstream *url.URL
+	handler  http.Handler
+	label    string
+	el       ExtractLabeler
 
 	mux                   http.Handler
 	modifiers             map[string]func(*http.Response) error
@@ -334,7 +333,6 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	r := &routes{
 		upstream:              upstream,
 		handler:               proxy,
-		transport:             http.DefaultTransport.(*http.Transport).Clone(),
 		label:                 label,
 		el:                    extractLabeler,
 		errorOnReplace:        opt.errorOnReplace,
@@ -431,7 +429,8 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 
 	// Configure tls for proxy
-	r.transport.TLSClientConfig = &tls.Config{
+	transport = http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: opt.insecureSkipVerify,
 	}
 
@@ -446,10 +445,10 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 			return nil, fmt.Errorf("failed to append CA cert to pool")
 		}
 
-		r.transport.TLSClientConfig.RootCAs = caCertPool
+		transport.TLSClientConfig.RootCAs = caCertPool
 	}
 
-	proxy.Transport = r.transport
+	proxy.Transport = transport
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
 	proxy.ErrorLog = log.Default()
