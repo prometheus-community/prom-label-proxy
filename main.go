@@ -18,7 +18,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"k8s.io/klog/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -77,6 +77,8 @@ func main() {
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	klog.InitFlags(flagset)
+
 	flagset.StringVar(&insecureListenAddress, "insecure-listen-address", "", "The address the prom-label-proxy HTTP server should listen on.")
 	flagset.StringVar(&internalListenAddress, "internal-listen-address", "", "The address the internal prom-label-proxy HTTP server should listen on to expose metrics about itself.")
 	flagset.StringVar(&queryParam, "query-param", "", "Name of the HTTP parameter that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given. If the flag isn't defined and neither -header-name nor -label-value is set, it will default to the value of the -label flag.")
@@ -102,8 +104,10 @@ func main() {
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
+	defer klog.Flush()
+
 	if label == "" {
-		log.Fatalf("-label flag cannot be empty")
+		klog.Fatal("-label flag cannot be empty")
 	}
 
 	if len(labelValues) == 0 && queryParam == "" && headerName == "" {
@@ -112,19 +116,19 @@ func main() {
 
 	if len(labelValues) > 0 {
 		if queryParam != "" || headerName != "" {
-			log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
+			klog.Fatal("at most one of -query-param, -header-name and -label-value must be set")
 		}
 	} else if queryParam != "" && headerName != "" {
-		log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
+		klog.Fatal("at most one of -query-param, -header-name and -label-value must be set")
 	}
 
 	upstreamURL, err := url.Parse(upstream)
 	if err != nil {
-		log.Fatalf("Failed to build parse upstream URL: %v", err)
+		klog.Fatalf("Failed to build parse upstream URL: %v", err)
 	}
 
 	if upstreamURL.Scheme != "http" && upstreamURL.Scheme != "https" {
-		log.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
+		klog.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
 	}
 
 	reg := prometheus.NewRegistry()
@@ -165,18 +169,16 @@ func main() {
 	if regexMatch {
 		if len(labelValues) > 0 {
 			if len(labelValues) > 1 {
-				log.Fatalf("Regex match is limited to one label value")
+				klog.Fatal("Regex match is limited to one label value")
 			}
 
 			compiledRegex, err := regexp.Compile(labelValues[0])
 			if err != nil {
-				log.Fatalf("Invalid regexp: %v", err.Error())
-				return
+				klog.Fatalf("Invalid regexp: %v", err.Error())
 			}
 
 			if compiledRegex.MatchString("") {
-				log.Fatalf("Regex should not match empty string")
-				return
+				klog.Fatal("Regex should not match empty string")
 			}
 		}
 
@@ -201,7 +203,7 @@ func main() {
 		// Run the insecure HTTP server.
 		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
 		if err != nil {
-			log.Fatalf("Failed to create injectproxy Routes: %v", err)
+			klog.Fatalf("Failed to create injectproxy Routes: %v", err)
 		}
 
 		mux := http.NewServeMux()
@@ -209,15 +211,15 @@ func main() {
 
 		l, err := net.Listen("tcp", insecureListenAddress)
 		if err != nil {
-			log.Fatalf("Failed to listen on insecure address: %v", err)
+			klog.Fatalf("Failed to listen on insecure address: %v", err)
 		}
 
 		srv := &http.Server{Handler: mux}
 
 		g.Add(func() error {
-			log.Printf("Listening insecurely on %v", l.Addr())
+			klog.InfoS("Listening insecurely on", "address", l.Addr())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
-				log.Printf("Server stopped with %v", err)
+				klog.ErrorS(err, "Server stopped")
 				return err
 			}
 			return nil
@@ -236,15 +238,15 @@ func main() {
 		// Run the HTTP server.
 		l, err := net.Listen("tcp", internalListenAddress)
 		if err != nil {
-			log.Fatalf("Failed to listen on internal address: %v", err)
+			klog.Fatalf("Failed to listen on internal address: %v", err)
 		}
 
 		srv := &http.Server{Handler: h}
 
 		g.Add(func() error {
-			log.Printf("Listening on %v for metrics and pprof", l.Addr())
+			klog.InfoS("Listening for metrics and pprof", "address", l.Addr())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
-				log.Printf("Internal server stopped with %v", err)
+				klog.ErrorS(err, "Internal server stopped")
 				return err
 			}
 			return nil
@@ -257,9 +259,9 @@ func main() {
 
 	if err := g.Run(); err != nil {
 		if !errors.As(err, &run.SignalError{}) {
-			log.Printf("Server stopped with %v", err)
+			klog.ErrorS(err, "Server stopped")
 			os.Exit(1)
 		}
-		log.Print("Caught signal; exiting gracefully...")
+		klog.Info("Caught signal; exiting gracefully...")
 	}
 }

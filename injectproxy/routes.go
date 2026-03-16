@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"k8s.io/klog/v2"
 	"io"
 	"log"
 	"net/http"
@@ -54,8 +55,6 @@ type routes struct {
 	errorOnReplace        bool
 	regexMatch            bool
 	rulesWithActiveAlerts bool
-
-	logger *log.Logger
 }
 
 type options struct {
@@ -338,7 +337,6 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		errorOnReplace:        opt.errorOnReplace,
 		regexMatch:            opt.regexMatch,
 		rulesWithActiveAlerts: opt.rulesWithActiveAlerts,
-		logger:                log.Default(),
 	}
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
 
@@ -451,7 +449,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	proxy.Transport = transport
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
-	proxy.ErrorLog = log.Default()
+	proxy.ErrorLog = log.New(klogWriter{}, "", 0)
 
 	return r, nil
 }
@@ -471,7 +469,7 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 }
 
 func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
-	r.logger.Printf("http: proxy error: %v", err)
+	klog.ErrorS(err, "HTTP proxy error")
 	if errors.Is(err, errModifyResponseFailed) {
 		rw.WriteHeader(http.StatusBadRequest)
 	}
@@ -767,4 +765,14 @@ func trimValues(slice []string) []string {
 	}
 
 	return slice
+}
+
+// klogWriter bridges standard log output to klog.
+type klogWriter struct{}
+
+func (w klogWriter) Write(b []byte) (int, error) {
+	// Trim the trailing newline that the standard log package adds
+	msg := strings.TrimSpace(string(b))
+	klog.ErrorS(nil, "Reverse proxy internal error", "output", msg)
+	return len(b), nil
 }

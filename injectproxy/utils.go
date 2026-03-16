@@ -15,7 +15,7 @@ package injectproxy
 
 import (
 	"encoding/json"
-	"log"
+	"k8s.io/klog/v2"
 	"net/http"
 )
 
@@ -27,6 +27,6 @@ func prometheusAPIError(w http.ResponseWriter, errorMessage string, code int) {
 	res := map[string]string{"status": "error", "errorType": "prom-label-proxy", "error": errorMessage}
 
 	if err := json.NewEncoder(w).Encode(res); err != nil {
-		log.Printf("error: Failed to encode json: %v", err)
+		klog.ErrorS(err, "Failed to encode json")
 	}
 }
