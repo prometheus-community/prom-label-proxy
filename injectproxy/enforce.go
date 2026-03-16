@@ -16,8 +16,8 @@ package injectproxy
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"k8s.io/klog/v2"
+	"slices"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
