@@ -318,7 +318,7 @@ func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) 
 // StaticLabelEnforcer enforces a static label value.
 type StaticLabelEnforcer struct{
 	Label       string
-	LabelValues string
+	LabelValues []string
 }
 
 // ExtractLabel implements the ExtractLabeler interface.
