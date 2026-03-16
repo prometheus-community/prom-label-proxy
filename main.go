@@ -208,11 +208,11 @@ func main() {
 	var extractLabeler injectproxy.ExtractLabeler
 	switch {
 	case len(labelValues) > 0:
-		extractLabeler = injectproxy.StaticLabelEnforcer(labelValues)
+		extractLabeler = injectproxy.StaticLabelEnforcer{Label: label, LabelValues: labelValues}
 	case queryParam != "":
-		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam}
+		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam, Label: label}
 	case headerName != "":
-		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName), ParseListSyntax: headerUsesListSyntax}
+		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName), Label: label, ParseListSyntax: headerUsesListSyntax}
 	}
 
 	parser.ExperimentalDurationExpr = promQLDurationExpressionParsing

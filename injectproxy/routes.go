@@ -223,6 +223,7 @@ type ExtractLabeler interface {
 // HTTPFormEnforcer enforces a label value extracted from the HTTP form and query parameters.
 type HTTPFormEnforcer struct {
 	ParameterName string
+	Label         string
 }
 
 // ExtractLabel implements the ExtractLabeler interface.
@@ -230,6 +231,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		labelValues, err := hff.getLabelValues(r)
 		if err != nil {
+			klog.V(4).ErrorS(err, "Failed to extract labels from PostForm", "source", "parameter", hff.ParameterName)
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
@@ -242,6 +244,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 		// Remove the param from the PostForm.
 		if r.Method == http.MethodPost {
 			if err := r.ParseForm(); err != nil {
+				klog.V(6).ErrorS(err, "Failed to parse the PostForm", "source", "parameter", hff.ParameterName)
 				prometheusAPIError(w, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -255,6 +258,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			}
 		}
 
+		klog.V(4).InfoS("Extracted label from PostForm", "source", "parameter", hff.ParameterName, "label", hff.Label, "values", labelValues)
 		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
@@ -276,6 +280,7 @@ func (hff HTTPFormEnforcer) getLabelValues(r *http.Request) ([]string, error) {
 // HTTPHeaderEnforcer enforces a label value extracted from the HTTP headers.
 type HTTPHeaderEnforcer struct {
 	Name            string
+	Label           string
 	ParseListSyntax bool
 }
 
@@ -284,10 +289,12 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		labelValues, err := hhe.getLabelValues(r)
 		if err != nil {
+			klog.V(4).ErrorS(err, "Failed to extract labels from header", "source", "header", hhe.Name)
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
 
+		klog.V(4).InfoS("Extracted label from header", "source", "header", hhe.Name, "label", hhe.Label, "values", labelValues)
 		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
@@ -309,12 +316,16 @@ func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) 
 }
 
 // StaticLabelEnforcer enforces a static label value.
-type StaticLabelEnforcer []string
+type StaticLabelEnforcer struct{
+	Label       string
+	LabelValues string
+}
 
 // ExtractLabel implements the ExtractLabeler interface.
 func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next(w, r.WithContext(WithLabelValues(r.Context(), sle)))
+		klog.V(2).InfoS("Extracted static label", "source", "label", sle.Label, "values", sle.LabelValues)
+		next(w, r.WithContext(WithLabelValues(r.Context(), sle.LabelValues)))
 	})
 }
 
