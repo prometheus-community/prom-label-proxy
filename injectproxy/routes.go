@@ -614,15 +614,18 @@ func enforceQueryValues(e *PromQLEnforcer, v url.Values) (values string, noQuery
 	// If no values were given or no query is present,
 	// e.g. because the query came in the POST body
 	// but the URL query string was passed, then finish early.
-	if v.Get(queryParam) == "" {
+	origQuery := v.Get(queryParam)
+	if origQuery == "" {
 		return v.Encode(), false, nil
 	}
 
-	q, err := e.Enforce(v.Get(queryParam))
+	q, err := e.Enforce(origQuery)
 	if err != nil {
+		klog.V(2).ErrorS(err, "Failed to enforce query", "query", origQuery)
 		return "", true, err
 	}
 
+	klog.V(2).InfoS("Successfully enforced query", "originalQuery", origQuery, "enforcedQuery", q)
 	v.Set(queryParam, q)
 
 	return v.Encode(), true, nil
