@@ -33,7 +33,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/prometheus/promql/parser"
-	
+
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 )
 
@@ -106,7 +106,7 @@ func main() {
 		Format: promslog.NewFormat(),
 	}
 
-	promslogConfig.Level.Set("info") //nolint: errcheck // promslogConfig.Level.Set() will exit on error
+	promslogConfig.Level.Set("info")    //nolint: errcheck // promslogConfig.Level.Set() will exit on error
 	promslogConfig.Format.Set("logfmt") //nolint: errcheck // promslogConfig.Level.Set() will exit on error
 	flagset.Var(promslogConfig.Level, "log.level", "Only log messages with the given severity or above. One of: [debug, info, warn, error]")
 	flagset.Var(promslogConfig.Format, "log.format", "Output format of log messages. One of: [logfmt, json]")
@@ -115,7 +115,6 @@ func main() {
 	flagset.Parse(os.Args[1:])
 	logger := promslog.New(promslogConfig)
 	slog.SetDefault(logger)
-	
 
 	if label == "" {
 		slog.Error("-label flag cannot be empty")
@@ -138,7 +137,7 @@ func main() {
 
 	upstreamURL, err := url.Parse(upstream)
 	if err != nil {
-		slog.Error("Failed to build parse upstream URL", "error",  err)
+		slog.Error("Failed to build parse upstream URL", "error", err)
 		os.Exit(1)
 	}
 
