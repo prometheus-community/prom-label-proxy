@@ -477,7 +477,7 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 	return m(resp)
 }
 
-func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
+func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err error) {
 	slog.Error("HTTP proxy error", 
         "error", err, 
         "path", req.URL.Path, 
