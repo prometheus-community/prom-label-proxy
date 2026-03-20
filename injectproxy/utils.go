@@ -23,7 +23,11 @@ func prometheusAPIError(w http.ResponseWriter, errorMessage string, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
-	
+
+	if lrw, ok := w.(*loggingResponseWriter); ok {
+		lrw.alreadyLogged = true
+	}
+
 	slog.Debug("API error returned to client", 
         "status", code, 
         "message", errorMessage,

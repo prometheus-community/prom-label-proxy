@@ -144,6 +144,27 @@ func WithRegexMatch() Option {
 	})
 }
 
+// loggingResponseWriter wraps http.ResponseWriter to capture the HTTP status code and prevent double-logging.
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode    int
+	alreadyLogged bool 
+}
+
+// WriteHeader captures the status code before writing it to the underlying response writer.
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
+}
+
+// Write ensures a default 200 OK status is captured if WriteHeader wasn't explicitly called.
+func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
+	if lrw.statusCode == 0 {
+		lrw.statusCode = http.StatusOK
+	}
+	return lrw.ResponseWriter.Write(b)
+}
+
 // mux abstracts away the behavior we expect from the http.ServeMux type in this package.
 type mux interface {
 	http.Handler
@@ -464,7 +485,18 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 }
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	r.mux.ServeHTTP(w, req)
+	lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+	
+	r.mux.ServeHTTP(lrw, req)
+
+	// log if it's an error AND it hasn't been logged yet
+	if lrw.statusCode >= 400 && !lrw.alreadyLogged {
+		slog.Debug("HTTP request failed (caught by multiplexer)",
+			"method", req.Method,
+			"path", req.URL.Path,
+			"status", lrw.statusCode,
+		)
+	}
 }
 
 func (r *routes) ModifyResponse(resp *http.Response) error {
@@ -478,6 +510,10 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 }
 
 func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err error) {
+	if lrw, ok := w.(*loggingResponseWriter); ok {
+		lrw.alreadyLogged = true
+	}
+
 	slog.Error("HTTP proxy error", 
         "error", err, 
         "path", req.URL.Path, 
