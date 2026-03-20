@@ -57,7 +57,7 @@ var (
 func (ms *PromQLEnforcer) Enforce(q string) (string, error) {
 	expr, err := parser.ParseExpr(q)
 	if err != nil {
-		slog.rror("Failed to parse PromQL expression", "error", err, "query", q)
+		slog.error("Failed to parse PromQL expression", "error", err, "query", q)
 		return "", fmt.Errorf("%w: %w", ErrQueryParse, err)
 	}
 

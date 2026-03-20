@@ -27,13 +27,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/metalmatze/signal/internalserver"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/common/promslog"
-	"github.com/prometheus/common/promslog/flag"
 	"github.com/prometheus/prometheus/promql/parser"
 	
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
