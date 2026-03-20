@@ -16,7 +16,7 @@ package injectproxy
 import (
 	"errors"
 	"fmt"
-	"k8s.io/klog/v2"
+	"log/slog"
 	"slices"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -57,17 +57,17 @@ var (
 func (ms *PromQLEnforcer) Enforce(q string) (string, error) {
 	expr, err := parser.ParseExpr(q)
 	if err != nil {
-		klog.V(2).ErrorS(err, "Failed to parse PromQL expression", "query", q)
+		slog.rror("Failed to parse PromQL expression", "error", err, "query", q)
 		return "", fmt.Errorf("%w: %w", ErrQueryParse, err)
 	}
 
 	if err := ms.EnforceNode(expr); err != nil {
 		if errors.Is(err, ErrIllegalLabelMatcher) {
-			klog.V(2).InfoS("Illegal label matcher encountered during enforcement", "query", q, "error", err)
+			slog.Warn("Illegal label matcher encountered during enforcement", "query", q, "error", err)
 			return "", err
 		}
 
-		klog.V(2).ErrorS(err, "Failed to enforce label on AST node", "query", q)
+		slog.Error("Failed to enforce label on AST node", "error", err, "query", q)
 		return "", fmt.Errorf("%w: %w", ErrEnforceLabel, err)
 	}
 
@@ -275,7 +275,7 @@ func (ms PromQLEnforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.M
 			}
 
 			if !ok {
-				klog.V(4).InfoS("Label matcher conflict detected", "targetMatcher", target.String(), "injectedMatcher", matcher.String())
+				slog.Info("Label matcher conflict detected", "targetMatcher", target.String(), "injectedMatcher", matcher.String())
 				return res, fmt.Errorf("%w: label matcher %q conflicts with injected matcher %q", ErrIllegalLabelMatcher, target.String(), matcher.String())
 			}
 		}
@@ -287,7 +287,7 @@ func (ms PromQLEnforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.M
 		// In both cases, the enforced matcher will be added after
 		// iterating on all the expression's matchers.
 		if matcher.Type == labels.MatchEqual || matcher.String() == target.String() {
-			klog.V(4).InfoS("Dropping existing label matcher in favor of injected matcher", "droppedMatcher", target.String(), "injectedMatcher", matcher.String())
+			slog.Info("Dropping existing label matcher in favor of injected matcher", "droppedMatcher", target.String(), "injectedMatcher", matcher.String())
 			continue
 		}
 

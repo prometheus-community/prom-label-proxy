@@ -31,8 +31,6 @@ import (
 	"sort"
 	"strings"
 
-	"k8s.io/klog/v2"
-
 	"github.com/efficientgo/core/merrors"
 	"github.com/metalmatze/signal/server/signalhttp"
 	"github.com/prometheus/client_golang/prometheus"
@@ -231,7 +229,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		labelValues, err := hff.getLabelValues(r)
 		if err != nil {
-			klog.V(4).ErrorS(err, "Failed to extract labels from PostForm", "source", "parameter", hff.ParameterName)
+			slog.Error("Failed to extract labels from PostForm", "error", err, "source", "PostForm", "parameter", hff.ParameterName)
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
@@ -244,7 +242,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 		// Remove the param from the PostForm.
 		if r.Method == http.MethodPost {
 			if err := r.ParseForm(); err != nil {
-				klog.V(6).ErrorS(err, "Failed to parse the PostForm", "source", "parameter", hff.ParameterName)
+				slog.Error("Failed to parse the PostForm", "error", err, "source", "PostForm", "parameter", hff.ParameterName)
 				prometheusAPIError(w, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -258,7 +256,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			}
 		}
 
-		klog.V(4).InfoS("Extracted label from PostForm", "source", "parameter", hff.ParameterName, "label", hff.Label, "values", labelValues)
+		slog.Info("Extracted label from PostForm", "source", "PostForm", "parameter", hff.ParameterName, "label", hff.Label, "values", labelValues)
 		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
@@ -289,12 +287,12 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		labelValues, err := hhe.getLabelValues(r)
 		if err != nil {
-			klog.V(4).ErrorS(err, "Failed to extract labels from header", "source", "header", hhe.Name)
+			slog.Error("Failed to extract labels from header", "error", err, "source", "header", "header", hhe.Name)
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
 
-		klog.V(4).InfoS("Extracted label from header", "source", "header", hhe.Name, "label", hhe.Label, "values", labelValues)
+		slog.Info("Extracted label from header", "source", "header", "header", hhe.Name, "label", hhe.Label, "values", labelValues)
 		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
@@ -324,7 +322,7 @@ type StaticLabelEnforcer struct {
 // ExtractLabel implements the ExtractLabeler interface.
 func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		klog.V(2).InfoS("Extracted static label", "source", "label", sle.Label, "values", sle.LabelValues)
+		slog.Info("Extracted static label", "source", "static", "label", sle.Label, "values", sle.LabelValues)
 		next(w, r.WithContext(WithLabelValues(r.Context(), sle.LabelValues)))
 	})
 }
@@ -461,7 +459,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	proxy.Transport = transport
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
-	proxy.ErrorLog = log.New(klogWriter{}, "", 0)
+	proxy.ErrorLog = log.New(slogWriter{}, "", 0)
 
 	return r, nil
 }
@@ -481,7 +479,7 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 }
 
 func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
-	klog.ErrorS(err, "HTTP proxy error")
+	slog.Error("HTTP proxy error", "error", err)
 	if errors.Is(err, errModifyResponseFailed) {
 		rw.WriteHeader(http.StatusBadRequest)
 	}
@@ -632,11 +630,11 @@ func enforceQueryValues(e *PromQLEnforcer, v url.Values) (values string, noQuery
 
 	q, err := e.Enforce(origQuery)
 	if err != nil {
-		klog.V(2).ErrorS(err, "Failed to enforce query", "query", origQuery)
+		slog.Error("Failed to enforce query", "error", err, "query", origQuery)
 		return "", true, err
 	}
 
-	klog.V(2).InfoS("Successfully enforced query", "originalQuery", origQuery, "enforcedQuery", q)
+	slog.Info("Successfully enforced query", "originalQuery", origQuery, "enforcedQuery", q)
 	v.Set(queryParam, q)
 
 	return v.Encode(), true, nil
@@ -718,7 +716,7 @@ func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
-		klog.V(2).InfoS("Successfully injected matcher", "originalMatchers", origMatchers, "enforcedMatchers", q[matchersParam])
+		slog.Info("Successfully injected matcher", "originalMatchers", origMatchers, "enforcedMatchers", q[matchersParam])
 		return nil
 	}
 
@@ -726,14 +724,14 @@ func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	for i, m := range matchers {
 		ms, err := parser.ParseMetricSelector(m)
 		if err != nil {
-			klog.V(2).ErrorS(err, "Failed to parse metric selector during matcher injection", "matcher", m)
+			slog.Error("Failed to parse metric selector during matcher injection", "error", err, "matcher", m)
 			return err
 		}
 
 		matchers[i] = matchersToString(append(ms, matcher)...)
 	}
 	q[matchersParam] = matchers
-	klog.V(2).InfoS("Successfully injected matchers", "originalMatchers", origMatchers, "enforcedMatchers", q[matchersParam])
+	slog.Info("Successfully injected matchers", "originalMatchers", origMatchers, "enforcedMatchers", q[matchersParam])
 
 	return nil
 }
@@ -787,12 +785,12 @@ func trimValues(slice []string) []string {
 	return slice
 }
 
-// klogWriter bridges standard log output to klog.
-type klogWriter struct{}
+// slogWriter bridges standard log output to slog.
+type slogWriter struct{}
 
-func (w klogWriter) Write(b []byte) (int, error) {
+func (w slogWriter) Write(b []byte) (int, error) {
 	// Trim the trailing newline that the standard log package adds
 	msg := strings.TrimSpace(string(b))
-	klog.ErrorS(nil, "Reverse proxy internal error", "output", msg)
+	slog.Error("Reverse proxy internal error", "output", msg)
 	return len(b), nil
 }

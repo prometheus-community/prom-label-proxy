@@ -27,14 +27,15 @@ import (
 	"strings"
 	"syscall"
 
-	"k8s.io/klog/v2"
-
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/metalmatze/signal/internalserver"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/common/promslog"
+	"github.com/prometheus/common/promslog/flag"
 	"github.com/prometheus/prometheus/promql/parser"
-
+	
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 )
 
@@ -79,8 +80,6 @@ func main() {
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	klog.InitFlags(flagset)
-
 	flagset.StringVar(&insecureListenAddress, "insecure-listen-address", "", "The address the prom-label-proxy HTTP server should listen on.")
 	flagset.StringVar(&internalListenAddress, "internal-listen-address", "", "The address the internal prom-label-proxy HTTP server should listen on to expose metrics about itself.")
 	flagset.StringVar(&queryParam, "query-param", "", "Name of the HTTP parameter that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given. If the flag isn't defined and neither -header-name nor -label-value is set, it will default to the value of the -label flag.")
@@ -104,30 +103,25 @@ func main() {
 	flagset.BoolVar(&promQLDurationExpressionParsing, "enable-promql-duration-expression-parsing", false, "When true, the proxy supports arithmetic for durations in PromQL expressions.")
 	flagset.BoolVar(&promQLExperimentalFunctions, "enable-promql-experimental-functions", false, "When true, the proxy supports experimental functions in PromQL expressions.")
 
-	//nolint: errcheck // Parse() will exit on error.
-	flagset.Parse(os.Args[1:])
-	defer klog.Flush()
-
-	slogOpts := &slog.HandlerOptions{
-		AddSource: false,
-		Level:     slog.LevelDebug,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.LevelKey {
-				level := a.Value.Any().(slog.Level)
-				if level < slog.LevelInfo {
-					a.Value = slog.StringValue("DEBUG")
-				}
-			}
-			return a
-		},
+	promslogConfig := &promslog.Config{
+		Level:  promslog.NewLevel(),
+		Format: promslog.NewFormat(),
 	}
 
-	handler := slog.NewTextHandler(os.Stderr, slogOpts)
-	logger := slog.New(handler)
-	klog.SetSlogLogger(logger)
+	promslogConfig.Level.Set("info")
+	promslogConfig.Format.Set("logfmt")
+	flagset.Var(promslogConfig.Level, "log.level", "Only log messages with the given severity or above. One of: [debug, info, warn, error]")
+	flagset.Var(promslogConfig.Format, "log.format", "Output format of log messages. One of: [logfmt, json]")
+
+	//nolint: errcheck // Parse() will exit on error.
+	flagset.Parse(os.Args[1:])
+	logger := promslog.New(promslogConfig)
+	slog.SetDefault(logger)
+	
 
 	if label == "" {
-		klog.Fatal("-label flag cannot be empty")
+		slog.Error("-label flag cannot be empty")
+		os.Exit(1)
 	}
 
 	if len(labelValues) == 0 && queryParam == "" && headerName == "" {
@@ -136,19 +130,23 @@ func main() {
 
 	if len(labelValues) > 0 {
 		if queryParam != "" || headerName != "" {
-			klog.Fatal("at most one of -query-param, -header-name and -label-value must be set")
+			slog.Error("at most one of -query-param, -header-name and -label-value must be set")
+			os.Exit(1)
 		}
 	} else if queryParam != "" && headerName != "" {
-		klog.Fatal("at most one of -query-param, -header-name and -label-value must be set")
+		slog.Error("at most one of -query-param, -header-name and -label-value must be set")
+		os.Exit(1)
 	}
 
 	upstreamURL, err := url.Parse(upstream)
 	if err != nil {
-		klog.Fatalf("Failed to build parse upstream URL: %v", err)
+		slog.Error("Failed to build parse upstream URL", "error",  err)
+		os.Exit(1)
 	}
 
 	if upstreamURL.Scheme != "http" && upstreamURL.Scheme != "https" {
-		klog.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
+		slog.Error("Invalid scheme for upstream URL, only 'http' and 'https' are supported", "upstream", upstream)
+		os.Exit(1)
 	}
 
 	reg := prometheus.NewRegistry()
@@ -189,16 +187,19 @@ func main() {
 	if regexMatch {
 		if len(labelValues) > 0 {
 			if len(labelValues) > 1 {
-				klog.Fatal("Regex match is limited to one label value")
+				slog.Error("Regex match is limited to one label value")
+				os.Exit(1)
 			}
 
 			compiledRegex, err := regexp.Compile(labelValues[0])
 			if err != nil {
-				klog.Fatalf("Invalid regexp: %v", err.Error())
+				slog.Error("Invalid regexp", "error", err)
+				os.Exit(1)
 			}
 
 			if compiledRegex.MatchString("") {
-				klog.Fatal("Regex should not match empty string")
+				slog.Error("Regex should not match empty string")
+				os.Exit(1)
 			}
 		}
 
@@ -223,7 +224,8 @@ func main() {
 		// Run the insecure HTTP server.
 		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
 		if err != nil {
-			klog.Fatalf("Failed to create injectproxy Routes: %v", err)
+			slog.Error("Failed to create injectproxy Routes", "error", err)
+			os.Exit(1)
 		}
 
 		mux := http.NewServeMux()
@@ -231,15 +233,16 @@ func main() {
 
 		l, err := net.Listen("tcp", insecureListenAddress)
 		if err != nil {
-			klog.Fatalf("Failed to listen on insecure address: %v", err)
+			slog.Error("Failed to listen on insecure address", "error", err)
+			os.Exit(1)
 		}
 
 		srv := &http.Server{Handler: mux}
 
 		g.Add(func() error {
-			klog.InfoS("Listening insecurely on", "address", l.Addr())
+			slog.Info("Listening insecurely on", "address", l.Addr())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
-				klog.ErrorS(err, "Server stopped")
+				slog.Error("Server stopped", "error", err)
 				return err
 			}
 			return nil
@@ -258,15 +261,16 @@ func main() {
 		// Run the HTTP server.
 		l, err := net.Listen("tcp", internalListenAddress)
 		if err != nil {
-			klog.Fatalf("Failed to listen on internal address: %v", err)
+			slog.Error("Failed to listen on internal address", "error", err)
+			os.Exit(1)
 		}
 
 		srv := &http.Server{Handler: h}
 
 		g.Add(func() error {
-			klog.InfoS("Listening for metrics and pprof", "address", l.Addr())
+			slog.Info("Listening for metrics and pprof", "address", l.Addr())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
-				klog.ErrorS(err, "Internal server stopped")
+				slog.Error("Internal server stopped", "error", err)
 				return err
 			}
 			return nil
@@ -279,9 +283,9 @@ func main() {
 
 	if err := g.Run(); err != nil {
 		if !errors.As(err, &run.SignalError{}) {
-			klog.ErrorS(err, "Server stopped")
+			slog.Error("Server stopped", "error", err)
 			os.Exit(1)
 		}
-		klog.Info("Caught signal; exiting gracefully...")
+		slog.Info("Caught signal; exiting gracefully...")
 	}
 }
