@@ -106,8 +106,8 @@ func main() {
 		Format: promslog.NewFormat(),
 	}
 
-	promslogConfig.Level.Set("info")
-	promslogConfig.Format.Set("logfmt")
+	promslogConfig.Level.Set("info") //nolint: errcheck // promslogConfig.Level.Set() will exit on error
+	promslogConfig.Format.Set("logfmt") //nolint: errcheck // promslogConfig.Level.Set() will exit on error
 	flagset.Var(promslogConfig.Level, "log.level", "Only log messages with the given severity or above. One of: [debug, info, warn, error]")
 	flagset.Var(promslogConfig.Format, "log.format", "Output format of log messages. One of: [logfmt, json]")
 
