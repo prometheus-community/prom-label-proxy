@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -230,7 +229,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		labelValues, err := hff.getLabelValues(r)
 		if err != nil {
-			slog.Error("Failed to extract labels from PostForm", "error", err, "source", "PostForm", "parameter", hff.ParameterName)
+			slog.Error("Failed to extract labels from PostForm", "error", err, "source", "queryParameter", "parameter", hff.ParameterName)
 			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
@@ -243,7 +242,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 		// Remove the param from the PostForm.
 		if r.Method == http.MethodPost {
 			if err := r.ParseForm(); err != nil {
-				slog.Error("Failed to parse the PostForm", "error", err, "source", "PostForm", "parameter", hff.ParameterName)
+				slog.Error("Failed to parse the PostForm", "error", err, "source", "queryParameter", "parameter", hff.ParameterName)
 				prometheusAPIError(w, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -257,7 +256,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			}
 		}
 
-		slog.Info("Extracted label from PostForm", "source", "PostForm", "parameter", hff.ParameterName, "label", hff.Label, "values", labelValues)
+		slog.Info("Extracted label from PostForm", "source", "parameter", "queryParameter", hff.ParameterName, "label", hff.Label, "values", labelValues)
 		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
@@ -460,8 +459,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	proxy.Transport = transport
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
-	proxy.ErrorLog = log.New(slogWriter{}, "", 0)
-
+	proxy.ErrorLog = slog.NewLogLogger(slog.Default().Handler(), slog.LevelError)
 	return r, nil
 }
 
@@ -480,7 +478,12 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 }
 
 func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
-	slog.Error("HTTP proxy error", "error", err)
+	slog.Error("HTTP proxy error", 
+        "error", err, 
+        "path", req.URL.Path, 
+        "method", req.Method,
+    )
+
 	if errors.Is(err, errModifyResponseFailed) {
 		rw.WriteHeader(http.StatusBadRequest)
 	}
@@ -784,14 +787,4 @@ func trimValues(slice []string) []string {
 	}
 
 	return slice
-}
-
-// slogWriter bridges standard log output to slog.
-type slogWriter struct{}
-
-func (w slogWriter) Write(b []byte) (int, error) {
-	// Trim the trailing newline that the standard log package adds
-	msg := strings.TrimSpace(string(b))
-	slog.Error("Reverse proxy internal error", "output", msg)
-	return len(b), nil
 }
