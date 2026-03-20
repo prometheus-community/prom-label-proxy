@@ -148,7 +148,7 @@ func WithRegexMatch() Option {
 type loggingResponseWriter struct {
 	http.ResponseWriter
 	statusCode    int
-	alreadyLogged bool 
+	alreadyLogged bool
 }
 
 // WriteHeader captures the status code before writing it to the underlying response writer.
@@ -486,14 +486,14 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-	
+
 	r.mux.ServeHTTP(lrw, req)
 
 	// log if it's an error AND it hasn't been logged yet
 	if lrw.statusCode >= 400 && !lrw.alreadyLogged {
 		slog.Debug("HTTP request failed (caught by multiplexer)",
 			"method", req.Method,
-			"path", req.URL.Path,
+			"path",   req.URL.Path,
 			"status", lrw.statusCode,
 		)
 	}
