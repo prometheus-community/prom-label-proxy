@@ -515,9 +515,9 @@ func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err err
 	}
 
 	slog.Error("HTTP proxy error",
-            "error", err,
-            "path", req.URL.Path,
-            "method", req.Method,
+		"error", err,
+		"path", req.URL.Path,
+		"method", req.Method,
 	)
 
 	if errors.Is(err, errModifyResponseFailed) {
