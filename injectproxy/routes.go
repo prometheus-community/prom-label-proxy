@@ -493,7 +493,7 @@ func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if lrw.statusCode >= 400 && !lrw.alreadyLogged {
 		slog.Debug("HTTP request failed (caught by multiplexer)",
 			"method", req.Method,
-			"path",   req.URL.Path,
+			"path", req.URL.Path,
 			"status", lrw.statusCode,
 		)
 	}
@@ -515,9 +515,9 @@ func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err err
 	}
 
 	slog.Error("HTTP proxy error", 
-        "error", err, 
-        "path", req.URL.Path, 
-        "method", req.Method,
+        	"error", err, 
+        	"path", req.URL.Path, 
+        	"method", req.Method,
     )
 
 	if errors.Is(err, errModifyResponseFailed) {
