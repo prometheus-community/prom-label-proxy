@@ -514,11 +514,11 @@ func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err err
 		lrw.alreadyLogged = true
 	}
 
-	slog.Error("HTTP proxy error", 
-        	"error", err, 
-        	"path", req.URL.Path, 
+	slog.Error("HTTP proxy error",
+        	"error", err,
+        	"path", req.URL.Path,
         	"method", req.Method,
-    )
+	)
 
 	if errors.Is(err, errModifyResponseFailed) {
 		rw.WriteHeader(http.StatusBadRequest)

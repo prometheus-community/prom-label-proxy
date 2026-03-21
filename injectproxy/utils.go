@@ -31,7 +31,7 @@ func prometheusAPIError(w http.ResponseWriter, errorMessage string, code int) {
 	slog.Debug("API error returned to client",
 			"status", code, 
 			"message", errorMessage,
-    )
+	)
 
 	res := map[string]string{"status": "error", "errorType": "prom-label-proxy", "error": errorMessage}
 
