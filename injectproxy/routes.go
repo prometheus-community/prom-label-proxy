@@ -509,7 +509,7 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 }
 
 func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err error) {
-	w.Header().Set("X-Proxy-Error-Logged", "true")
+	rw.Header().Set("X-Proxy-Error-Logged", "true")
 
 	slog.Error("HTTP proxy error",
 		"error", err,
