@@ -510,7 +510,7 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 }
 
 func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err error) {
-	if lrw, ok := w.(*loggingResponseWriter); ok {
+	if lrw, ok := rw.(*loggingResponseWriter); ok {
 		lrw.alreadyLogged = true
 	}
 
