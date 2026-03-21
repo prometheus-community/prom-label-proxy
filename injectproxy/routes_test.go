@@ -31,12 +31,12 @@ func checkParameterAbsent(param string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		kvs, err := url.ParseQuery(req.URL.RawQuery)
 		if err != nil {
-			prometheusAPIError(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
 			return
 		}
 
 		if len(kvs[param]) != 0 {
-			prometheusAPIError(w, fmt.Sprintf("unexpected parameter %q", param), http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, fmt.Sprintf("unexpected parameter %q", param), http.StatusInternalServerError)
 			return
 		}
 		next.ServeHTTP(w, req)
@@ -47,12 +47,12 @@ func checkFormParameterAbsent(param string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		err := req.ParseForm()
 		if err != nil {
-			prometheusAPIError(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
 			return
 		}
 		kvs := req.Form
 		if len(kvs[param]) != 0 {
-			prometheusAPIError(w, fmt.Sprintf("unexpected Form parameter %q", param), http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, fmt.Sprintf("unexpected Form parameter %q", param), http.StatusInternalServerError)
 			return
 		}
 		next.ServeHTTP(w, req)
@@ -64,13 +64,13 @@ func checkQueryHandler(body, key string, values ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		kvs, err := url.ParseQuery(req.URL.RawQuery)
 		if err != nil {
-			prometheusAPIError(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
 			return
 		}
 
 		// Verify that the client provides the parameter only once.
 		if len(kvs[key]) != len(values) {
-			prometheusAPIError(w, fmt.Sprintf("expected %d values of parameter %q, got %d", len(values), key, len(kvs[key])), http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, fmt.Sprintf("expected %d values of parameter %q, got %d", len(values), key, len(kvs[key])), http.StatusInternalServerError)
 			return
 		}
 
@@ -78,19 +78,19 @@ func checkQueryHandler(body, key string, values ...string) http.Handler {
 		sort.Strings(kvs[key])
 		for i := range values {
 			if kvs[key][i] != values[i] {
-				prometheusAPIError(w, fmt.Sprintf("expected parameter %q with value %q, got %q", key, values[i], kvs[key][i]), http.StatusInternalServerError)
+				prometheusAPIError(w, req,(w, fmt.Sprintf("expected parameter %q with value %q, got %q", key, values[i], kvs[key][i]), http.StatusInternalServerError)
 				return
 			}
 		}
 
 		buf, err := io.ReadAll(req.Body)
 		if err != nil {
-			prometheusAPIError(w, "failed to read body", http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, "failed to read body", http.StatusInternalServerError)
 			return
 		}
 
 		if string(buf) != body {
-			prometheusAPIError(w, fmt.Sprintf("expected body %q, got %q", body, string(buf)), http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, fmt.Sprintf("expected body %q, got %q", body, string(buf)), http.StatusInternalServerError)
 			return
 		}
 
@@ -104,20 +104,20 @@ func checkFormHandler(key string, values ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		err := req.ParseForm()
 		if err != nil {
-			prometheusAPIError(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
 			return
 		}
 		kvs := req.PostForm
 		// Verify that the client provides the parameter only once.
 		if len(kvs[key]) != len(values) {
-			prometheusAPIError(w, fmt.Sprintf("expected %d values of parameter %q, got %d", len(values), key, len(kvs[key])), http.StatusInternalServerError)
+			prometheusAPIError(w, req,(w, fmt.Sprintf("expected %d values of parameter %q, got %d", len(values), key, len(kvs[key])), http.StatusInternalServerError)
 			return
 		}
 		sort.Strings(values)
 		sort.Strings(kvs[key])
 		for i := range values {
 			if kvs[key][i] != values[i] {
-				prometheusAPIError(w, fmt.Sprintf("expected parameter %q with value %q, got %q", key, values[i], kvs[key][i]), http.StatusInternalServerError)
+				prometheusAPIError(w, req,(w, fmt.Sprintf("expected parameter %q with value %q, got %q", key, values[i], kvs[key][i]), http.StatusInternalServerError)
 				return
 			}
 		}
