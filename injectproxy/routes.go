@@ -148,7 +148,6 @@ func WithRegexMatch() Option {
 type loggingResponseWriter struct {
 	http.ResponseWriter
 	statusCode    int
-	alreadyLogged bool
 }
 
 // WriteHeader captures the status code before writing it to the underlying response writer.
@@ -251,7 +250,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 		labelValues, err := hff.getLabelValues(r)
 		if err != nil {
 			slog.Error("Failed to extract labels from PostForm", "error", err, "source", "queryParameter", "parameter", hff.ParameterName)
-			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
+			prometheusAPIError(w, r, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
 
@@ -264,7 +263,7 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 		if r.Method == http.MethodPost {
 			if err := r.ParseForm(); err != nil {
 				slog.Error("Failed to parse the PostForm", "error", err, "source", "queryParameter", "parameter", hff.ParameterName)
-				prometheusAPIError(w, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
+				prometheusAPIError(w, r, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
 				return
 			}
 			if r.PostForm.Get(hff.ParameterName) != "" {
@@ -309,7 +308,7 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 		labelValues, err := hhe.getLabelValues(r)
 		if err != nil {
 			slog.Error("Failed to extract labels from header", "error", err, "source", "header", "header", hhe.Name)
-			prometheusAPIError(w, humanFriendlyErrorMessage(err), http.StatusBadRequest)
+			prometheusAPIError(w, r, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
 
@@ -490,8 +489,8 @@ func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.mux.ServeHTTP(lrw, req)
 
 	// log if it's an error AND it hasn't been logged yet
-	if lrw.statusCode >= 400 && !lrw.alreadyLogged {
-		slog.Debug("HTTP request failed (caught by multiplexer)",
+	if lrw.statusCode >= 400 && lrw.Header().Get("X-Proxy-Error-Logged") == "" {
+		slog.Debug("HTTP request failed",
 			"method", req.Method,
 			"path", req.URL.Path,
 			"status", lrw.statusCode,
@@ -510,9 +509,7 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 }
 
 func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err error) {
-	if lrw, ok := rw.(*loggingResponseWriter); ok {
-		lrw.alreadyLogged = true
-	}
+	w.Header().Set("X-Proxy-Error-Logged", "true")
 
 	slog.Error("HTTP proxy error",
 		"error", err,
@@ -540,7 +537,7 @@ func enforceMethods(h http.HandlerFunc, methods ...string) http.HandlerFunc {
 func (r *routes) errorIfRegexpMatch(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if r.regexMatch {
-			prometheusAPIError(w, "support for regex match not implemented", http.StatusNotImplemented)
+			prometheusAPIError(w, r, "support for regex match not implemented", http.StatusNotImplemented)
 			return
 		}
 
@@ -599,7 +596,7 @@ func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	matcher, err := r.newLabelMatcher(MustLabelValues(req.Context())...)
 	if err != nil {
-		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+		prometheusAPIError(w, r, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -614,11 +611,11 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrIllegalLabelMatcher):
-			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+			prometheusAPIError(w, r, err.Error(), http.StatusBadRequest)
 		case errors.Is(err, ErrQueryParse):
-			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+			prometheusAPIError(w, r, err.Error(), http.StatusBadRequest)
 		case errors.Is(err, ErrEnforceLabel):
-			prometheusAPIError(w, err.Error(), http.StatusInternalServerError)
+			prometheusAPIError(w, r, err.Error(), http.StatusInternalServerError)
 		}
 
 		return
@@ -629,17 +626,17 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 	// Enforce the query in the POST body if needed.
 	if req.Method == http.MethodPost {
 		if err := req.ParseForm(); err != nil {
-			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+			prometheusAPIError(w, r, err.Error(), http.StatusBadRequest)
 		}
 		q, found2, err = enforceQueryValues(e, req.PostForm)
 		if err != nil {
 			switch {
 			case errors.Is(err, ErrIllegalLabelMatcher):
-				prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+				prometheusAPIError(w, r, err.Error(), http.StatusBadRequest)
 			case errors.Is(err, ErrQueryParse):
-				prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+				prometheusAPIError(w, r, err.Error(), http.StatusBadRequest)
 			case errors.Is(err, ErrEnforceLabel):
-				prometheusAPIError(w, err.Error(), http.StatusInternalServerError)
+				prometheusAPIError(w, r, err.Error(), http.StatusInternalServerError)
 			}
 
 			return
@@ -719,13 +716,13 @@ func (r *routes) newLabelMatcher(vals ...string) (*labels.Matcher, error) {
 func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	matcher, err := r.newLabelMatcher(MustLabelValues(req.Context())...)
 	if err != nil {
-		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+		prometheusAPIError(w, r, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	q := req.URL.Query()
 	if err := injectMatcher(q, matcher); err != nil {
-		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+		prometheusAPIError(w, r, err.Error(), http.StatusBadRequest)
 		return
 	}
 
