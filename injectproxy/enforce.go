@@ -26,6 +26,7 @@ import (
 type PromQLEnforcer struct {
 	labelMatchers  map[string]*labels.Matcher
 	errorOnReplace bool
+	parserOptions  parser.Options
 }
 
 func NewPromQLEnforcer(errorOnReplace bool, ms ...*labels.Matcher) *PromQLEnforcer {
@@ -38,6 +39,7 @@ func NewPromQLEnforcer(errorOnReplace bool, ms ...*labels.Matcher) *PromQLEnforc
 	return &PromQLEnforcer{
 		labelMatchers:  entries,
 		errorOnReplace: errorOnReplace,
+		parserOptions:  defaultParserOptions(),
 	}
 }
 
@@ -52,9 +54,16 @@ var (
 	ErrEnforceLabel = errors.New("failed to enforce label")
 )
 
+// SetParserOptions sets custom parser options for the PromQL enforcer.
+func (ms *PromQLEnforcer) SetParserOptions(opts parser.Options) *PromQLEnforcer {
+	ms.parserOptions = opts
+	return ms
+}
+
 // Enforce the label matchers in a PromQL expression.
 func (ms *PromQLEnforcer) Enforce(q string) (string, error) {
-	expr, err := parser.ParseExpr(q)
+	p := parser.NewParser(ms.parserOptions)
+	expr, err := p.ParseExpr(q)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrQueryParse, err)
 	}
@@ -293,4 +302,8 @@ func (ms PromQLEnforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.M
 	}
 
 	return res, nil
+}
+
+func defaultParserOptions() parser.Options {
+	return parser.Options{}
 }
