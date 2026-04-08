@@ -572,7 +572,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	e := NewPromQLEnforcer(r.errorOnReplace, matcher).SetParserOptions(r.parserOpts)
+	e := NewPromQLEnforcerWithOptions(r.errorOnReplace, r.parserOpts, matcher)
 
 	// The `query` can come in the URL query string and/or the POST body.
 	// For this reason, we need to try to enforcing in both places.

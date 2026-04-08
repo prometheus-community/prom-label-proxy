@@ -30,6 +30,10 @@ type PromQLEnforcer struct {
 }
 
 func NewPromQLEnforcer(errorOnReplace bool, ms ...*labels.Matcher) *PromQLEnforcer {
+	return NewPromQLEnforcerWithOptions(errorOnReplace, defaultParserOptions(), ms...)
+}
+
+func NewPromQLEnforcerWithOptions(errorOnReplace bool, parserOptions parser.Options, ms ...*labels.Matcher) *PromQLEnforcer {
 	entries := make(map[string]*labels.Matcher)
 
 	for _, matcher := range ms {
@@ -39,7 +43,7 @@ func NewPromQLEnforcer(errorOnReplace bool, ms ...*labels.Matcher) *PromQLEnforc
 	return &PromQLEnforcer{
 		labelMatchers:  entries,
 		errorOnReplace: errorOnReplace,
-		parserOptions:  defaultParserOptions(),
+		parserOptions:  parserOptions,
 	}
 }
 
@@ -54,11 +58,6 @@ var (
 	ErrEnforceLabel = errors.New("failed to enforce label")
 )
 
-// SetParserOptions sets custom parser options for the PromQL enforcer.
-func (ms *PromQLEnforcer) SetParserOptions(opts parser.Options) *PromQLEnforcer {
-	ms.parserOptions = opts
-	return ms
-}
 
 // Enforce the label matchers in a PromQL expression.
 func (ms *PromQLEnforcer) Enforce(q string) (string, error) {
