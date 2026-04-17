@@ -18,7 +18,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -31,6 +31,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/common/promslog"
 
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 )
@@ -99,10 +100,24 @@ func main() {
 	flagset.BoolVar(&promQLDurationExpressionParsing, "enable-promql-duration-expression-parsing", false, "When true, the proxy supports arithmetic for durations in PromQL expressions.")
 	flagset.BoolVar(&promQLExperimentalFunctions, "enable-promql-experimental-functions", false, "When true, the proxy supports experimental functions in PromQL expressions.")
 
+	promslogConfig := &promslog.Config{
+		Level:  promslog.NewLevel(),
+		Format: promslog.NewFormat(),
+	}
+
+	promslogConfig.Level.Set("info")    //nolint: errcheck // promslogConfig.Level.Set() will exit on error
+	promslogConfig.Format.Set("logfmt") //nolint: errcheck // promslogConfig.Level.Set() will exit on error
+	flagset.Var(promslogConfig.Level, "log.level", "Only log messages with the given severity or above. One of: [debug, info, warn, error]")
+	flagset.Var(promslogConfig.Format, "log.format", "Output format of log messages. One of: [logfmt, json]")
+
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
+	logger := promslog.New(promslogConfig)
+	slog.SetDefault(logger)
+
 	if label == "" {
-		log.Fatalf("-label flag cannot be empty")
+		slog.Error("-label flag cannot be empty")
+		os.Exit(1)
 	}
 
 	if len(labelValues) == 0 && queryParam == "" && headerName == "" {
@@ -111,19 +126,23 @@ func main() {
 
 	if len(labelValues) > 0 {
 		if queryParam != "" || headerName != "" {
-			log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
+			slog.Error("at most one of -query-param, -header-name and -label-value must be set")
+			os.Exit(1)
 		}
 	} else if queryParam != "" && headerName != "" {
-		log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
+		slog.Error("at most one of -query-param, -header-name and -label-value must be set")
+		os.Exit(1)
 	}
 
 	upstreamURL, err := url.Parse(upstream)
 	if err != nil {
-		log.Fatalf("Failed to build parse upstream URL: %v", err)
+		slog.Error("Failed to build parse upstream URL", "error", err)
+		os.Exit(1)
 	}
 
 	if upstreamURL.Scheme != "http" && upstreamURL.Scheme != "https" {
-		log.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
+		slog.Error("Invalid scheme for upstream URL, only 'http' and 'https' are supported", "upstream", upstream)
+		os.Exit(1)
 	}
 
 	reg := prometheus.NewRegistry()
@@ -164,18 +183,19 @@ func main() {
 	if regexMatch {
 		if len(labelValues) > 0 {
 			if len(labelValues) > 1 {
-				log.Fatalf("Regex match is limited to one label value")
+				slog.Error("Regex match is limited to one label value")
+				os.Exit(1)
 			}
 
 			compiledRegex, err := regexp.Compile(labelValues[0])
 			if err != nil {
-				log.Fatalf("Invalid regexp: %v", err.Error())
-				return
+				slog.Error("Invalid regexp", "error", err)
+				os.Exit(1)
 			}
 
 			if compiledRegex.MatchString("") {
-				log.Fatalf("Regex should not match empty string")
-				return
+				slog.Error("Regex should not match empty string")
+				os.Exit(1)
 			}
 		}
 
@@ -193,11 +213,11 @@ func main() {
 	var extractLabeler injectproxy.ExtractLabeler
 	switch {
 	case len(labelValues) > 0:
-		extractLabeler = injectproxy.StaticLabelEnforcer(labelValues)
+		extractLabeler = injectproxy.StaticLabelEnforcer{Label: label, LabelValues: labelValues}
 	case queryParam != "":
-		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam}
+		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam, Label: label}
 	case headerName != "":
-		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName), ParseListSyntax: headerUsesListSyntax}
+		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName), Label: label, ParseListSyntax: headerUsesListSyntax}
 	}
 
 	var g run.Group
@@ -205,7 +225,8 @@ func main() {
 		// Run the insecure HTTP server.
 		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
 		if err != nil {
-			log.Fatalf("Failed to create injectproxy Routes: %v", err)
+			slog.Error("Failed to create injectproxy Routes", "error", err)
+			os.Exit(1)
 		}
 
 		mux := http.NewServeMux()
@@ -213,15 +234,16 @@ func main() {
 
 		l, err := net.Listen("tcp", insecureListenAddress)
 		if err != nil {
-			log.Fatalf("Failed to listen on insecure address: %v", err)
+			slog.Error("Failed to listen on insecure address", "error", err)
+			os.Exit(1)
 		}
 
 		srv := &http.Server{Handler: mux}
 
 		g.Add(func() error {
-			log.Printf("Listening insecurely on %v", l.Addr())
+			slog.Info("Listening insecurely on", "address", l.Addr())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
-				log.Printf("Server stopped with %v", err)
+				slog.Error("Server stopped", "error", err)
 				return err
 			}
 			return nil
@@ -240,15 +262,16 @@ func main() {
 		// Run the HTTP server.
 		l, err := net.Listen("tcp", internalListenAddress)
 		if err != nil {
-			log.Fatalf("Failed to listen on internal address: %v", err)
+			slog.Error("Failed to listen on internal address", "error", err)
+			os.Exit(1)
 		}
 
 		srv := &http.Server{Handler: h}
 
 		g.Add(func() error {
-			log.Printf("Listening on %v for metrics and pprof", l.Addr())
+			slog.Info("Listening for metrics and pprof", "address", l.Addr())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
-				log.Printf("Internal server stopped with %v", err)
+				slog.Error("Internal server stopped", "error", err)
 				return err
 			}
 			return nil
@@ -261,9 +284,9 @@ func main() {
 
 	if err := g.Run(); err != nil {
 		if !errors.As(err, &run.SignalError{}) {
-			log.Printf("Server stopped with %v", err)
+			slog.Error("Server stopped", "error", err)
 			os.Exit(1)
 		}
-		log.Print("Caught signal; exiting gracefully...")
+		slog.Info("Caught signal; exiting gracefully...")
 	}
 }
