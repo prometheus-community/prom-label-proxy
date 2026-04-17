@@ -58,7 +58,6 @@ var (
 	ErrEnforceLabel = errors.New("failed to enforce label")
 )
 
-
 // Enforce the label matchers in a PromQL expression.
 func (ms *PromQLEnforcer) Enforce(q string) (string, error) {
 	p := parser.NewParser(ms.parserOptions)

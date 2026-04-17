@@ -690,7 +690,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	}
 
 	q := req.URL.Query()
-	if err := injectMatcher(q, matcher, r.parserOpts); err != nil {
+	if err := r.injectMatcher(q, matcher); err != nil {
 		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -702,7 +702,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		}
 
 		q = req.PostForm
-		if err := injectMatcher(q, matcher, r.parserOpts); err != nil {
+		if err := r.injectMatcher(q, matcher); err != nil {
 			return
 		}
 
@@ -716,7 +716,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
 }
 
-func injectMatcher(q url.Values, matcher *labels.Matcher, parserOpts parser.Options) error {
+func (r *routes) injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
@@ -724,7 +724,7 @@ func injectMatcher(q url.Values, matcher *labels.Matcher, parserOpts parser.Opti
 	}
 
 	// Inject label into existing matchers.
-	p := parser.NewParser(parserOpts)
+	p := parser.NewParser(r.parserOpts)
 	for i, m := range matchers {
 		ms, err := p.ParseMetricSelector(m)
 		if err != nil {
