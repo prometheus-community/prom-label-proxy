@@ -164,6 +164,8 @@ func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
 		lrw.statusCode = http.StatusOK
 	}
 	return lrw.ResponseWriter.Write(b)
+}
+
 // WithPromqlDurationExpressionParsing enables parsing of duration expressions in the PromQL parser.
 func WithPromqlDurationExpressionParsing() Option {
 	return optionFunc(func(o *options) {
