@@ -54,6 +54,7 @@ type routes struct {
 	errorOnReplace        bool
 	regexMatch            bool
 	rulesWithActiveAlerts bool
+	parserOpts            parser.Options
 
 	logger *log.Logger
 }
@@ -68,6 +69,7 @@ type options struct {
 	regexMatch               bool
 	rulesWithActiveAlerts    bool
 	labelMatchersForRulesAPI bool
+	parserOptions            parser.Options
 }
 
 type Option interface {
@@ -143,6 +145,20 @@ func WithLabelMatchersForRulesAPI() Option {
 func WithRegexMatch() Option {
 	return optionFunc(func(o *options) {
 		o.regexMatch = true
+	})
+}
+
+// WithPromqlDurationExpressionParsing enables parsing of duration expressions in the PromQL parser.
+func WithPromqlDurationExpressionParsing() Option {
+	return optionFunc(func(o *options) {
+		o.parserOptions.ExperimentalDurationExpr = true
+	})
+}
+
+// WithPromqlExperimentalFunctions enables parsing of experimental functions in the PromQL parser.
+func WithPromqlExperimentalFunctions() Option {
+	return optionFunc(func(o *options) {
+		o.parserOptions.EnableExperimentalFunctions = true
 	})
 }
 
@@ -339,6 +355,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		regexMatch:            opt.regexMatch,
 		rulesWithActiveAlerts: opt.rulesWithActiveAlerts,
 		logger:                log.Default(),
+		parserOpts:            opt.parserOptions,
 	}
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
 
@@ -555,7 +572,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	e := NewPromQLEnforcer(r.errorOnReplace, matcher)
+	e := NewPromQLEnforcerWithOptions(r.errorOnReplace, r.parserOpts, matcher)
 
 	// The `query` can come in the URL query string and/or the POST body.
 	// For this reason, we need to try to enforcing in both places.
@@ -673,7 +690,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	}
 
 	q := req.URL.Query()
-	if err := injectMatcher(q, matcher); err != nil {
+	if err := r.injectMatcher(q, matcher); err != nil {
 		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -685,7 +702,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		}
 
 		q = req.PostForm
-		if err := injectMatcher(q, matcher); err != nil {
+		if err := r.injectMatcher(q, matcher); err != nil {
 			return
 		}
 
@@ -699,7 +716,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
 }
 
-func injectMatcher(q url.Values, matcher *labels.Matcher) error {
+func (r *routes) injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
@@ -707,8 +724,9 @@ func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	}
 
 	// Inject label into existing matchers.
+	p := parser.NewParser(r.parserOpts)
 	for i, m := range matchers {
-		ms, err := parser.ParseMetricSelector(m)
+		ms, err := p.ParseMetricSelector(m)
 		if err != nil {
 			return err
 		}
