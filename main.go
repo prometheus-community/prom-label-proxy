@@ -32,7 +32,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/common/promslog"
-	"github.com/prometheus/prometheus/promql/parser"
 
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 )
