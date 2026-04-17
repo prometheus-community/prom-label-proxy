@@ -54,6 +54,12 @@ type routes struct {
 	errorOnReplace        bool
 	regexMatch            bool
 	rulesWithActiveAlerts bool
+<<<<<<< add-logging
+=======
+	parserOpts            parser.Options
+
+	logger *log.Logger
+>>>>>>> main
 }
 
 type options struct {
@@ -66,6 +72,7 @@ type options struct {
 	regexMatch               bool
 	rulesWithActiveAlerts    bool
 	labelMatchersForRulesAPI bool
+	parserOptions            parser.Options
 }
 
 type Option interface {
@@ -144,6 +151,7 @@ func WithRegexMatch() Option {
 	})
 }
 
+<<<<<<< add-logging
 // loggingResponseWriter wraps http.ResponseWriter to capture the HTTP status code and prevent double-logging.
 type loggingResponseWriter struct {
 	http.ResponseWriter
@@ -162,6 +170,20 @@ func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
 		lrw.statusCode = http.StatusOK
 	}
 	return lrw.ResponseWriter.Write(b)
+=======
+// WithPromqlDurationExpressionParsing enables parsing of duration expressions in the PromQL parser.
+func WithPromqlDurationExpressionParsing() Option {
+	return optionFunc(func(o *options) {
+		o.parserOptions.ExperimentalDurationExpr = true
+	})
+}
+
+// WithPromqlExperimentalFunctions enables parsing of experimental functions in the PromQL parser.
+func WithPromqlExperimentalFunctions() Option {
+	return optionFunc(func(o *options) {
+		o.parserOptions.EnableExperimentalFunctions = true
+	})
+>>>>>>> main
 }
 
 // mux abstracts away the behavior we expect from the http.ServeMux type in this package.
@@ -367,6 +389,11 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		errorOnReplace:        opt.errorOnReplace,
 		regexMatch:            opt.regexMatch,
 		rulesWithActiveAlerts: opt.rulesWithActiveAlerts,
+<<<<<<< add-logging
+=======
+		logger:                log.Default(),
+		parserOpts:            opt.parserOptions,
+>>>>>>> main
 	}
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
 
@@ -600,7 +627,7 @@ func (r *routes) query(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	e := NewPromQLEnforcer(r.errorOnReplace, matcher)
+	e := NewPromQLEnforcerWithOptions(r.errorOnReplace, r.parserOpts, matcher)
 
 	// The `query` can come in the URL query string and/or the POST body.
 	// For this reason, we need to try to enforcing in both places.
@@ -721,8 +748,13 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	}
 
 	q := req.URL.Query()
+<<<<<<< add-logging
 	if err := injectMatcher(q, matcher); err != nil {
 		prometheusAPIError(w, req, err.Error(), http.StatusBadRequest)
+=======
+	if err := r.injectMatcher(q, matcher); err != nil {
+		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+>>>>>>> main
 		return
 	}
 
@@ -733,7 +765,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		}
 
 		q = req.PostForm
-		if err := injectMatcher(q, matcher); err != nil {
+		if err := r.injectMatcher(q, matcher); err != nil {
 			return
 		}
 
@@ -747,9 +779,13 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
 }
 
+<<<<<<< add-logging
 func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	origMatchers := append([]string(nil), q[matchersParam]...)
 
+=======
+func (r *routes) injectMatcher(q url.Values, matcher *labels.Matcher) error {
+>>>>>>> main
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
@@ -758,8 +794,9 @@ func injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	}
 
 	// Inject label into existing matchers.
+	p := parser.NewParser(r.parserOpts)
 	for i, m := range matchers {
-		ms, err := parser.ParseMetricSelector(m)
+		ms, err := p.ParseMetricSelector(m)
 		if err != nil {
 			slog.Error("Failed to parse metric selector during matcher injection", "error", err, "matcher", m)
 			return err

@@ -31,8 +31,11 @@ import (
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+<<<<<<< add-logging
 	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/prometheus/promql/parser"
+=======
+>>>>>>> main
 
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 )
@@ -203,6 +206,14 @@ func main() {
 		opts = append(opts, injectproxy.WithRegexMatch())
 	}
 
+	if promQLDurationExpressionParsing {
+		opts = append(opts, injectproxy.WithPromqlDurationExpressionParsing())
+	}
+
+	if promQLExperimentalFunctions {
+		opts = append(opts, injectproxy.WithPromqlExperimentalFunctions())
+	}
+
 	var extractLabeler injectproxy.ExtractLabeler
 	switch {
 	case len(labelValues) > 0:
@@ -212,9 +223,6 @@ func main() {
 	case headerName != "":
 		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName), Label: label, ParseListSyntax: headerUsesListSyntax}
 	}
-
-	parser.ExperimentalDurationExpr = promQLDurationExpressionParsing
-	parser.EnableExperimentalFunctions = promQLExperimentalFunctions
 
 	var g run.Group
 	{
