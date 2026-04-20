@@ -162,6 +162,13 @@ func WithPromqlExperimentalFunctions() Option {
 	})
 }
 
+// WithPromqlExtendedRangeSelectors enables extended range selectors in the PromQL parser.
+func WithPromqlExtendedRangeSelectors() Option {
+	return optionFunc(func(o *options) {
+		o.parserOptions.EnableExtendedRangeSelectors = true
+	})
+}
+
 // mux abstracts away the behavior we expect from the http.ServeMux type in this package.
 type mux interface {
 	http.Handler
