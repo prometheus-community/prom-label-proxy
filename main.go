@@ -74,6 +74,7 @@ func main() {
 		promQLDurationExpressionParsing  bool
 		promQLExperimentalFunctions      bool
 		promQLExtendedRangeSelectors     bool
+		promQLBinopFillModifiers         bool
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -100,6 +101,7 @@ func main() {
 	flagset.BoolVar(&promQLDurationExpressionParsing, "enable-promql-duration-expression-parsing", false, "When true, the proxy supports arithmetic for durations in PromQL expressions.")
 	flagset.BoolVar(&promQLExperimentalFunctions, "enable-promql-experimental-functions", false, "When true, the proxy supports experimental functions in PromQL expressions.")
 	flagset.BoolVar(&promQLExtendedRangeSelectors, "enable-promql-extended-range-selectors", false, "When true, the proxy supports extended range selectors in PromQL expressions.")
+	flagset.BoolVar(&promQLBinopFillModifiers, "enable-promql-binop-fill-modifiers", false, "When true, the proxy supports binary operation fill modifiers in PromQL expressions.")
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
@@ -194,6 +196,10 @@ func main() {
 
 	if promQLExtendedRangeSelectors {
 		opts = append(opts, injectproxy.WithPromqlExtendedRangeSelectors())
+	}
+
+	if promQLBinopFillModifiers {
+		opts = append(opts, injectproxy.WithPromqlBinopFillModifiers())
 	}
 
 	var extractLabeler injectproxy.ExtractLabeler

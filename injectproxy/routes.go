@@ -169,6 +169,13 @@ func WithPromqlExtendedRangeSelectors() Option {
 	})
 }
 
+// WithPromqlBinopFillModifiers enables binary operation fill modifiers in the PromQL parser.
+func WithPromqlBinopFillModifiers() Option {
+	return optionFunc(func(o *options) {
+		o.parserOptions.EnableBinopFillModifiers = true
+	})
+}
+
 // mux abstracts away the behavior we expect from the http.ServeMux type in this package.
 type mux interface {
 	http.Handler
