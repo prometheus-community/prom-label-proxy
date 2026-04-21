@@ -71,10 +71,10 @@ func main() {
 		headerUsesListSyntax            bool
 		rulesWithActiveAlerts           bool
 		labelMatchersForRulesAPI        bool
-		promQLDurationExpressionParsing  bool
-		promQLExperimentalFunctions      bool
-		promQLExtendedRangeSelectors     bool
-		promQLBinopFillModifiers         bool
+		promQLDurationExpressionParsing bool
+		promQLExperimentalFunctions     bool
+		promQLExtendedRangeSelectors    bool
+		promQLBinopFillModifiers        bool
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
