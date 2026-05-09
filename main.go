@@ -147,7 +147,7 @@ func main() {
 	}
 
 	if upstreamURL.Scheme != "http" && upstreamURL.Scheme != "https" {
-			fatal("Invalid scheme for upstream URL, only 'http' and 'https' are supported", "upstream", upstream)
+		fatal("Invalid scheme for upstream URL, only 'http' and 'https' are supported", "upstream", upstream)
 	}
 
 	reg := prometheus.NewRegistry()
