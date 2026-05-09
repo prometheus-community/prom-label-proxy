@@ -54,6 +54,12 @@ func (i *arrayFlags) Set(value string) error {
 	return nil
 }
 
+// fatal logs an error message with attributes and exits the program.
+func fatal(msg string, args ...any) {
+	slog.Error(msg, args...)
+	os.Exit(1)
+}
+
 func main() {
 	var (
 		insecureListenAddress           string
@@ -120,8 +126,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	if label == "" {
-		slog.Error("-label flag cannot be empty")
-		os.Exit(1)
+		fatal("-label flag cannot be empty")
 	}
 
 	if len(labelValues) == 0 && queryParam == "" && headerName == "" {
@@ -130,23 +135,19 @@ func main() {
 
 	if len(labelValues) > 0 {
 		if queryParam != "" || headerName != "" {
-			slog.Error("at most one of -query-param, -header-name and -label-value must be set")
-			os.Exit(1)
+			fatal("at most one of -query-param, -header-name and -label-value must be set")
 		}
 	} else if queryParam != "" && headerName != "" {
-		slog.Error("at most one of -query-param, -header-name and -label-value must be set")
-		os.Exit(1)
+		fatal("at most one of -query-param, -header-name and -label-value must be set")
 	}
 
 	upstreamURL, err := url.Parse(upstream)
 	if err != nil {
-		slog.Error("Failed to build parse upstream URL", "error", err)
-		os.Exit(1)
+		fatal("Failed to build parse upstream URL", "error", err)
 	}
 
 	if upstreamURL.Scheme != "http" && upstreamURL.Scheme != "https" {
-		slog.Error("Invalid scheme for upstream URL, only 'http' and 'https' are supported", "upstream", upstream)
-		os.Exit(1)
+			fatal("Invalid scheme for upstream URL, only 'http' and 'https' are supported", "upstream", upstream)
 	}
 
 	reg := prometheus.NewRegistry()
@@ -187,19 +188,16 @@ func main() {
 	if regexMatch {
 		if len(labelValues) > 0 {
 			if len(labelValues) > 1 {
-				slog.Error("Regex match is limited to one label value")
-				os.Exit(1)
+				fatal("Regex match is limited to one label value")
 			}
 
 			compiledRegex, err := regexp.Compile(labelValues[0])
 			if err != nil {
-				slog.Error("Invalid regexp", "error", err)
-				os.Exit(1)
+				fatal("Invalid regexp", "error", err)
 			}
 
 			if compiledRegex.MatchString("") {
-				slog.Error("Regex should not match empty string")
-				os.Exit(1)
+				fatal("Regex should not match empty string")
 			}
 		}
 
@@ -237,8 +235,7 @@ func main() {
 		// Run the insecure HTTP server.
 		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
 		if err != nil {
-			slog.Error("Failed to create injectproxy Routes", "error", err)
-			os.Exit(1)
+			fatal("Failed to create injectproxy Routes", "error", err)
 		}
 
 		mux := http.NewServeMux()
@@ -246,8 +243,7 @@ func main() {
 
 		l, err := net.Listen("tcp", insecureListenAddress)
 		if err != nil {
-			slog.Error("Failed to listen on insecure address", "error", err)
-			os.Exit(1)
+			fatal("Failed to listen on insecure address", "error", err)
 		}
 
 		srv := &http.Server{Handler: mux}
@@ -274,8 +270,7 @@ func main() {
 		// Run the HTTP server.
 		l, err := net.Listen("tcp", internalListenAddress)
 		if err != nil {
-			slog.Error("Failed to listen on internal address", "error", err)
-			os.Exit(1)
+			fatal("Failed to listen on internal address", "error", err)
 		}
 
 		srv := &http.Server{Handler: h}
@@ -296,8 +291,7 @@ func main() {
 
 	if err := g.Run(); err != nil {
 		if !errors.As(err, &run.SignalError{}) {
-			slog.Error("Server stopped", "error", err)
-			os.Exit(1)
+			fatal("Server stopped", "error", err)
 		}
 		slog.Info("Caught signal; exiting gracefully...")
 	}

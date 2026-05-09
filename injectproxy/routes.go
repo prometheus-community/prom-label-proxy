@@ -279,7 +279,6 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		labelValues, err := hff.getLabelValues(r)
 		if err != nil {
-			slog.Error("Failed to extract labels from PostForm", "error", err, "source", "queryParameter", "parameter", hff.ParameterName)
 			prometheusAPIError(w, r, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
@@ -292,7 +291,6 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 		// Remove the param from the PostForm.
 		if r.Method == http.MethodPost {
 			if err := r.ParseForm(); err != nil {
-				slog.Error("Failed to parse the PostForm", "error", err, "source", "queryParameter", "parameter", hff.ParameterName)
 				prometheusAPIError(w, r, fmt.Sprintf("Failed to parse the PostForm: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -306,7 +304,6 @@ func (hff HTTPFormEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 			}
 		}
 
-		slog.Info("Extracted label from PostForm", "source", "parameter", "queryParameter", hff.ParameterName, "label", hff.Label, "values", labelValues)
 		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
@@ -337,12 +334,10 @@ func (hhe HTTPHeaderEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		labelValues, err := hhe.getLabelValues(r)
 		if err != nil {
-			slog.Error("Failed to extract labels from header", "error", err, "source", "header", "header", hhe.Name)
 			prometheusAPIError(w, r, humanFriendlyErrorMessage(err), http.StatusBadRequest)
 			return
 		}
 
-		slog.Info("Extracted label from header", "source", "header", "header", hhe.Name, "label", hhe.Label, "values", labelValues)
 		next.ServeHTTP(w, r.WithContext(WithLabelValues(r.Context(), labelValues)))
 	})
 }
@@ -372,7 +367,6 @@ type StaticLabelEnforcer struct {
 // ExtractLabel implements the ExtractLabeler interface.
 func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("Extracted static label", "source", "static", "label", sle.Label, "values", sle.LabelValues)
 		next(w, r.WithContext(WithLabelValues(r.Context(), sle.LabelValues)))
 	})
 }
@@ -698,11 +692,9 @@ func enforceQueryValues(e *PromQLEnforcer, v url.Values) (values string, noQuery
 
 	q, err := e.Enforce(origQuery)
 	if err != nil {
-		slog.Error("Failed to enforce query", "error", err, "query", origQuery)
 		return "", true, err
 	}
 
-	slog.Info("Successfully enforced query", "originalQuery", origQuery, "enforcedQuery", q)
 	v.Set(queryParam, q)
 
 	return v.Encode(), true, nil
@@ -779,11 +771,9 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *routes) injectMatcher(q url.Values, matcher *labels.Matcher) error {
-	origMatchers := append([]string(nil), q[matchersParam]...)
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
 		q.Set(matchersParam, matchersToString(matcher))
-		slog.Info("Successfully injected matcher", "originalMatchers", origMatchers, "enforcedMatchers", q[matchersParam])
 		return nil
 	}
 
@@ -792,14 +782,12 @@ func (r *routes) injectMatcher(q url.Values, matcher *labels.Matcher) error {
 	for i, m := range matchers {
 		ms, err := p.ParseMetricSelector(m)
 		if err != nil {
-			slog.Error("Failed to parse metric selector during matcher injection", "error", err, "matcher", m)
 			return err
 		}
 
 		matchers[i] = matchersToString(append(ms, matcher)...)
 	}
 	q[matchersParam] = matchers
-	slog.Info("Successfully injected matchers", "originalMatchers", origMatchers, "enforcedMatchers", q[matchersParam])
 
 	return nil
 }
