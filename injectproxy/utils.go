@@ -15,18 +15,27 @@ package injectproxy
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 )
 
-func prometheusAPIError(w http.ResponseWriter, errorMessage string, code int) {
+func prometheusAPIError(w http.ResponseWriter, req *http.Request, errorMessage string, code int) {
+	w.Header().Set("X-Proxy-Error-Logged", "true")
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
 
+	slog.Debug("API error returned to client",
+		"status", code,
+		"message", errorMessage,
+		"path", req.URL.Path,
+		"method", req.Method,
+	)
+
 	res := map[string]string{"status": "error", "errorType": "prom-label-proxy", "error": errorMessage}
 
 	if err := json.NewEncoder(w).Encode(res); err != nil {
-		log.Printf("error: Failed to encode json: %v", err)
+		slog.Error("Failed to encode json", "error", err)
 	}
 }

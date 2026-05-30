@@ -137,11 +137,11 @@ const silID = "802146e0-1f7a-42a6-ab0e-1e631479970b"
 func getSilenceWithoutLabel() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != "GET" {
-			prometheusAPIError(w, "invalid method: "+req.Method, http.StatusInternalServerError)
+			prometheusAPIError(w, req, "invalid method: "+req.Method, http.StatusInternalServerError)
 			return
 		}
 		if req.URL.Path != "/api/v2/silence/"+silID {
-			prometheusAPIError(w, "invalid path: "+req.URL.Path, http.StatusInternalServerError)
+			prometheusAPIError(w, req, "invalid path: "+req.URL.Path, http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -171,11 +171,11 @@ func getSilenceWithoutLabel() http.Handler {
 func getSilenceWithLabel(labelv string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != "GET" {
-			prometheusAPIError(w, "invalid method: "+req.Method, http.StatusInternalServerError)
+			prometheusAPIError(w, req, "invalid method: "+req.Method, http.StatusInternalServerError)
 			return
 		}
 		if req.URL.Path != "/api/v2/silence/"+silID {
-			prometheusAPIError(w, "invalid path: "+req.URL.Path, http.StatusInternalServerError)
+			prometheusAPIError(w, req, "invalid path: "+req.URL.Path, http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -206,7 +206,7 @@ func createSilenceWithLabel(labelv string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var sil models.PostableSilence
 		if err := json.NewDecoder(req.Body).Decode(&sil); err != nil {
-			prometheusAPIError(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			prometheusAPIError(w, req, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
 			return
 		}
 		var values []string
@@ -216,11 +216,11 @@ func createSilenceWithLabel(labelv string) http.Handler {
 			}
 		}
 		if len(values) != 1 {
-			prometheusAPIError(w, fmt.Sprintf("expected 1 matcher for label %s, got %d", proxyLabel, len(values)), http.StatusInternalServerError)
+			prometheusAPIError(w, req, fmt.Sprintf("expected 1 matcher for label %s, got %d", proxyLabel, len(values)), http.StatusInternalServerError)
 			return
 		}
 		if values[0] != labelv {
-			prometheusAPIError(w, fmt.Sprintf("expected matcher for label %s to be %q, got %q", proxyLabel, labelv, values[0]), http.StatusInternalServerError)
+			prometheusAPIError(w, req, fmt.Sprintf("expected matcher for label %s to be %q, got %q", proxyLabel, labelv, values[0]), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -238,7 +238,7 @@ func (c *chainedHandlers) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer func() { c.idx++ }()
 
 	if c.idx >= len(c.handlers) {
-		prometheusAPIError(w, "", http.StatusInternalServerError)
+		prometheusAPIError(w, req, "", http.StatusInternalServerError)
 		return
 	}
 	c.handlers[c.idx].ServeHTTP(w, req)
