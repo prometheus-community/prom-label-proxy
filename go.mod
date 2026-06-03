@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/efficientgo/core v1.0.0-rc.3
 	github.com/go-openapi/runtime v0.29.5
-	github.com/go-openapi/strfmt v0.26.2
+	github.com/go-openapi/strfmt v0.26.3
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a
 	github.com/oklog/run v1.2.0
 	github.com/prometheus/alertmanager v0.32.1
@@ -55,9 +55,9 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.53.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
