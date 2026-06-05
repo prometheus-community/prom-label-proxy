@@ -61,6 +61,9 @@ type routes struct {
 
 type options struct {
 	upstreamCaCert           string
+	upstreamClientCertFile   string
+	upstreamClientKeyFile    string
+	upstreamServerName       string
 	enableLabelAPIs          bool
 	passthroughPaths         []string
 	insecureSkipVerify       bool
@@ -93,6 +96,23 @@ func WithPrometheusRegistry(reg prometheus.Registerer) Option {
 func WithUpstreamCaCert(caCert string) Option {
 	return optionFunc(func(o *options) {
 		o.upstreamCaCert = caCert
+	})
+}
+
+// WithUpstreamClientCert configures the proxy to present the given client
+// certificate and key for mutual TLS with the upstream.
+func WithUpstreamClientCert(certFile, keyFile string) Option {
+	return optionFunc(func(o *options) {
+		o.upstreamClientCertFile = certFile
+		o.upstreamClientKeyFile = keyFile
+	})
+}
+
+// WithUpstreamServerName configures the server name used to verify the
+// upstream's TLS certificate (also used as the SNI server name).
+func WithUpstreamServerName(name string) Option {
+	return optionFunc(func(o *options) {
+		o.upstreamServerName = name
 	})
 }
 
@@ -463,6 +483,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: opt.insecureSkipVerify,
+		ServerName:         opt.upstreamServerName,
 	}
 
 	if opt.upstreamCaCert != "" {
@@ -477,6 +498,19 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		}
 
 		transport.TLSClientConfig.RootCAs = caCertPool
+	}
+
+	if opt.upstreamClientCertFile != "" || opt.upstreamClientKeyFile != "" {
+		if opt.upstreamClientCertFile == "" || opt.upstreamClientKeyFile == "" {
+			return nil, fmt.Errorf("both client certificate and key files must be provided")
+		}
+
+		cert, err := tls.LoadX509KeyPair(opt.upstreamClientCertFile, opt.upstreamClientKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load client certificate/key pair: %v", err)
+		}
+
+		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
 	}
 
 	proxy.Transport = transport
