@@ -507,7 +507,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 		cert, err := tls.LoadX509KeyPair(opt.upstreamClientCertFile, opt.upstreamClientKeyFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load client certificate/key pair: %v", err)
+			return nil, fmt.Errorf("failed to load client certificate/key pair: %w", err)
 		}
 
 		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
