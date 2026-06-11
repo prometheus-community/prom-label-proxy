@@ -59,6 +59,9 @@ func main() {
 		internalListenAddress           string
 		upstream                        string
 		upstreamCaCert                  string
+		upstreamClientCert              string
+		upstreamClientKey               string
+		upstreamServerName              string
 		queryParam                      string
 		headerName                      string
 		label                           string
@@ -84,6 +87,9 @@ func main() {
 	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
 	flagset.StringVar(&upstreamCaCert, "upstream-ca-cert", "", "The upstream ca certificate file.")
+	flagset.StringVar(&upstreamClientCert, "upstream-client-cert", "", "The client certificate file to present for mutual TLS with the upstream. Requires -upstream-client-key.")
+	flagset.StringVar(&upstreamClientKey, "upstream-client-key", "", "The client key file to present for mutual TLS with the upstream. Requires -upstream-client-cert.")
+	flagset.StringVar(&upstreamServerName, "upstream-server-name", "", "The server name used to verify the upstream's TLS certificate. Useful when the upstream URL host does not match the certificate.")
 	flagset.StringVar(&label, "label", "", "The label name to enforce in all proxied PromQL queries.")
 	flagset.Var(&labelValues, "label-value", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given. It can be repeated in which case the proxy will enforce the union of values.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
@@ -136,9 +142,21 @@ func main() {
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 
+	if (upstreamClientCert == "") != (upstreamClientKey == "") {
+		log.Fatalf("both -upstream-client-cert and -upstream-client-key must be set")
+	}
+
 	opts := []injectproxy.Option{injectproxy.WithPrometheusRegistry(reg)}
 	if upstreamCaCert != "" {
 		opts = append(opts, injectproxy.WithUpstreamCaCert(upstreamCaCert))
+	}
+
+	if upstreamClientCert != "" {
+		opts = append(opts, injectproxy.WithUpstreamClientCert(upstreamClientCert, upstreamClientKey))
+	}
+
+	if upstreamServerName != "" {
+		opts = append(opts, injectproxy.WithUpstreamServerName(upstreamServerName))
 	}
 
 	if enableLabelAPIs {
