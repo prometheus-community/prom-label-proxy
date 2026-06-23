@@ -1,4 +1,8 @@
-## 0.13.0 / 2026-06-21
+## 0.14.0 / 2026-06-23
+
+* [FEATURE] Add the `-upstream-client-cert`, `-upstream-client-key` and `-upstream-server-name` flags to configure the TLS connection of the upstream server. #377
+
+## 0.13.0 / 2026-04-21
 
 * [FEATURE] Add the `-insecure-skip-verify` flag to bypass the TLS verification of the upstream server. #335
 * [FEATURE] Add the `-upstream-ca-cert` flag to provide the Certificate Authority's certificate of the upstream server. #340
