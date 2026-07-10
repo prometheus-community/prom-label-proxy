@@ -163,7 +163,7 @@ func main() {
 	)
 
 	if (upstreamClientCert == "") != (upstreamClientKey == "") {
-		log.Fatalf("both -upstream-client-cert and -upstream-client-key must be set")
+		fatal("both -upstream-client-cert and -upstream-client-key must be set")
 	}
 
 	opts := []injectproxy.Option{injectproxy.WithPrometheusRegistry(reg)}
