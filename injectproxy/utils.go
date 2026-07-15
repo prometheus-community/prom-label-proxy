@@ -20,18 +20,9 @@ import (
 )
 
 func prometheusAPIError(w http.ResponseWriter, req *http.Request, errorMessage string, code int) {
-	w.Header().Set("X-Proxy-Error-Logged", "true")
-
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
-
-	slog.Debug("API error returned to client",
-		"status", code,
-		"message", errorMessage,
-		"path", req.URL.Path,
-		"method", req.Method,
-	)
 
 	res := map[string]string{"status": "error", "errorType": "prom-label-proxy", "error": errorMessage}
 

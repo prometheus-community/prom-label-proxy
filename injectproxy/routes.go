@@ -543,18 +543,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 }
 
 func (r *routes) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
-	r.mux.ServeHTTP(lrw, req)
-
-	// log if it's an error AND it hasn't been logged yet
-	if lrw.statusCode >= 400 && lrw.Header().Get("X-Proxy-Error-Logged") == "" {
-		slog.Debug("HTTP request failed",
-			"method", req.Method,
-			"path", req.URL.Path,
-			"status", lrw.statusCode,
-		)
-	}
+	r.mux.ServeHTTP(w, req)
 }
 
 func (r *routes) ModifyResponse(resp *http.Response) error {
@@ -567,9 +556,7 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 	return m(resp)
 }
 
-func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err error) {
-	rw.Header().Set("X-Proxy-Error-Logged", "true")
-
+func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
 	slog.Error("HTTP proxy error",
 		"error", err,
 		"path", req.URL.Path,
