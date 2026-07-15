@@ -166,26 +166,6 @@ func WithRegexMatch() Option {
 	})
 }
 
-// loggingResponseWriter wraps http.ResponseWriter to capture the HTTP status code and prevent double-logging.
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-// WriteHeader captures the status code before writing it to the underlying response writer.
-func (lrw *loggingResponseWriter) WriteHeader(code int) {
-	lrw.statusCode = code
-	lrw.ResponseWriter.WriteHeader(code)
-}
-
-// Write ensures a default 200 OK status is captured if WriteHeader wasn't explicitly called.
-func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
-	if lrw.statusCode == 0 {
-		lrw.statusCode = http.StatusOK
-	}
-	return lrw.ResponseWriter.Write(b)
-}
-
 // WithPromqlDurationExpressionParsing enables parsing of duration expressions in the PromQL parser.
 func WithPromqlDurationExpressionParsing() Option {
 	return optionFunc(func(o *options) {
