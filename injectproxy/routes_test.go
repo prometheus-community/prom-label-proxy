@@ -1276,13 +1276,13 @@ func TestQuery(t *testing.T) {
 
 				var labelEnforcer ExtractLabeler
 				if len(tc.staticLabelVal) > 0 {
-					labelEnforcer = StaticLabelEnforcer{LabelValues: tc.staticLabelVal, Label: proxyLabel}
+					labelEnforcer = StaticLabelEnforcer(tc.staticLabelVal)
 				} else if tc.headerName != "" {
-					labelEnforcer = HTTPHeaderEnforcer{Name: tc.headerName, Label: proxyLabel, ParseListSyntax: tc.headerUsesListSyntax}
+					labelEnforcer = HTTPHeaderEnforcer{Name: tc.headerName, ParseListSyntax: tc.headerUsesListSyntax}
 				} else if tc.queryParam != "" {
-					labelEnforcer = HTTPFormEnforcer{ParameterName: tc.queryParam, Label: proxyLabel}
+					labelEnforcer = HTTPFormEnforcer{ParameterName: tc.queryParam}
 				} else {
-					labelEnforcer = HTTPFormEnforcer{ParameterName: proxyLabel, Label: proxyLabel}
+					labelEnforcer = HTTPFormEnforcer{ParameterName: proxyLabel}
 				}
 
 				r, err := NewRoutes(m.url, proxyLabel, labelEnforcer, opts...)

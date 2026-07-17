@@ -271,7 +271,6 @@ type ExtractLabeler interface {
 // HTTPFormEnforcer enforces a label value extracted from the HTTP form and query parameters.
 type HTTPFormEnforcer struct {
 	ParameterName string
-	Label         string
 }
 
 // ExtractLabel implements the ExtractLabeler interface.
@@ -325,7 +324,6 @@ func (hff HTTPFormEnforcer) getLabelValues(r *http.Request) ([]string, error) {
 // HTTPHeaderEnforcer enforces a label value extracted from the HTTP headers.
 type HTTPHeaderEnforcer struct {
 	Name            string
-	Label           string
 	ParseListSyntax bool
 }
 
@@ -359,15 +357,12 @@ func (hhe HTTPHeaderEnforcer) getLabelValues(r *http.Request) ([]string, error) 
 }
 
 // StaticLabelEnforcer enforces a static label value.
-type StaticLabelEnforcer struct {
-	Label       string
-	LabelValues []string
-}
+type StaticLabelEnforcer []string
 
 // ExtractLabel implements the ExtractLabeler interface.
 func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next(w, r.WithContext(WithLabelValues(r.Context(), sle.LabelValues)))
+		next(w, r.WithContext(WithLabelValues(r.Context(), sle)))
 	})
 }
 
@@ -686,12 +681,11 @@ func enforceQueryValues(e *PromQLEnforcer, v url.Values) (values string, noQuery
 	// If no values were given or no query is present,
 	// e.g. because the query came in the POST body
 	// but the URL query string was passed, then finish early.
-	origQuery := v.Get(queryParam)
-	if origQuery == "" {
+	if v.Get(queryParam) == "" {
 		return v.Encode(), false, nil
 	}
 
-	q, err := e.Enforce(origQuery)
+	q, err := e.Enforce(v.Get(queryParam))
 	if err != nil {
 		return "", true, err
 	}

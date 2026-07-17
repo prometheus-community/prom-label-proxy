@@ -29,11 +29,11 @@ import (
 
 	"github.com/metalmatze/signal/internalserver"
 	"github.com/oklog/run"
+	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/common/promslog"
-
-	"github.com/prometheus-community/prom-label-proxy/injectproxy"
+	promslogflag "github.com/prometheus/common/promslog/flag"
 )
 
 type arrayFlags []string
@@ -121,10 +121,23 @@ func main() {
 		Format: promslog.NewFormat(),
 	}
 
-	promslogConfig.Level.Set("info")    //nolint: errcheck // promslogConfig.Level.Set() will exit on error
-	promslogConfig.Format.Set("logfmt") //nolint: errcheck // promslogConfig.Level.Set() will exit on error
-	flagset.Var(promslogConfig.Level, "log.level", "Only log messages with the given severity or above. One of: [debug, info, warn, error]")
-	flagset.Var(promslogConfig.Format, "log.format", "Output format of log messages. One of: [logfmt, json]")
+	if err := promslogConfig.Level.Set("info"); err != nil {
+		panic(err)
+	}
+	if err := promslogConfig.Format.Set("logfmt"); err != nil {
+		panic(err)
+	}
+	flagset.Var(
+		promslogConfig.Level,
+		promslogflag.LevelFlagName,
+		promslogflag.LevelFlagHelp,
+	)
+
+	flagset.Var(
+		promslogConfig.Format,
+		promslogflag.FormatFlagName,
+		promslogflag.FormatFlagHelp,
+	)
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
@@ -241,11 +254,11 @@ func main() {
 	var extractLabeler injectproxy.ExtractLabeler
 	switch {
 	case len(labelValues) > 0:
-		extractLabeler = injectproxy.StaticLabelEnforcer{Label: label, LabelValues: labelValues}
+		extractLabeler = injectproxy.StaticLabelEnforcer(labelValues)
 	case queryParam != "":
-		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam, Label: label}
+		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam}
 	case headerName != "":
-		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName), Label: label, ParseListSyntax: headerUsesListSyntax}
+		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName), ParseListSyntax: headerUsesListSyntax}
 	}
 
 	var g run.Group
@@ -267,7 +280,7 @@ func main() {
 		srv := &http.Server{Handler: mux}
 
 		g.Add(func() error {
-			slog.Info("Listening insecurely on", "address", l.Addr())
+			slog.Info("Listening insecurely", "address", l.Addr().String())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
 				slog.Error("Server stopped", "error", err)
 				return err
