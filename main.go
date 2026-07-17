@@ -307,7 +307,7 @@ func main() {
 		srv := &http.Server{Handler: h}
 
 		g.Add(func() error {
-			slog.Info("Listening for metrics and pprof", "address", l.Addr())
+			slog.Info("Listening for metrics and pprof", "address", l.Addr().String())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
 				slog.Error("Internal server stopped", "error", err)
 				return err
