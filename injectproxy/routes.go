@@ -73,6 +73,7 @@ type options struct {
 	rulesWithActiveAlerts    bool
 	labelMatchersForRulesAPI bool
 	parserOptions            parser.Options
+	rewriteHostHeader        string
 }
 
 type Option interface {
@@ -193,6 +194,15 @@ func WithPromqlExtendedRangeSelectors() Option {
 func WithPromqlBinopFillModifiers() Option {
 	return optionFunc(func(o *options) {
 		o.parserOptions.EnableBinopFillModifiers = true
+	})
+}
+
+// WithRewriteHostHeader configures the proxy to rewrite the Host header
+// to the given value when proxying requests to the upstream. This is useful
+// when the upstream is behind an ingress that routes based on the Host header.
+func WithRewriteHostHeader(host string) Option {
+	return optionFunc(func(o *options) {
+		o.rewriteHostHeader = host
 	})
 }
 
@@ -378,7 +388,16 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		opt.registerer = prometheus.NewRegistry()
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(upstream)
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(upstream)
+			if opt.rewriteHostHeader != "" {
+				r.Out.Host = opt.rewriteHostHeader
+			} else {
+				r.Out.Host = r.In.Host
+			}
+		},
+	}
 
 	r := &routes{
 		upstream:              upstream,

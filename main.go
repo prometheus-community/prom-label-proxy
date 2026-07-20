@@ -78,6 +78,7 @@ func main() {
 		promQLExperimentalFunctions     bool
 		promQLExtendedRangeSelectors    bool
 		promQLBinopFillModifiers        bool
+		rewriteHostHeader               string
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -100,6 +101,7 @@ func main() {
 		"API (like /api/v1/configuration) which isn't enforced by prom-label-proxy. NOTE: \"all\" matching paths like \"/\" or \"\" and regex are not allowed.")
 	flagset.BoolVar(&insecureSkipVerify, "insecure-skip-verify", false, "When specified, the proxy will bypass validation of the server's TLS/SSL certificate.")
 	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
+	flagset.StringVar(&rewriteHostHeader, "rewrite-host-header-to", "", "Rewrite the Host header to the supplied value when proxying requests to the upstream URL. Useful when the upstream is behind an ingress that routes based on the Host header.")
 	flagset.BoolVar(&regexMatch, "regex-match", false, "When specified, the tenant name is treated as a regular expression. In this case, only one tenant name should be provided.")
 	flagset.BoolVar(&headerUsesListSyntax, "header-uses-list-syntax", false, "When specified, the header line value will be parsed as a comma-separated list. This allows a single tenant header line to specify multiple tenant names.")
 	flagset.BoolVar(&rulesWithActiveAlerts, "rules-with-active-alerts", false, "When true, the proxy will return alerting rules with active alerts matching the tenant label even when the tenant label isn't present in the rule's labels.")
@@ -173,6 +175,10 @@ func main() {
 
 	if errorOnReplace {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
+	}
+
+	if rewriteHostHeader != "" {
+		opts = append(opts, injectproxy.WithRewriteHostHeader(rewriteHostHeader))
 	}
 
 	if rulesWithActiveAlerts {
