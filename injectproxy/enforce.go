@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -295,8 +296,13 @@ func (ms PromQLEnforcer) EnforceMatchers(targets []*labels.Matcher) ([]*labels.M
 		res = append(res, target)
 	}
 
-	for _, enforcedMatcher := range ms.labelMatchers {
-		res = append(res, enforcedMatcher)
+	matcherNames := make([]string, 0, len(ms.labelMatchers))
+	for name := range ms.labelMatchers {
+		matcherNames = append(matcherNames, name)
+	}
+	sort.Strings(matcherNames)
+	for _, name := range matcherNames {
+		res = append(res, ms.labelMatchers[name])
 	}
 
 	return res, nil

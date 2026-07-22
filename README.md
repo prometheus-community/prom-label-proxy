@@ -3,7 +3,7 @@
 [![Build Status](https://github.com/prometheus-community/prom-label-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/prometheus-community/prom-label-proxy/actions/workflows/ci.yml)
 [![Docker Repository on Quay](https://quay.io/repository/prometheuscommunity/prom-label-proxy/status "Docker Repository on Quay")](https://quay.io/repository/prometheuscommunity/prom-label-proxy)
 
-The prom-label-proxy can enforce a given label in a given PromQL query, in Prometheus API responses or in Alertmanager API requests. As an example (but not only),
+The prom-label-proxy can enforce one or more labels in PromQL queries, Prometheus API responses, or Alertmanager API requests. As an example (but not only),
 this allows read multi-tenancy for projects like Prometheus, Alertmanager or Thanos.
 
 This proxy does not perform authentication or authorization, this has to happen before the request reaches this proxy, allowing you to use any authN/authZ system you want. The [kube-rbac-proxy](https://github.com/brancz/kube-rbac-proxy) is an example for such an additional building block. Additionally, you can use prom-label-proxy as a library in your own proxy, like what is done in [prom-authzed-proxy](https://github.com/authzed/prom-authzed-proxy).
@@ -43,7 +43,7 @@ go get github.com/prometheus-community/prom-label-proxy
 
 ## How does this project work?
 
-This application proxies the following endpoints and it ensures that a particular label is enforced in the particular request and response:
+This application proxies the following endpoints and ensures that the configured labels are enforced in each request and response:
 
 * `/federate` for GET method (Prometheus)
 * `/api/v1/query_exemplars` for GET and POST methods (Prometheus/Thanos)
@@ -120,6 +120,22 @@ You can provide multiple values for the label using several HTTP headers:
 {"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
 
+To enforce multiple labels, repeat `-label` and `-header-name`. Labels and
+headers are paired in the order they are provided:
+
+```
+prom-label-proxy \
+   -label tenant -header-name X-Tenant \
+   -label cluster -header-name X-Cluster \
+   -label environment -header-name X-Environment \
+   -upstream http://demo.do.prometheus.io:9090 \
+   -insecure-listen-address 127.0.0.1:8080
+```
+
+The same positional pairing applies when repeating `-query-param` instead of
+`-header-name`. Every configured header or query parameter must be present in
+the request. Existing single-label configurations remain unchanged.
+
 A last option is to provide a static value for the label:
 
 ```
@@ -144,6 +160,8 @@ prom-label-proxy \
 ```
 
 `prom-label-proxy` will enforce the `tenant=~"prometheus|alertmanager"` label selector in all requests.
+Repeated `-label-value` flags continue to define multiple allowed values for a
+single label.
 
 You can match the label value using a regular expression with the `-regex-match` option. For example:
 
@@ -169,16 +187,16 @@ prom-label-proxy \
    -error-on-replace
 ```
 
-Once again for clarity: **this project only enforces a particular label in the respective calls to Prometheus, it in itself does not authenticate or
+Once again for clarity: **this project only enforces configured labels in the respective calls to Prometheus, it in itself does not authenticate or
 authorize the requesting entity in any way, this has to be built around this project.**
 
 ### Federate endpoint
 
-The proxy ensures that all selectors passed as matchers to the `/federate` endpoint _must_ contain that exact match of the particular label (and throws away all other matchers for the label).
+The proxy ensures that all selectors passed as matchers to the `/federate` endpoint contain exact matches for the configured labels.
 
 ### Query endpoints
 
-For the two query endpoints (`/api/v1/query` and `/api/v1/query_range`), the proxy parses the PromQL expression and modifies all selectors in the same way. The label-key is configured as a flag on the binary and the label-value is passed as a query parameter.
+For the two query endpoints (`/api/v1/query` and `/api/v1/query_range`), the proxy parses the PromQL expression and modifies all selectors in the same way. Label names are configured with flags and their values are supplied by query parameters, headers, or a static value.
 
 For example, if requesting the PromQL query
 
@@ -197,7 +215,7 @@ This is enforced for any case, whether a label matcher is specified in the origi
 
 ### Metadata endpoints
 
-Similar to query endpoint, for metadata endpoints `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values` the proxy injects the specified label all the provided `match[]` selectors.
+Similar to query endpoints, for metadata endpoints `/api/v1/series`, `/api/v1/labels`, and `/api/v1/label/<name>/values`, the proxy injects the configured labels into all provided `match[]` selectors.
 
 NOTE: When the `/api/v1/labels` and `/api/v1/label/<name>/values` endpoints were added to `prom-label-proxy`, the Prometheus and Thanos endpoints didn't support the `match[]` parameter hence the `prom-label-proxy` labels endpoints are disabled by default. Use the `-enable-label-apis` flag to enable with care. Ensure that the upstream endpoints support label selectors:
 * Prometheus >= [2.24.0](https://github.com/prometheus/prometheus/releases/tag/v2.24.0)
@@ -228,11 +246,11 @@ The proxy requests the `/api/v1/alerts` Prometheus endpoint, discards the rules 
 
 The proxy ensures the following:
 
-* `GET` requests to the `/api/v2/silences` endpoint contain a `filter` parameter that matches exactly the particular label and throws away all other matchers for the label.
-* `POST` requests to the `/api/v2/silences` endpoint can only affect silences that match the label and the label matcher is enforced.
-* `DELETE` requests to the `/api/v2/silence/` endpoint can only affect silences that match the label.
+* `GET` requests to the `/api/v2/silences` endpoint contain filter parameters that match all configured labels.
+* `POST` requests to the `/api/v2/silences` endpoint can only affect silences that match all configured labels, and those label matchers are enforced.
+* `DELETE` requests to the `/api/v2/silence/` endpoint can only affect silences that match all configured labels.
 
-:rotating_light: `prom-label-proxy` doesn't support multiple label values for the Silences endpoints :rotating_light:
+:rotating_light: `prom-label-proxy` doesn't support multiple values for any one enforced label on the Silences endpoints :rotating_light:
 
 ## Example use
 

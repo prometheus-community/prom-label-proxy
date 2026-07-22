@@ -53,6 +53,53 @@ func (i *arrayFlags) Set(value string) error {
 	return nil
 }
 
+type labelFlags []string
+
+func (f *labelFlags) String() string {
+	return fmt.Sprint(*f)
+}
+
+func (f *labelFlags) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+func validateLabelFlags(labels, queryParams, headerNames, labelValues []string) error {
+	if len(labels) == 0 {
+		return errors.New("-label flag cannot be empty")
+	}
+	seenLabels := make(map[string]struct{}, len(labels))
+	for _, label := range labels {
+		if label == "" {
+			return errors.New("-label flag cannot be empty")
+		}
+		if _, ok := seenLabels[label]; ok {
+			return fmt.Errorf("-label %q is configured more than once", label)
+		}
+		seenLabels[label] = struct{}{}
+	}
+
+	if len(labelValues) > 0 {
+		if len(queryParams) > 0 || len(headerNames) > 0 {
+			return errors.New("-label-value cannot be combined with -query-param or -header-name")
+		}
+		if len(labels) > 1 {
+			return errors.New("-label-value cannot be used with multiple -label flags")
+		}
+	} else if len(queryParams) > 0 && len(headerNames) > 0 {
+		return errors.New("-query-param and -header-name cannot be combined")
+	}
+
+	if len(queryParams) > 0 && len(queryParams) != len(labels) {
+		return errors.New("the number of -query-param flags must match the number of -label flags")
+	}
+	if len(headerNames) > 0 && len(headerNames) != len(labels) {
+		return errors.New("the number of -header-name flags must match the number of -label flags")
+	}
+
+	return nil
+}
+
 func main() {
 	var (
 		insecureListenAddress           string
@@ -62,9 +109,9 @@ func main() {
 		upstreamClientCert              string
 		upstreamClientKey               string
 		upstreamServerName              string
-		queryParam                      string
-		headerName                      string
-		label                           string
+		queryParams                     arrayFlags
+		headerNames                     arrayFlags
+		labels                          labelFlags
 		labelValues                     arrayFlags
 		enableLabelAPIs                 bool
 		unsafePassthroughPaths          string // Comma-delimited string.
@@ -83,14 +130,14 @@ func main() {
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flagset.StringVar(&insecureListenAddress, "insecure-listen-address", "", "The address the prom-label-proxy HTTP server should listen on.")
 	flagset.StringVar(&internalListenAddress, "internal-listen-address", "", "The address the internal prom-label-proxy HTTP server should listen on to expose metrics about itself.")
-	flagset.StringVar(&queryParam, "query-param", "", "Name of the HTTP parameter that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given. If the flag isn't defined and neither -header-name nor -label-value is set, it will default to the value of the -label flag.")
-	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given.")
+	flagset.Var(&queryParams, "query-param", "Name of the HTTP parameter that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given. If the flag isn't defined and neither -header-name nor -label-value is set, it will default to the value of the -label flag.")
+	flagset.Var(&headerNames, "header-name", "Name of the HTTP header name that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
 	flagset.StringVar(&upstreamCaCert, "upstream-ca-cert", "", "The upstream ca certificate file.")
 	flagset.StringVar(&upstreamClientCert, "upstream-client-cert", "", "The client certificate file to present for mutual TLS with the upstream. Requires -upstream-client-key.")
 	flagset.StringVar(&upstreamClientKey, "upstream-client-key", "", "The client key file to present for mutual TLS with the upstream. Requires -upstream-client-cert.")
 	flagset.StringVar(&upstreamServerName, "upstream-server-name", "", "The server name used to verify the upstream's TLS certificate. Useful when the upstream URL host does not match the certificate.")
-	flagset.StringVar(&label, "label", "", "The label name to enforce in all proxied PromQL queries.")
+	flagset.Var(&labels, "label", "The label name to enforce in all proxied PromQL queries.")
 	flagset.Var(&labelValues, "label-value", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given. It can be repeated in which case the proxy will enforce the union of values.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
 		"NOTE: Enable with care because filtering by matcher is not implemented in older versions of Prometheus (>= v2.24.0 required) and Thanos (>= v0.18.0 required, >= v0.23.0 recommended). If enabled and "+
@@ -111,20 +158,13 @@ func main() {
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
-	if label == "" {
-		log.Fatalf("-label flag cannot be empty")
+
+	if len(labelValues) == 0 && len(queryParams) == 0 && len(headerNames) == 0 {
+		queryParams = append(queryParams, labels...)
 	}
 
-	if len(labelValues) == 0 && queryParam == "" && headerName == "" {
-		queryParam = label
-	}
-
-	if len(labelValues) > 0 {
-		if queryParam != "" || headerName != "" {
-			log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
-		}
-	} else if queryParam != "" && headerName != "" {
-		log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
+	if err := validateLabelFlags(labels, queryParams, headerNames, labelValues); err != nil {
+		log.Fatal(err)
 	}
 
 	upstreamURL, err := url.Parse(upstream)
@@ -186,17 +226,17 @@ func main() {
 	if regexMatch {
 		if len(labelValues) > 0 {
 			if len(labelValues) > 1 {
-				log.Fatalf("Regex match is limited to one label value")
+				log.Fatalf("-regex-match allows only one -label-value")
 			}
 
 			compiledRegex, err := regexp.Compile(labelValues[0])
 			if err != nil {
-				log.Fatalf("Invalid regexp: %v", err.Error())
+				log.Fatalf("invalid -label-value regexp: %v", err)
 				return
 			}
 
 			if compiledRegex.MatchString("") {
-				log.Fatalf("Regex should not match empty string")
+				log.Fatalf("-label-value regexp must not match the empty string")
 				return
 			}
 		}
@@ -220,20 +260,25 @@ func main() {
 		opts = append(opts, injectproxy.WithPromqlBinopFillModifiers())
 	}
 
-	var extractLabeler injectproxy.ExtractLabeler
-	switch {
-	case len(labelValues) > 0:
-		extractLabeler = injectproxy.StaticLabelEnforcer(labelValues)
-	case queryParam != "":
-		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam}
-	case headerName != "":
-		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName), ParseListSyntax: headerUsesListSyntax}
+	extractLabelers := make([]injectproxy.ExtractLabeler, len(labels))
+	for i := range labels {
+		switch {
+		case len(labelValues) > 0:
+			extractLabelers[i] = injectproxy.StaticLabelEnforcer(labelValues)
+		case len(queryParams) > 0:
+			extractLabelers[i] = injectproxy.HTTPFormEnforcer{ParameterName: queryParams[i]}
+		case len(headerNames) > 0:
+			extractLabelers[i] = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerNames[i]), ParseListSyntax: headerUsesListSyntax}
+		}
+	}
+	for i := 1; i < len(labels); i++ {
+		opts = append(opts, injectproxy.WithLabel(labels[i], extractLabelers[i]))
 	}
 
 	var g run.Group
 	{
 		// Run the insecure HTTP server.
-		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
+		routes, err := injectproxy.NewRoutes(upstreamURL, labels[0], extractLabelers[0], opts...)
 		if err != nil {
 			log.Fatalf("Failed to create injectproxy Routes: %v", err)
 		}

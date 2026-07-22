@@ -811,6 +811,148 @@ func TestAlerts(t *testing.T) {
 	}
 }
 
+func TestAlertsMultipleLabels(t *testing.T) {
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+  "status": "success",
+  "data": {
+    "alerts": [
+      {"labels": {"namespace": "team-a", "cluster": "cluster-a"}},
+      {"labels": {"namespace": "team-a", "cluster": "cluster-b"}},
+      {"labels": {"namespace": "team-a"}}
+    ]
+  }
+}`))
+	}))
+	defer m.Close()
+
+	r, err := NewRoutes(
+		m.url,
+		"namespace",
+		HTTPHeaderEnforcer{Name: "X-Namespace"},
+		WithLabel("cluster", HTTPHeaderEnforcer{Name: "X-Cluster"}),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://prometheus.example.com/api/v1/alerts", nil)
+	req.Header.Set("X-Namespace", "team-a")
+	req.Header.Set("X-Cluster", "cluster-a")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var response apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var data alertsData
+	if err := json.Unmarshal(response.Data, &data); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(data.Alerts) != 1 {
+		t.Fatalf("expected one alert, got %d", len(data.Alerts))
+	}
+	if got := data.Alerts[0].Labels.Get("cluster"); got != "cluster-a" {
+		t.Fatalf("expected cluster label %q, got %q", "cluster-a", got)
+	}
+}
+
+func TestRulesMultipleLabelsWithActiveAlerts(t *testing.T) {
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+  "status": "success",
+  "data": {
+    "groups": [{
+      "name": "group",
+      "rules": [{
+        "type": "alerting",
+        "name": "Alert",
+        "state": "firing",
+        "labels": {},
+        "annotations": {},
+        "alerts": [
+          {"state": "firing", "labels": {"namespace": "team-a", "cluster": "cluster-a"}},
+          {"state": "firing", "labels": {"namespace": "team-a", "cluster": "cluster-b"}},
+          {"state": "firing", "labels": {"namespace": "team-a"}}
+        ]
+      }]
+    }]
+  }
+}`))
+	}))
+	defer m.Close()
+
+	r, err := NewRoutes(
+		m.url,
+		"namespace",
+		HTTPHeaderEnforcer{Name: "X-Namespace"},
+		WithLabel("cluster", HTTPHeaderEnforcer{Name: "X-Cluster"}),
+		WithActiveAlerts(),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://prometheus.example.com/api/v1/rules", nil)
+	req.Header.Set("X-Namespace", "team-a")
+	req.Header.Set("X-Cluster", "cluster-a")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var response apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var data rulesData
+	if err := json.Unmarshal(response.Data, &data); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(data.RuleGroups) != 1 || len(data.RuleGroups[0].Rules) != 1 {
+		t.Fatalf("expected one rule, got %+v", data.RuleGroups)
+	}
+	alerts := data.RuleGroups[0].Rules[0].Alerts
+	if len(alerts) != 1 || alerts[0].Labels.Get("cluster") != "cluster-a" {
+		t.Fatalf("expected one alert for cluster-a, got %+v", alerts)
+	}
+}
+
+func TestRulesMultipleLabelMatchers(t *testing.T) {
+	m := newMockUpstream(validRulesWithLabelMatchers(`{namespace="team-a",cluster="cluster-a"}`))
+	defer m.Close()
+
+	r, err := NewRoutes(
+		m.url,
+		"namespace",
+		HTTPHeaderEnforcer{Name: "X-Namespace"},
+		WithLabel("cluster", HTTPHeaderEnforcer{Name: "X-Cluster"}),
+		WithLabelMatchersForRulesAPI(),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://prometheus.example.com/api/v1/rules", nil)
+	req.Header.Set("X-Namespace", "team-a")
+	req.Header.Set("X-Cluster", "cluster-a")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
 func normalizeAPIResponse(t *testing.T, b []byte) string {
 	t.Helper()
 	var apir apiResponse
