@@ -130,3 +130,28 @@ func TestGetAlerts(t *testing.T) {
 		})
 	}
 }
+
+func TestGetAlertsMultipleLabels(t *testing.T) {
+	m := newMockUpstream(checkQueryHandler("", "filter", `namespace="team-a"`, `cluster="cluster-a"`))
+	defer m.Close()
+
+	r, err := NewRoutes(
+		m.url,
+		"namespace",
+		HTTPHeaderEnforcer{Name: "X-Namespace"},
+		WithLabel("cluster", HTTPHeaderEnforcer{Name: "X-Cluster"}),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://alertmanager.example.com/api/v2/alerts", nil)
+	req.Header.Set("X-Namespace", "team-a")
+	req.Header.Set("X-Cluster", "cluster-a")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}

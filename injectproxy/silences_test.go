@@ -202,6 +202,37 @@ func getSilenceWithLabel(labelv string) http.Handler {
 	})
 }
 
+func getSilenceWithLabels(labelValues map[string]string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet {
+			prometheusAPIError(w, "invalid method: "+req.Method, http.StatusInternalServerError)
+			return
+		}
+		matchers := make([]map[string]any, 0, len(labelValues))
+		for name, value := range labelValues {
+			matchers = append(matchers, map[string]any{
+				"isRegex": false,
+				"name":    name,
+				"value":   value,
+			})
+		}
+		response := map[string]any{
+			"id":        silID,
+			"status":    map[string]string{"state": "pending"},
+			"updatedAt": "2020-01-15T09:06:23.419Z",
+			"comment":   "comment",
+			"createdBy": "author",
+			"endsAt":    "2020-02-13T13:00:02.084Z",
+			"matchers":  matchers,
+			"startsAt":  "2020-02-13T12:02:01.000Z",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(&response); err != nil {
+			prometheusAPIError(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+}
+
 func createSilenceWithLabel(labelv string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var sil models.PostableSilence
@@ -223,6 +254,32 @@ func createSilenceWithLabel(labelv string) http.Handler {
 			prometheusAPIError(w, fmt.Sprintf("expected matcher for label %s to be %q, got %q", proxyLabel, labelv, values[0]), http.StatusInternalServerError)
 			return
 		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(okResponse)
+	})
+}
+
+func createSilenceWithLabels(expected map[string]string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var sil models.PostableSilence
+		if err := json.NewDecoder(req.Body).Decode(&sil); err != nil {
+			prometheusAPIError(w, fmt.Sprintf("unexpected error: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		actual := make(map[string][]string)
+		for _, matcher := range sil.Matchers {
+			if matcher.Name != nil && matcher.Value != nil {
+				actual[*matcher.Name] = append(actual[*matcher.Name], *matcher.Value)
+			}
+		}
+		for name, value := range expected {
+			if len(actual[name]) != 1 || actual[name][0] != value {
+				prometheusAPIError(w, fmt.Sprintf("expected one matcher %s=%q, got %q", name, value, actual[name]), http.StatusInternalServerError)
+				return
+			}
+		}
+
 		w.WriteHeader(http.StatusOK)
 		w.Write(okResponse)
 	})
@@ -575,6 +632,100 @@ func TestUpdateSilence(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateSilenceMultipleLabels(t *testing.T) {
+	m := newMockUpstream(createSilenceWithLabels(map[string]string{
+		"namespace": "team-a",
+		"cluster":   "cluster-a",
+	}))
+	defer m.Close()
+
+	r, err := NewRoutes(
+		m.url,
+		"namespace",
+		HTTPHeaderEnforcer{Name: "X-Namespace"},
+		WithLabel("cluster", HTTPHeaderEnforcer{Name: "X-Cluster"}),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	body := `{
+    "comment":"foo",
+    "createdBy":"bar",
+    "endsAt":"2020-02-13T13:00:02.084Z",
+    "matchers":[
+        {"isRegex":false,"name":"foo","value":"bar"},
+        {"isRegex":false,"name":"namespace","value":"other"},
+        {"isRegex":false,"name":"cluster","value":"other"}
+    ],
+    "startsAt":"2020-02-13T12:02:01Z"
+}`
+	req := httptest.NewRequest(http.MethodPost, "http://alertmanager.example.com/api/v2/silences", strings.NewReader(body))
+	req.Header.Set("X-Namespace", "team-a")
+	req.Header.Set("X-Cluster", "cluster-a")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestDeleteSilenceRequiresEveryLabel(t *testing.T) {
+	m := newMockUpstream(getSilenceWithLabels(map[string]string{
+		"namespace": "team-a",
+	}))
+	defer m.Close()
+
+	r, err := NewRoutes(
+		m.url,
+		"namespace",
+		HTTPHeaderEnforcer{Name: "X-Namespace"},
+		WithLabel("cluster", HTTPHeaderEnforcer{Name: "X-Cluster"}),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "http://alertmanager.example.com/api/v2/silence/"+silID, nil)
+	req.Header.Set("X-Namespace", "team-a")
+	req.Header.Set("X-Cluster", "cluster-a")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusForbidden, w.Code, w.Body.String())
+	}
+}
+
+func TestSilencesRejectMultipleValuesForAdditionalLabel(t *testing.T) {
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer m.Close()
+
+	r, err := NewRoutes(
+		m.url,
+		"namespace",
+		HTTPHeaderEnforcer{Name: "X-Namespace"},
+		WithLabel("cluster", HTTPHeaderEnforcer{Name: "X-Cluster"}),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://alertmanager.example.com/api/v2/silences", nil)
+	req.Header.Set("X-Namespace", "team-a")
+	req.Header["X-Cluster"] = []string{"cluster-a", "cluster-b"}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusUnprocessableEntity, w.Code, w.Body.String())
+	}
+}
+
 func TestGetAlertGroups(t *testing.T) {
 	for _, tc := range []struct {
 		labelv         []string
