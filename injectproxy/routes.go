@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -55,8 +55,6 @@ type routes struct {
 	regexMatch            bool
 	rulesWithActiveAlerts bool
 	parserOpts            parser.Options
-
-	logger *log.Logger
 }
 
 type options struct {
@@ -388,7 +386,6 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		errorOnReplace:        opt.errorOnReplace,
 		regexMatch:            opt.regexMatch,
 		rulesWithActiveAlerts: opt.rulesWithActiveAlerts,
-		logger:                log.Default(),
 		parserOpts:            opt.parserOptions,
 	}
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
@@ -516,8 +513,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	proxy.Transport = transport
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
-	proxy.ErrorLog = log.Default()
-
+	proxy.ErrorLog = slog.NewLogLogger(slog.Default().Handler(), slog.LevelError)
 	return r, nil
 }
 
@@ -535,8 +531,13 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 	return m(resp)
 }
 
-func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
-	r.logger.Printf("http: proxy error: %v", err)
+func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err error) {
+	slog.Error("HTTP proxy error",
+		"error", err,
+		"path", req.URL.Path,
+		"method", req.Method,
+	)
+
 	if errors.Is(err, errModifyResponseFailed) {
 		rw.WriteHeader(http.StatusBadRequest)
 	}
