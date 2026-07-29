@@ -14,6 +14,8 @@
 package injectproxy
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -37,12 +39,23 @@ func TestRewriteHostHeader(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var receivedHost, receivedXForwardedFor, receivedXForwardedHost, receivedXForwardedProto string
 			m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				receivedHost = req.Host
-				receivedXForwardedFor = req.Header.Get("X-Forwarded-For")
-				receivedXForwardedHost = req.Header.Get("X-Forwarded-Host")
-				receivedXForwardedProto = req.Header.Get("X-Forwarded-Proto")
+				if req.Host != tc.wantHost {
+					prometheusAPIError(w, fmt.Sprintf("unexpected Host: got %q, want %q", req.Host, tc.wantHost), http.StatusBadRequest)
+					return
+				}
+				if req.Header.Get("X-Forwarded-For") == "" {
+					prometheusAPIError(w, "X-Forwarded-For not set", http.StatusBadRequest)
+					return
+				}
+				if got := req.Header.Get("X-Forwarded-Host"); got != "example.com" {
+					prometheusAPIError(w, fmt.Sprintf("unexpected X-Forwarded-Host: got %q, want %q", got, "example.com"), http.StatusBadRequest)
+					return
+				}
+				if got := req.Header.Get("X-Forwarded-Proto"); got != "http" {
+					prometheusAPIError(w, fmt.Sprintf("unexpected X-Forwarded-Proto: got %q, want %q", got, "http"), http.StatusBadRequest)
+					return
+				}
 				w.Write(okResponse)
 			}))
 			defer m.Close()
@@ -63,22 +76,8 @@ func TestRewriteHostHeader(t *testing.T) {
 
 			resp := w.Result()
 			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("expected status code 200, got %d", resp.StatusCode)
-			}
-
-			if receivedHost != tc.wantHost {
-				t.Errorf("Host: got %q, want %q", receivedHost, tc.wantHost)
-			}
-
-			// Verify X-Forwarded-* headers are set by SetXForwarded().
-			if receivedXForwardedFor == "" {
-				t.Error("X-Forwarded-For header not set on upstream request")
-			}
-			if receivedXForwardedHost != "example.com" {
-				t.Errorf("X-Forwarded-Host: got %q, want %q", receivedXForwardedHost, "example.com")
-			}
-			if receivedXForwardedProto != "http" {
-				t.Errorf("X-Forwarded-Proto: got %q, want %q", receivedXForwardedProto, "http")
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("unexpected status %d: %s", resp.StatusCode, body)
 			}
 		})
 	}
