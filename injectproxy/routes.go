@@ -392,10 +392,9 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(upstream)
 			r.SetXForwarded()
+			r.Out.Host = r.In.Host
 			if opt.rewriteHostHeader != "" {
 				r.Out.Host = opt.rewriteHostHeader
-			} else {
-				r.Out.Host = r.In.Host
 			}
 		},
 	}
