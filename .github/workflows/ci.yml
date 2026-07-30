@@ -51,6 +51,7 @@ jobs:
         with:
           docker_hub_organization: prometheuscommunity
           docker_hub_password: ${{ secrets.docker_hub_password }}
+          ghcr_io_organization: prometheus-community
           ghcr_io_password: ${{ github.token }}
           quay_io_organization: prometheuscommunity
           quay_io_password: ${{ secrets.quay_io_password }}
@@ -69,6 +70,7 @@ jobs:
         with:
           docker_hub_organization: prometheuscommunity
           docker_hub_password: ${{ secrets.docker_hub_password }}
+          ghcr_io_organization: prometheus-community
           ghcr_io_password: ${{ github.token }}
           quay_io_organization: prometheuscommunity
           quay_io_password: ${{ secrets.quay_io_password }}
