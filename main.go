@@ -99,7 +99,7 @@ func main() {
 	flagset.StringVar(&upstreamClientCert, "upstream-client-cert", "", "The client certificate file to present for mutual TLS with the upstream. Requires -upstream-client-key.")
 	flagset.StringVar(&upstreamClientKey, "upstream-client-key", "", "The client key file to present for mutual TLS with the upstream. Requires -upstream-client-cert.")
 	flagset.StringVar(&upstreamPathPrefix, "upstream-path-prefix", "", "The upstream prefix path to proxy to.")
-  flagset.StringVar(&upstreamServerName, "upstream-server-name", "", "The server name used to verify the upstream's TLS certificate. Useful when the upstream URL host does not match the certificate.")
+	flagset.StringVar(&upstreamServerName, "upstream-server-name", "", "The server name used to verify the upstream's TLS certificate. Useful when the upstream URL host does not match the certificate.")
 	flagset.StringVar(&label, "label", "", "The label name to enforce in all proxied PromQL queries.")
 	flagset.Var(&labelValues, "label-value", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given. It can be repeated in which case the proxy will enforce the union of values.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
