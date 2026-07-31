@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -55,13 +55,14 @@ type routes struct {
 	regexMatch            bool
 	rulesWithActiveAlerts bool
 	parserOpts            parser.Options
-
-	logger *log.Logger
 }
 
 type options struct {
 	upstreamPathPrefix       string
 	upstreamCaCert           string
+	upstreamClientCertFile   string
+	upstreamClientKeyFile    string
+	upstreamServerName       string
 	enableLabelAPIs          bool
 	passthroughPaths         []string
 	insecureSkipVerify       bool
@@ -71,6 +72,7 @@ type options struct {
 	rulesWithActiveAlerts    bool
 	labelMatchersForRulesAPI bool
 	parserOptions            parser.Options
+	rewriteHostHeader        string
 }
 
 type Option interface {
@@ -101,6 +103,23 @@ func WithUpstreamPathPrefix(pathPrefix string) Option {
 func WithUpstreamCaCert(caCert string) Option {
 	return optionFunc(func(o *options) {
 		o.upstreamCaCert = caCert
+	})
+}
+
+// WithUpstreamClientCert configures the proxy to present the given client
+// certificate and key for mutual TLS with the upstream.
+func WithUpstreamClientCert(certFile, keyFile string) Option {
+	return optionFunc(func(o *options) {
+		o.upstreamClientCertFile = certFile
+		o.upstreamClientKeyFile = keyFile
+	})
+}
+
+// WithUpstreamServerName configures the server name used to verify the
+// upstream's TLS certificate (also used as the SNI server name).
+func WithUpstreamServerName(name string) Option {
+	return optionFunc(func(o *options) {
+		o.upstreamServerName = name
 	})
 }
 
@@ -167,6 +186,29 @@ func WithPromqlDurationExpressionParsing() Option {
 func WithPromqlExperimentalFunctions() Option {
 	return optionFunc(func(o *options) {
 		o.parserOptions.EnableExperimentalFunctions = true
+	})
+}
+
+// WithPromqlExtendedRangeSelectors enables extended range selectors in the PromQL parser.
+func WithPromqlExtendedRangeSelectors() Option {
+	return optionFunc(func(o *options) {
+		o.parserOptions.EnableExtendedRangeSelectors = true
+	})
+}
+
+// WithPromqlBinopFillModifiers enables binary operation fill modifiers in the PromQL parser.
+func WithPromqlBinopFillModifiers() Option {
+	return optionFunc(func(o *options) {
+		o.parserOptions.EnableBinopFillModifiers = true
+	})
+}
+
+// WithRewriteHostHeader configures the proxy to rewrite the Host header
+// to the given value when proxying requests to the upstream. This is useful
+// when the upstream is behind an ingress that routes based on the Host header.
+func WithRewriteHostHeader(host string) Option {
+	return optionFunc(func(o *options) {
+		o.rewriteHostHeader = host
 	})
 }
 
@@ -352,7 +394,16 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		opt.registerer = prometheus.NewRegistry()
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(upstream)
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(upstream)
+			r.SetXForwarded()
+			r.Out.Host = r.In.Host
+			if opt.rewriteHostHeader != "" {
+				r.Out.Host = opt.rewriteHostHeader
+			}
+		},
+	}
 
 	r := &routes{
 		upstream:              upstream,
@@ -362,7 +413,6 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		errorOnReplace:        opt.errorOnReplace,
 		regexMatch:            opt.regexMatch,
 		rulesWithActiveAlerts: opt.rulesWithActiveAlerts,
-		logger:                log.Default(),
 		parserOpts:            opt.parserOptions,
 	}
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
@@ -473,6 +523,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: opt.insecureSkipVerify,
+		ServerName:         opt.upstreamServerName,
 	}
 
 	if opt.upstreamCaCert != "" {
@@ -489,11 +540,23 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 		transport.TLSClientConfig.RootCAs = caCertPool
 	}
 
+	if opt.upstreamClientCertFile != "" || opt.upstreamClientKeyFile != "" {
+		if opt.upstreamClientCertFile == "" || opt.upstreamClientKeyFile == "" {
+			return nil, fmt.Errorf("both client certificate and key files must be provided")
+		}
+
+		cert, err := tls.LoadX509KeyPair(opt.upstreamClientCertFile, opt.upstreamClientKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load client certificate/key pair: %w", err)
+		}
+
+		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
+	}
+
 	proxy.Transport = transport
 	proxy.ModifyResponse = r.ModifyResponse
 	proxy.ErrorHandler = r.errorHandler
-	proxy.ErrorLog = log.Default()
-
+	proxy.ErrorLog = slog.NewLogLogger(slog.Default().Handler(), slog.LevelError)
 	return r, nil
 }
 
@@ -511,8 +574,13 @@ func (r *routes) ModifyResponse(resp *http.Response) error {
 	return m(resp)
 }
 
-func (r *routes) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
-	r.logger.Printf("http: proxy error: %v", err)
+func (r *routes) errorHandler(rw http.ResponseWriter, req *http.Request, err error) {
+	slog.Error("HTTP proxy error",
+		"error", err,
+		"path", req.URL.Path,
+		"method", req.Method,
+	)
+
 	if errors.Is(err, errModifyResponseFailed) {
 		rw.WriteHeader(http.StatusBadRequest)
 	}

@@ -18,7 +18,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -29,10 +29,11 @@ import (
 
 	"github.com/metalmatze/signal/internalserver"
 	"github.com/oklog/run"
+	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
-
-	"github.com/prometheus-community/prom-label-proxy/injectproxy"
+	"github.com/prometheus/common/promslog"
+	promslogflag "github.com/prometheus/common/promslog/flag"
 )
 
 type arrayFlags []string
@@ -53,6 +54,12 @@ func (i *arrayFlags) Set(value string) error {
 	return nil
 }
 
+// fatal logs an error message with attributes and exits the program.
+func fatal(msg string, args ...any) {
+	slog.Error(msg, args...)
+	os.Exit(1)
+}
+
 func main() {
 	var (
 		insecureListenAddress           string
@@ -60,6 +67,9 @@ func main() {
 		upstream                        string
 		upstreamPathPrefix              string
 		upstreamCaCert                  string
+		upstreamClientCert              string
+		upstreamClientKey               string
+		upstreamServerName              string
 		queryParam                      string
 		headerName                      string
 		label                           string
@@ -74,6 +84,9 @@ func main() {
 		labelMatchersForRulesAPI        bool
 		promQLDurationExpressionParsing bool
 		promQLExperimentalFunctions     bool
+		promQLExtendedRangeSelectors    bool
+		promQLBinopFillModifiers        bool
+		rewriteHostHeader               string
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -83,7 +96,10 @@ func main() {
 	flagset.StringVar(&headerName, "header-name", "", "Name of the HTTP header name that contains the tenant value. At most one of -query-param, -header-name and -label-value should be given.")
 	flagset.StringVar(&upstream, "upstream", "", "The upstream URL to proxy to.")
 	flagset.StringVar(&upstreamCaCert, "upstream-ca-cert", "", "The upstream ca certificate file.")
+	flagset.StringVar(&upstreamClientCert, "upstream-client-cert", "", "The client certificate file to present for mutual TLS with the upstream. Requires -upstream-client-key.")
+	flagset.StringVar(&upstreamClientKey, "upstream-client-key", "", "The client key file to present for mutual TLS with the upstream. Requires -upstream-client-cert.")
 	flagset.StringVar(&upstreamPathPrefix, "upstream-path-prefix", "", "The upstream prefix path to proxy to.")
+  flagset.StringVar(&upstreamServerName, "upstream-server-name", "", "The server name used to verify the upstream's TLS certificate. Useful when the upstream URL host does not match the certificate.")
 	flagset.StringVar(&label, "label", "", "The label name to enforce in all proxied PromQL queries.")
 	flagset.Var(&labelValues, "label-value", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given. It can be repeated in which case the proxy will enforce the union of values.")
 	flagset.BoolVar(&enableLabelAPIs, "enable-label-apis", false, "When specified proxy allows to inject label to label APIs like /api/v1/labels and /api/v1/label/<name>/values. "+
@@ -94,17 +110,46 @@ func main() {
 		"API (like /api/v1/configuration) which isn't enforced by prom-label-proxy. NOTE: \"all\" matching paths like \"/\" or \"\" and regex are not allowed.")
 	flagset.BoolVar(&insecureSkipVerify, "insecure-skip-verify", false, "When specified, the proxy will bypass validation of the server's TLS/SSL certificate.")
 	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
+	flagset.StringVar(&rewriteHostHeader, "rewrite-host-header-to", "", "Rewrite the Host header to the supplied value when proxying requests to the upstream URL. Useful when the upstream is behind an ingress that routes based on the Host header.")
 	flagset.BoolVar(&regexMatch, "regex-match", false, "When specified, the tenant name is treated as a regular expression. In this case, only one tenant name should be provided.")
 	flagset.BoolVar(&headerUsesListSyntax, "header-uses-list-syntax", false, "When specified, the header line value will be parsed as a comma-separated list. This allows a single tenant header line to specify multiple tenant names.")
 	flagset.BoolVar(&rulesWithActiveAlerts, "rules-with-active-alerts", false, "When true, the proxy will return alerting rules with active alerts matching the tenant label even when the tenant label isn't present in the rule's labels.")
 	flagset.BoolVar(&labelMatchersForRulesAPI, "enable-label-matchers-for-rules-api", false, "When true, the proxy uses label matchers when querying the /api/v1/rules endpoint. NOTE: Enable with care because filtering by label matcher is not implemented in older versions of Prometheus (>= 2.54.0 required) and Thanos (>= v0.25.0 required). If not implemented by upstream, the response will not be filtered accordingly.")
 	flagset.BoolVar(&promQLDurationExpressionParsing, "enable-promql-duration-expression-parsing", false, "When true, the proxy supports arithmetic for durations in PromQL expressions.")
 	flagset.BoolVar(&promQLExperimentalFunctions, "enable-promql-experimental-functions", false, "When true, the proxy supports experimental functions in PromQL expressions.")
+	flagset.BoolVar(&promQLExtendedRangeSelectors, "enable-promql-extended-range-selectors", false, "When true, the proxy supports extended range selectors in PromQL expressions.")
+	flagset.BoolVar(&promQLBinopFillModifiers, "enable-promql-binop-fill-modifiers", false, "When true, the proxy supports binary operation fill modifiers in PromQL expressions.")
+
+	promslogConfig := &promslog.Config{
+		Level:  promslog.NewLevel(),
+		Format: promslog.NewFormat(),
+	}
+
+	if err := promslogConfig.Level.Set("info"); err != nil {
+		panic(err)
+	}
+	if err := promslogConfig.Format.Set("logfmt"); err != nil {
+		panic(err)
+	}
+	flagset.Var(
+		promslogConfig.Level,
+		promslogflag.LevelFlagName,
+		promslogflag.LevelFlagHelp,
+	)
+
+	flagset.Var(
+		promslogConfig.Format,
+		promslogflag.FormatFlagName,
+		promslogflag.FormatFlagHelp,
+	)
 
 	//nolint: errcheck // Parse() will exit on error.
 	flagset.Parse(os.Args[1:])
+	logger := promslog.New(promslogConfig)
+	slog.SetDefault(logger)
+
 	if label == "" {
-		log.Fatalf("-label flag cannot be empty")
+		fatal("-label flag cannot be empty")
 	}
 
 	if len(labelValues) == 0 && queryParam == "" && headerName == "" {
@@ -113,19 +158,19 @@ func main() {
 
 	if len(labelValues) > 0 {
 		if queryParam != "" || headerName != "" {
-			log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
+			fatal("at most one of -query-param, -header-name and -label-value must be set")
 		}
 	} else if queryParam != "" && headerName != "" {
-		log.Fatalf("at most one of -query-param, -header-name and -label-value must be set")
+		fatal("at most one of -query-param, -header-name and -label-value must be set")
 	}
 
 	upstreamURL, err := url.Parse(upstream)
 	if err != nil {
-		log.Fatalf("Failed to build parse upstream URL: %v", err)
+		fatal("Failed to build parse upstream URL", "error", err)
 	}
 
 	if upstreamURL.Scheme != "http" && upstreamURL.Scheme != "https" {
-		log.Fatalf("Invalid scheme for upstream URL %q, only 'http' and 'https' are supported", upstream)
+		fatal("Invalid scheme for upstream URL, only 'http' and 'https' are supported", "upstream", upstream)
 	}
 
 	reg := prometheus.NewRegistry()
@@ -134,6 +179,10 @@ func main() {
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 
+	if (upstreamClientCert == "") != (upstreamClientKey == "") {
+		fatal("both -upstream-client-cert and -upstream-client-key must be set")
+	}
+
 	opts := []injectproxy.Option{injectproxy.WithPrometheusRegistry(reg)}
 	if upstreamPathPrefix != "" {
 		opts = append(opts, injectproxy.WithUpstreamPathPrefix(upstreamPathPrefix))
@@ -141,6 +190,14 @@ func main() {
 
 	if upstreamCaCert != "" {
 		opts = append(opts, injectproxy.WithUpstreamCaCert(upstreamCaCert))
+	}
+
+	if upstreamClientCert != "" {
+		opts = append(opts, injectproxy.WithUpstreamClientCert(upstreamClientCert, upstreamClientKey))
+	}
+
+	if upstreamServerName != "" {
+		opts = append(opts, injectproxy.WithUpstreamServerName(upstreamServerName))
 	}
 
 	if enableLabelAPIs {
@@ -159,6 +216,10 @@ func main() {
 		opts = append(opts, injectproxy.WithErrorOnReplace())
 	}
 
+	if rewriteHostHeader != "" {
+		opts = append(opts, injectproxy.WithRewriteHostHeader(rewriteHostHeader))
+	}
+
 	if rulesWithActiveAlerts {
 		opts = append(opts, injectproxy.WithActiveAlerts())
 	}
@@ -170,18 +231,16 @@ func main() {
 	if regexMatch {
 		if len(labelValues) > 0 {
 			if len(labelValues) > 1 {
-				log.Fatalf("Regex match is limited to one label value")
+				fatal("Regex match is limited to one label value")
 			}
 
 			compiledRegex, err := regexp.Compile(labelValues[0])
 			if err != nil {
-				log.Fatalf("Invalid regexp: %v", err.Error())
-				return
+				fatal("Invalid regexp", "error", err)
 			}
 
 			if compiledRegex.MatchString("") {
-				log.Fatalf("Regex should not match empty string")
-				return
+				fatal("Regex should not match empty string")
 			}
 		}
 
@@ -194,6 +253,14 @@ func main() {
 
 	if promQLExperimentalFunctions {
 		opts = append(opts, injectproxy.WithPromqlExperimentalFunctions())
+	}
+
+	if promQLExtendedRangeSelectors {
+		opts = append(opts, injectproxy.WithPromqlExtendedRangeSelectors())
+	}
+
+	if promQLBinopFillModifiers {
+		opts = append(opts, injectproxy.WithPromqlBinopFillModifiers())
 	}
 
 	var extractLabeler injectproxy.ExtractLabeler
@@ -211,7 +278,7 @@ func main() {
 		// Run the insecure HTTP server.
 		routes, err := injectproxy.NewRoutes(upstreamURL, label, extractLabeler, opts...)
 		if err != nil {
-			log.Fatalf("Failed to create injectproxy Routes: %v", err)
+			fatal("Failed to create injectproxy Routes", "error", err)
 		}
 
 		mux := http.NewServeMux()
@@ -219,15 +286,15 @@ func main() {
 
 		l, err := net.Listen("tcp", insecureListenAddress)
 		if err != nil {
-			log.Fatalf("Failed to listen on insecure address: %v", err)
+			fatal("Failed to listen on insecure address", "error", err)
 		}
 
 		srv := &http.Server{Handler: mux}
 
 		g.Add(func() error {
-			log.Printf("Listening insecurely on %v", l.Addr())
+			slog.Info("Listening insecurely", "address", l.Addr().String())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
-				log.Printf("Server stopped with %v", err)
+				slog.Error("Server stopped", "error", err)
 				return err
 			}
 			return nil
@@ -246,15 +313,15 @@ func main() {
 		// Run the HTTP server.
 		l, err := net.Listen("tcp", internalListenAddress)
 		if err != nil {
-			log.Fatalf("Failed to listen on internal address: %v", err)
+			fatal("Failed to listen on internal address", "error", err)
 		}
 
 		srv := &http.Server{Handler: h}
 
 		g.Add(func() error {
-			log.Printf("Listening on %v for metrics and pprof", l.Addr())
+			slog.Info("Listening for metrics and pprof", "address", l.Addr().String())
 			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
-				log.Printf("Internal server stopped with %v", err)
+				slog.Error("Internal server stopped", "error", err)
 				return err
 			}
 			return nil
@@ -267,9 +334,8 @@ func main() {
 
 	if err := g.Run(); err != nil {
 		if !errors.As(err, &run.SignalError{}) {
-			log.Printf("Server stopped with %v", err)
-			os.Exit(1)
+			fatal("Server stopped", "error", err)
 		}
-		log.Print("Caught signal; exiting gracefully...")
+		slog.Info("Caught signal; exiting gracefully...")
 	}
 }

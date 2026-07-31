@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 )
 
 func mustNewMatcher(t labels.MatchType, n, v string) *labels.Matcher {
@@ -990,6 +991,92 @@ func TestEnforceWithErrOnReplace(t *testing.T) {
 						t.Fatalf("expected expression %q, got %q", stc.exp, got)
 					}
 				})
+			}
+		})
+	}
+}
+
+func TestEnforceWithParserOptions(t *testing.T) {
+	ns := mustNewMatcher(labels.MatchEqual, "namespace", "NS")
+
+	for _, tc := range []struct {
+		name       string
+		expression string
+		enforcer   *PromQLEnforcer
+		check      checkFunc
+	}{
+		// EnableExperimentalFunctions
+		{
+			name:       "experimental function enabled",
+			expression: `mad_over_time(metric[5m])`,
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{EnableExperimentalFunctions: true}, ns),
+			check: checks(
+				noError(),
+				hasExpression(`mad_over_time(metric{namespace="NS"}[5m])`),
+			),
+		},
+		{
+			name:       "experimental function disabled",
+			expression: `mad_over_time(metric[5m])`,
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{}, ns),
+			check:      errorIs(ErrQueryParse),
+		},
+
+		// ExperimentalDurationExpr
+		{
+			name:       "experimental duration expression enabled",
+			expression: `rate(metric[5m * 2])`,
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{ExperimentalDurationExpr: true}, ns),
+			check: checks(
+				noError(),
+				hasExpression(`rate(metric{namespace="NS"}[5m * 2])`),
+			),
+		},
+		{
+			name:       "experimental duration expression disabled",
+			expression: `rate(metric[5m * 2])`,
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{}, ns),
+			check:      errorIs(ErrQueryParse),
+		},
+
+		// EnableExtendedRangeSelectors
+		{
+			name:       "extended range selectors enabled",
+			expression: `metric anchored`,
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{EnableExtendedRangeSelectors: true}, ns),
+			check: checks(
+				noError(),
+				hasExpression(`metric{namespace="NS"} anchored`),
+			),
+		},
+		{
+			name:       "extended range selectors disabled",
+			expression: `metric anchored`,
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{}, ns),
+			check:      errorIs(ErrQueryParse),
+		},
+
+		// EnableBinopFillModifiers
+		{
+			name:       "binop fill modifiers enabled",
+			expression: `metric_a + fill(0) metric_b`,
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{EnableBinopFillModifiers: true}, ns),
+			check: checks(
+				noError(),
+				hasExpression(`metric_a{namespace="NS"} + fill (0) metric_b{namespace="NS"}`),
+			),
+		},
+		{
+			name:       "binop fill modifiers disabled",
+			expression: `metric_a + fill(0) metric_b`,
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{}, ns),
+			check:      errorIs(ErrQueryParse),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.enforcer.Enforce(tc.expression)
+			if err := tc.check(got, err); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}
