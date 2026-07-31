@@ -1044,6 +1044,14 @@ func TestQuery(t *testing.T) {
 			expResponse:    nil,
 		},
 		{
+			name:           `Query with a vector selector, multiple values and errorOnReplace`,
+			labelv:         []string{"default", "default2"},
+			promQuery:      `up{namespace="other"}`,
+			errorOnReplace: true,
+			expCode:        http.StatusBadRequest,
+			expResponse:    nil,
+		},
+		{
 			name:           `Query with a vector selector in POST body and errorOnReplace`,
 			labelv:         []string{"default"},
 			promQueryBody:  `up{namespace="other"}`,

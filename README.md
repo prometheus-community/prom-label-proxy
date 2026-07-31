@@ -1,6 +1,7 @@
-[![Docker Repository on Quay](https://quay.io/repository/prometheuscommunity/prom-label-proxy/status "Docker Repository on Quay")](https://quay.io/repository/prometheuscommunity/prom-label-proxy)
-
 # prom-label-proxy
+
+[![Build Status](https://github.com/prometheus-community/prom-label-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/prometheus-community/prom-label-proxy/actions/workflows/ci.yml)
+[![Docker Repository on Quay](https://quay.io/repository/prometheuscommunity/prom-label-proxy/status "Docker Repository on Quay")](https://quay.io/repository/prometheuscommunity/prom-label-proxy)
 
 The prom-label-proxy can enforce a given label in a given PromQL query, in Prometheus API responses or in Alertmanager API requests. As an example (but not only),
 this allows read multi-tenancy for projects like Prometheus, Alertmanager or Thanos.
