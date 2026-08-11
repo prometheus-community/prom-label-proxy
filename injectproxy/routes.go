@@ -30,6 +30,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/efficientgo/core/merrors"
 	"github.com/metalmatze/signal/server/signalhttp"
@@ -72,6 +73,7 @@ type options struct {
 	labelMatchersForRulesAPI bool
 	parserOptions            parser.Options
 	rewriteHostHeader        string
+	httpTimeout              time.Duration
 }
 
 type Option interface {
@@ -201,6 +203,13 @@ func WithPromqlBinopFillModifiers() Option {
 func WithRewriteHostHeader(host string) Option {
 	return optionFunc(func(o *options) {
 		o.rewriteHostHeader = host
+	})
+}
+
+// WithHTTPTimeout sets a timeout on proxied HTTP requests. If zero, no timeout is applied.
+func WithHTTPTimeout(d time.Duration) Option {
+	return optionFunc(func(o *options) {
+		o.httpTimeout = d
 	})
 }
 
@@ -488,6 +497,9 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	}
 
 	r.mux = mux
+	if opt.httpTimeout > 0 {
+		r.mux = http.TimeoutHandler(mux, opt.httpTimeout, "")
+	}
 	r.modifiers = map[string]func(*http.Response) error{
 		"/api/v1/alerts": modifyAPIResponse(r.filterAlerts),
 	}

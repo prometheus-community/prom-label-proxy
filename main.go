@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/metalmatze/signal/internalserver"
 	"github.com/oklog/run"
@@ -86,6 +87,7 @@ func main() {
 		promQLExtendedRangeSelectors    bool
 		promQLBinopFillModifiers        bool
 		rewriteHostHeader               string
+		httpTimeout                     time.Duration
 	)
 
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -117,6 +119,7 @@ func main() {
 	flagset.BoolVar(&promQLExperimentalFunctions, "enable-promql-experimental-functions", false, "When true, the proxy supports experimental functions in PromQL expressions.")
 	flagset.BoolVar(&promQLExtendedRangeSelectors, "enable-promql-extended-range-selectors", false, "When true, the proxy supports extended range selectors in PromQL expressions.")
 	flagset.BoolVar(&promQLBinopFillModifiers, "enable-promql-binop-fill-modifiers", false, "When true, the proxy supports binary operation fill modifiers in PromQL expressions.")
+	flagset.DurationVar(&httpTimeout, "http-timeout", 0, "Timeout for proxied HTTP requests. If zero, no timeout is applied.")
 
 	promslogConfig := &promslog.Config{
 		Level:  promslog.NewLevel(),
@@ -255,6 +258,10 @@ func main() {
 
 	if promQLBinopFillModifiers {
 		opts = append(opts, injectproxy.WithPromqlBinopFillModifiers())
+	}
+
+	if httpTimeout > 0 {
+		opts = append(opts, injectproxy.WithHTTPTimeout(httpTimeout))
 	}
 
 	var extractLabeler injectproxy.ExtractLabeler
