@@ -171,10 +171,10 @@ type alert struct {
 // response from the backend.
 var errModifyResponseFailed = errors.New("failed to process the API response")
 
-// modifyAPIResponse unwraps the Prometheus API response, passes the enforced
-// label value and the response to the given function and finally replaces the
-// result in the response.
-func modifyAPIResponse(f func([]string, *http.Request, *apiResponse) (any, error)) func(*http.Response) error {
+// modifyAPIResponse unwraps the Prometheus API response, passes the request
+// and response to the given function and finally replaces the result in the
+// response.
+func modifyAPIResponse(f func(*http.Request, *apiResponse) (any, error)) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		if resp.StatusCode != http.StatusOK {
 			// Pass non-200 responses as-is.
@@ -186,7 +186,7 @@ func modifyAPIResponse(f func([]string, *http.Request, *apiResponse) (any, error
 			return fmt.Errorf("can't decode the response: %w", err)
 		}
 
-		v, err := f(MustLabelValues(resp.Request.Context()), resp.Request, apir)
+		v, err := f(resp.Request, apir)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errModifyResponseFailed, err)
 		}
@@ -209,13 +209,13 @@ func modifyAPIResponse(f func([]string, *http.Request, *apiResponse) (any, error
 	}
 }
 
-func (r *routes) filterRules(lvalues []string, req *http.Request, resp *apiResponse) (any, error) {
+func (r *routes) filterRules(req *http.Request, resp *apiResponse) (any, error) {
 	var rgs rulesData
 	if err := json.Unmarshal(resp.Data, &rgs); err != nil {
 		return nil, fmt.Errorf("can't decode rules data: %w", err)
 	}
 
-	m, err := r.newLabelMatcher(lvalues...)
+	matchers, err := r.newLabelMatchers(req.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (r *routes) filterRules(lvalues []string, req *http.Request, resp *apiRespo
 	for _, rg := range rgs.RuleGroups {
 		var rules []rule
 		for _, rgr := range rg.Rules {
-			if lval := rgr.Labels().Get(r.label); lval != "" && m.Matches(lval) {
+			if labelsMatch(rgr.Labels(), matchers) {
 				rules = append(rules, rgr)
 				continue
 			}
@@ -235,7 +235,7 @@ func (r *routes) filterRules(lvalues []string, req *http.Request, resp *apiRespo
 
 			var ar *alertingRule
 			for i := range rgr.Alerts {
-				if lval := rgr.Alerts[i].Labels.Get(r.label); lval == "" || !m.Matches(lval) {
+				if !labelsMatch(rgr.Alerts[i].Labels, matchers) {
 					continue
 				}
 
@@ -280,23 +280,34 @@ func (r *routes) filterRules(lvalues []string, req *http.Request, resp *apiRespo
 	return &rulesData{RuleGroups: filtered}, nil
 }
 
-func (r *routes) filterAlerts(lvalues []string, _ *http.Request, resp *apiResponse) (any, error) {
+func (r *routes) filterAlerts(req *http.Request, resp *apiResponse) (any, error) {
 	var data alertsData
 	if err := json.Unmarshal(resp.Data, &data); err != nil {
 		return nil, fmt.Errorf("can't decode alerts data: %w", err)
 	}
 
-	m, err := r.newLabelMatcher(lvalues...)
+	matchers, err := r.newLabelMatchers(req.Context())
 	if err != nil {
 		return nil, err
 	}
 
 	filtered := []*alert{}
 	for _, alert := range data.Alerts {
-		if lval := alert.Labels.Get(r.label); lval != "" && m.Matches(lval) {
+		if labelsMatch(alert.Labels, matchers) {
 			filtered = append(filtered, alert)
 		}
 	}
 
 	return &alertsData{Alerts: filtered}, nil
+}
+
+func labelsMatch(labelSet labels.Labels, matchers []*labels.Matcher) bool {
+	for _, matcher := range matchers {
+		value := labelSet.Get(matcher.Name)
+		if value == "" || !matcher.Matches(value) {
+			return false
+		}
+	}
+
+	return true
 }

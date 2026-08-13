@@ -17,11 +17,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -46,13 +48,15 @@ func (r *routes) silences(w http.ResponseWriter, req *http.Request) {
 }
 
 // assertSingleLabelValue verifies that the proxy is configured to match only
-// one label value. If not, it will reply with "422 Unprocessable Content".
-func assertSingleLabelValue(next http.HandlerFunc) http.HandlerFunc {
+// one value for each enforced label. If not, it will reply with "422
+// Unprocessable Content".
+func (r *routes) assertSingleLabelValue(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		labelValues := MustLabelValues(req.Context())
-		if len(labelValues) > 1 {
-			http.Error(w, "Multiple label matchers not supported", http.StatusUnprocessableEntity)
-			return
+		for _, l := range r.labels {
+			if len(mustLabelValuesFor(req.Context(), l.Label)) > 1 {
+				http.Error(w, "Multiple label matchers not supported", http.StatusUnprocessableEntity)
+				return
+			}
 		}
 
 		next(w, req)
@@ -62,40 +66,18 @@ func assertSingleLabelValue(next http.HandlerFunc) http.HandlerFunc {
 // enforceFilterParameter injects a label matcher parameter into the
 // Alertmanager API's query.
 func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request) {
-	var (
-		q               = req.URL.Query()
-		proxyLabelMatch labels.Matcher
-	)
-
-	if len(MustLabelValues(req.Context())) > 1 {
-		proxyLabelMatch = labels.Matcher{
-			Type:  labels.MatchRegexp,
-			Name:  r.label,
-			Value: labelValuesToRegexpString(MustLabelValues(req.Context())),
-		}
-	} else {
-		matcherType := labels.MatchEqual
-		matcherValue := MustLabelValue(req.Context())
-		if r.regexMatch {
-			compiledRegex, err := regexp.Compile(matcherValue)
-			if err != nil {
-				prometheusAPIError(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if compiledRegex.MatchString("") {
-				prometheusAPIError(w, "Regex should not match empty string", http.StatusBadRequest)
-				return
-			}
-			matcherType = labels.MatchRegexp
-		}
-		proxyLabelMatch = labels.Matcher{
-			Type:  matcherType,
-			Name:  r.label,
-			Value: matcherValue,
-		}
+	proxyLabelMatchers, err := r.newAlertmanagerMatchers(req.Context())
+	if err != nil {
+		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	modified := []string{proxyLabelMatch.String()}
+	q := req.URL.Query()
+	modified := make([]string, 0, len(proxyLabelMatchers)+len(q["filter"]))
+	for _, m := range proxyLabelMatchers {
+		modified = append(modified, m.String())
+	}
+
 	for _, filter := range q["filter"] {
 		m, err := labels.ParseMatcher(filter)
 		if err != nil {
@@ -105,7 +87,9 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 
 		// Keep the original matcher in case of multi label values because
 		// the user might want to filter on a specific value.
-		if m.Name == r.label && proxyLabelMatch.Type != labels.MatchRegexp {
+		if slices.ContainsFunc(proxyLabelMatchers, func(pm labels.Matcher) bool {
+			return pm.Name == m.Name && pm.Type != labels.MatchRegexp
+		}) {
 			continue
 		}
 
@@ -113,17 +97,44 @@ func (r *routes) enforceFilterParameter(w http.ResponseWriter, req *http.Request
 	}
 
 	q["filter"] = modified
-	q.Del(r.label)
+	for _, l := range r.labels {
+		q.Del(l.Label)
+	}
 	req.URL.RawQuery = q.Encode()
 
 	r.handler.ServeHTTP(w, req)
 }
 
+// newAlertmanagerMatchers returns one Alertmanager matcher per enforced label.
+func (r *routes) newAlertmanagerMatchers(ctx context.Context) ([]labels.Matcher, error) {
+	matchers := make([]labels.Matcher, 0, len(r.labels))
+	for _, l := range r.labels {
+		values := mustLabelValuesFor(ctx, l.Label)
+
+		m := labels.Matcher{Type: labels.MatchEqual, Name: l.Label, Value: values[0]}
+		switch {
+		case r.regexMatch:
+			compiledRegex, err := regexp.Compile(values[0])
+			if err != nil {
+				return nil, err
+			}
+			if compiledRegex.MatchString("") {
+				return nil, errors.New("regex should not match empty string")
+			}
+			m.Type = labels.MatchRegexp
+		case len(values) > 1:
+			m.Type = labels.MatchRegexp
+			m.Value = labelValuesToRegexpString(values)
+		}
+
+		matchers = append(matchers, m)
+	}
+
+	return matchers, nil
+}
+
 func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
-	var (
-		sil    models.PostableSilence
-		lvalue = MustLabelValue(req.Context())
-	)
+	var sil models.PostableSilence
 
 	if err := json.NewDecoder(req.Body).Decode(&sil); err != nil {
 		prometheusAPIError(w, fmt.Sprintf("bad request: can't decode: %v", err), http.StatusBadRequest)
@@ -138,25 +149,28 @@ func (r *routes) postSilence(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !hasMatcherForLabel(existing.Matchers, r.label, lvalue) {
+		if !r.hasEnforcedMatchers(req.Context(), existing.Matchers) {
 			prometheusAPIError(w, "forbidden", http.StatusForbidden)
 			return
 		}
 	}
 
 	var falsy bool
-	modified := models.Matchers{
-		&models.Matcher{Name: &(r.label), Value: &lvalue, IsRegex: &falsy},
+	modified := make(models.Matchers, 0, len(r.labels)+len(sil.Matchers))
+	for _, l := range r.labels {
+		// Single value guaranteed by assertSingleLabelValue().
+		name, value := l.Label, mustLabelValuesFor(req.Context(), l.Label)[0]
+		modified = append(modified, &models.Matcher{Name: &name, Value: &value, IsRegex: &falsy})
 	}
 	for _, m := range sil.Matchers {
-		if m.Name != nil && *m.Name == r.label {
+		if m.Name != nil && r.isEnforcedLabel(*m.Name) {
 			continue
 		}
 		modified = append(modified, m)
 	}
-	// At least one matcher in addition to the enforced label is required,
+	// At least one matcher in addition to the enforced labels is required,
 	// otherwise all alerts would be silenced
-	if len(modified) < 2 {
+	if len(modified) == len(r.labels) {
 		prometheusAPIError(w, "need at least one matcher, got none", http.StatusBadRequest)
 		return
 	}
@@ -192,7 +206,7 @@ func (r *routes) deleteSilence(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if !hasMatcherForLabel(sil.Matchers, r.label, MustLabelValue(req.Context())) {
+	if !r.hasEnforcedMatchers(req.Context(), sil.Matchers) {
 		prometheusAPIError(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -222,4 +236,20 @@ func hasMatcherForLabel(matchers models.Matchers, name, value string) bool {
 		}
 	}
 	return false
+}
+
+func (r *routes) isEnforcedLabel(name string) bool {
+	return slices.ContainsFunc(r.labels, func(l LabelEnforcer) bool { return l.Label == name })
+}
+
+// hasEnforcedMatchers returns true when the silence has a matcher for every enforced label.
+func (r *routes) hasEnforcedMatchers(ctx context.Context, matchers models.Matchers) bool {
+	for _, l := range r.labels {
+		// Single value guaranteed by assertSingleLabelValue().
+		if !hasMatcherForLabel(matchers, l.Label, mustLabelValuesFor(ctx, l.Label)[0]) {
+			return false
+		}
+	}
+
+	return true
 }

@@ -46,8 +46,7 @@ const (
 type routes struct {
 	upstream *url.URL
 	handler  http.Handler
-	label    string
-	el       ExtractLabeler
+	labels   []LabelEnforcer
 
 	mux                   http.Handler
 	modifiers             map[string]func(*http.Response) error
@@ -376,10 +375,39 @@ func (sle StaticLabelEnforcer) ExtractLabel(next http.HandlerFunc) http.Handler 
 	})
 }
 
+// LabelEnforcer associates an enforced label with the source of its values.
+type LabelEnforcer struct {
+	Label          string
+	ExtractLabeler ExtractLabeler
+}
+
 func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, opts ...Option) (*routes, error) {
+	return NewRoutesWithLabelers(upstream, []LabelEnforcer{{Label: label, ExtractLabeler: extractLabeler}}, opts...)
+}
+
+// NewRoutesWithLabelers returns a proxy enforcing all the given labels.
+func NewRoutesWithLabelers(upstream *url.URL, enforcedLabels []LabelEnforcer, opts ...Option) (*routes, error) {
 	opt := options{}
 	for _, o := range opts {
 		o.apply(&opt)
+	}
+
+	if len(enforcedLabels) == 0 {
+		return nil, errors.New("at least one label must be enforced")
+	}
+
+	seenLabels := make(map[string]struct{}, len(enforcedLabels))
+	for _, l := range enforcedLabels {
+		if l.Label == "" {
+			return nil, errors.New("the label name can't be empty")
+		}
+		if l.ExtractLabeler == nil {
+			return nil, fmt.Errorf("label %q has no value extractor", l.Label)
+		}
+		if _, ok := seenLabels[l.Label]; ok {
+			return nil, fmt.Errorf("label %q is enforced more than once", l.Label)
+		}
+		seenLabels[l.Label] = struct{}{}
 	}
 
 	if opt.registerer == nil {
@@ -400,8 +428,7 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	r := &routes{
 		upstream:              upstream,
 		handler:               proxy,
-		label:                 label,
-		el:                    extractLabeler,
+		labels:                enforcedLabels,
 		errorOnReplace:        opt.errorOnReplace,
 		regexMatch:            opt.regexMatch,
 		rulesWithActiveAlerts: opt.rulesWithActiveAlerts,
@@ -410,50 +437,50 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 	mux := newStrictMux(newInstrumentedMux(http.NewServeMux(), opt.registerer))
 
 	errs := merrors.New(
-		mux.Handle("/federate", r.el.ExtractLabel(enforceMethods(r.matcher, "GET"))),
-		mux.Handle("/api/v1/query", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
-		mux.Handle("/api/v1/query_range", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
-		mux.Handle("/api/v1/alerts", r.el.ExtractLabel(enforceMethods(r.passthrough, "GET"))),
-		mux.Handle("/api/v1/series", r.el.ExtractLabel(enforceMethods(r.matcher, "GET", "POST"))),
-		mux.Handle("/api/v1/query_exemplars", r.el.ExtractLabel(enforceMethods(r.query, "GET", "POST"))),
+		mux.Handle("/federate", r.extractLabels(enforceMethods(r.matcher, "GET"))),
+		mux.Handle("/api/v1/query", r.extractLabels(enforceMethods(r.query, "GET", "POST"))),
+		mux.Handle("/api/v1/query_range", r.extractLabels(enforceMethods(r.query, "GET", "POST"))),
+		mux.Handle("/api/v1/alerts", r.extractLabels(enforceMethods(r.passthrough, "GET"))),
+		mux.Handle("/api/v1/series", r.extractLabels(enforceMethods(r.matcher, "GET", "POST"))),
+		mux.Handle("/api/v1/query_exemplars", r.extractLabels(enforceMethods(r.query, "GET", "POST"))),
 	)
 
 	if opt.labelMatchersForRulesAPI {
-		errs.Add(mux.Handle("/api/v1/rules", r.el.ExtractLabel(enforceMethods(r.matcher, "GET"))))
+		errs.Add(mux.Handle("/api/v1/rules", r.extractLabels(enforceMethods(r.matcher, "GET"))))
 	} else {
-		errs.Add(mux.Handle("/api/v1/rules", r.el.ExtractLabel(enforceMethods(r.passthrough, "GET"))))
+		errs.Add(mux.Handle("/api/v1/rules", r.extractLabels(enforceMethods(r.passthrough, "GET"))))
 	}
 
 	if opt.enableLabelAPIs {
 		errs.Add(
-			mux.Handle("/api/v1/labels", r.el.ExtractLabel(enforceMethods(r.matcher, "GET", "POST"))),
+			mux.Handle("/api/v1/labels", r.extractLabels(enforceMethods(r.matcher, "GET", "POST"))),
 			// Full path is /api/v1/label/<label_name>/values but http mux does not support patterns.
 			// This is fine though as we don't care about name for matcher injector.
-			mux.Handle("/api/v1/label/", r.el.ExtractLabel(enforceMethods(r.matcher, "GET"))),
+			mux.Handle("/api/v1/label/", r.extractLabels(enforceMethods(r.matcher, "GET"))),
 		)
 	}
 
 	errs.Add(
-		// Reject multi label values with assertSingleLabelValue() because the
-		// semantics of the Silences API don't support multi-label matchers.
-		mux.Handle("/api/v2/silences", r.el.ExtractLabel(
+		// Reject multiple values for an enforced label because the Silences API
+		// doesn't support multiple values for an enforced matcher.
+		mux.Handle("/api/v2/silences", r.extractLabels(
 			r.errorIfRegexpMatch(
 				enforceMethods(
-					assertSingleLabelValue(r.silences),
+					r.assertSingleLabelValue(r.silences),
 					"GET", "POST",
 				),
 			),
 		)),
-		mux.Handle("/api/v2/silence/", r.el.ExtractLabel(
+		mux.Handle("/api/v2/silence/", r.extractLabels(
 			r.errorIfRegexpMatch(
 				enforceMethods(
-					assertSingleLabelValue(r.deleteSilence),
+					r.assertSingleLabelValue(r.deleteSilence),
 					"DELETE",
 				),
 			),
 		)),
-		mux.Handle("/api/v2/alerts/groups", r.el.ExtractLabel(enforceMethods(r.enforceFilterParameter, "GET"))),
-		mux.Handle("/api/v2/alerts", r.el.ExtractLabel(enforceMethods(r.alerts, "GET"))),
+		mux.Handle("/api/v2/alerts/groups", r.extractLabels(enforceMethods(r.enforceFilterParameter, "GET"))),
+		mux.Handle("/api/v2/alerts", r.extractLabels(enforceMethods(r.alerts, "GET"))),
 	)
 
 	errs.Add(
@@ -589,6 +616,26 @@ type ctxKey int
 
 const keyLabel ctxKey = iota
 
+// labelValuesKey stores the values extracted for a single enforced label.
+type labelValuesKey string
+
+// extractLabels chains the extractors of all the enforced labels, storing the
+// values of each label under its own context key.
+func (r *routes) extractLabels(next http.HandlerFunc) http.Handler {
+	var handler http.Handler = next
+
+	for i := len(r.labels) - 1; i >= 0; i-- {
+		l := r.labels[i]
+		nextHandler := handler
+		handler = l.ExtractLabeler.ExtractLabel(func(w http.ResponseWriter, req *http.Request) {
+			ctx := context.WithValue(req.Context(), labelValuesKey(l.Label), MustLabelValues(req.Context()))
+			nextHandler.ServeHTTP(w, req.WithContext(ctx))
+		})
+	}
+
+	return handler
+}
+
 // MustLabelValues returns labels (previously stored using WithLabelValue())
 // from the given context.
 // It will panic if no label is found or the value is empty.
@@ -629,18 +676,29 @@ func WithLabelValues(ctx context.Context, labels []string) context.Context {
 	return context.WithValue(ctx, keyLabel, labels)
 }
 
+// mustLabelValuesFor returns the values extracted for the given enforced label.
+// It panics if the handler wasn't wrapped by extractLabels().
+func mustLabelValuesFor(ctx context.Context, label string) []string {
+	values, ok := ctx.Value(labelValuesKey(label)).([]string)
+	if !ok || len(values) == 0 {
+		panic(fmt.Sprintf("can't find the %q label value in the context", label))
+	}
+
+	return values
+}
+
 func (r *routes) passthrough(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
 }
 
 func (r *routes) query(w http.ResponseWriter, req *http.Request) {
-	matcher, err := r.newLabelMatcher(MustLabelValues(req.Context())...)
+	matchers, err := r.newLabelMatchers(req.Context())
 	if err != nil {
 		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	e := NewPromQLEnforcerWithOptions(r.errorOnReplace, r.parserOpts, matcher)
+	e := NewPromQLEnforcerWithOptions(r.errorOnReplace, r.parserOpts, matchers...)
 
 	// The `query` can come in the URL query string and/or the POST body.
 	// For this reason, we need to try to enforcing in both places.
@@ -714,7 +772,20 @@ func enforceQueryValues(e *PromQLEnforcer, v url.Values) (values string, noQuery
 	return v.Encode(), true, nil
 }
 
-func (r *routes) newLabelMatcher(vals ...string) (*labels.Matcher, error) {
+func (r *routes) newLabelMatchers(ctx context.Context) ([]*labels.Matcher, error) {
+	matchers := make([]*labels.Matcher, 0, len(r.labels))
+	for _, l := range r.labels {
+		matcher, err := r.newLabelMatcher(l.Label, mustLabelValuesFor(ctx, l.Label)...)
+		if err != nil {
+			return nil, err
+		}
+		matchers = append(matchers, matcher)
+	}
+
+	return matchers, nil
+}
+
+func (r *routes) newLabelMatcher(label string, vals ...string) (*labels.Matcher, error) {
 	if r.regexMatch {
 		if len(vals) != 1 {
 			return nil, errors.New("only one label value allowed with regex match")
@@ -730,35 +801,35 @@ func (r *routes) newLabelMatcher(vals ...string) (*labels.Matcher, error) {
 			return nil, errors.New("regex should not match empty string")
 		}
 
-		return labels.NewMatcher(labels.MatchRegexp, r.label, re)
+		return labels.NewMatcher(labels.MatchRegexp, label, re)
 	}
 
 	if len(vals) == 1 {
 		return labels.NewMatcher(
 			labels.MatchEqual,
-			r.label,
+			label,
 			vals[0],
 		)
 	}
 
-	return labels.NewMatcher(labels.MatchRegexp, r.label, labelValuesToRegexpString(vals))
+	return labels.NewMatcher(labels.MatchRegexp, label, labelValuesToRegexpString(vals))
 }
 
-// matcher modifies all the match[] HTTP parameters to match on the tenant label.
-// If none was provided, a tenant label matcher matcher is injected.
+// matcher modifies all the match[] HTTP parameters to match on the enforced labels.
+// If none was provided, the enforced label matchers are injected.
 // This works for non-query Prometheus API endpoints like /api/v1/series,
 // /api/v1/label/<name>/values, /api/v1/labels and /federate which support
 // multiple matchers.
 // See e.g https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metadata
 func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
-	matcher, err := r.newLabelMatcher(MustLabelValues(req.Context())...)
+	matchers, err := r.newLabelMatchers(req.Context())
 	if err != nil {
 		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	q := req.URL.Query()
-	if err := r.injectMatcher(q, matcher); err != nil {
+	if err := r.injectMatchers(q, matchers...); err != nil {
 		prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -770,7 +841,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 		}
 
 		q = req.PostForm
-		if err := r.injectMatcher(q, matcher); err != nil {
+		if err := r.injectMatchers(q, matchers...); err != nil {
 			return
 		}
 
@@ -784,10 +855,10 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
 }
 
-func (r *routes) injectMatcher(q url.Values, matcher *labels.Matcher) error {
+func (r *routes) injectMatchers(q url.Values, enforcedMatchers ...*labels.Matcher) error {
 	matchers := q[matchersParam]
 	if len(matchers) == 0 {
-		q.Set(matchersParam, matchersToString(matcher))
+		q.Set(matchersParam, matchersToString(enforcedMatchers...))
 		return nil
 	}
 
@@ -799,7 +870,7 @@ func (r *routes) injectMatcher(q url.Values, matcher *labels.Matcher) error {
 			return err
 		}
 
-		matchers[i] = matchersToString(append(ms, matcher)...)
+		matchers[i] = matchersToString(append(ms, enforcedMatchers...)...)
 	}
 	q[matchersParam] = matchers
 

@@ -157,6 +157,170 @@ func (m *mockUpstream) Close() {
 
 const proxyLabel = "namespace"
 
+// multiLabelEnforcers enforces "namespace" and "cluster" from HTTP headers.
+var multiLabelEnforcers = []LabelEnforcer{
+	{Label: proxyLabel, ExtractLabeler: HTTPHeaderEnforcer{Name: "X-Namespace"}},
+	{Label: "cluster", ExtractLabeler: HTTPHeaderEnforcer{Name: "X-Cluster"}},
+}
+
+func TestNewRoutesWithLabelersValidation(t *testing.T) {
+	m := newMockUpstream(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer m.Close()
+
+	for _, tc := range []struct {
+		name     string
+		labelers []LabelEnforcer
+	}{
+		{
+			name: "no label",
+		},
+		{
+			name:     "empty label name",
+			labelers: []LabelEnforcer{{ExtractLabeler: HTTPHeaderEnforcer{Name: "X-Namespace"}}},
+		},
+		{
+			name:     "missing extractor",
+			labelers: []LabelEnforcer{{Label: proxyLabel}},
+		},
+		{
+			name: "duplicated label",
+			labelers: []LabelEnforcer{
+				{Label: proxyLabel, ExtractLabeler: HTTPHeaderEnforcer{Name: "X-Namespace"}},
+				{Label: proxyLabel, ExtractLabeler: HTTPHeaderEnforcer{Name: "X-Cluster"}},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := NewRoutesWithLabelers(m.url, tc.labelers); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+}
+
+// The extractors run one after the other and each of them strips its own
+// parameter from the request, whether it came from the URL or the body.
+func TestQueryMultipleLabelParametersAcrossURLAndPostBody(t *testing.T) {
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if err := req.ParseForm(); err != nil {
+			prometheusAPIError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if len(req.Form["tenant"]) != 0 || len(req.Form["cluster"]) != 0 {
+			prometheusAPIError(w, "label parameters were forwarded", http.StatusInternalServerError)
+			return
+		}
+		if got := req.PostForm.Get(queryParam); got != `up{cluster="cluster-a",tenant="team-a"}` {
+			prometheusAPIError(w, fmt.Sprintf("unexpected query %q", got), http.StatusInternalServerError)
+			return
+		}
+		w.Write(okResponse)
+	}))
+	defer m.Close()
+
+	r, err := NewRoutesWithLabelers(
+		m.url,
+		[]LabelEnforcer{
+			{Label: "tenant", ExtractLabeler: HTTPFormEnforcer{ParameterName: "tenant"}},
+			{Label: "cluster", ExtractLabeler: HTTPFormEnforcer{ParameterName: "cluster"}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	body := url.Values{queryParam: {"up"}, "cluster": {"cluster-a"}}.Encode()
+	req := httptest.NewRequest(http.MethodPost, "http://prometheus.example.com/api/v1/query?tenant=team-a", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestQueryMultipleLabels(t *testing.T) {
+	m := newMockUpstream(checkQueryHandler("", queryParam, `up{cluster="cluster-a",namespace="team-a"}`))
+	defer m.Close()
+
+	r, err := NewRoutesWithLabelers(m.url, multiLabelEnforcers)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://prometheus.example.com/api/v1/query?query=up", nil)
+	req.Header.Set("X-Namespace", "team-a")
+	req.Header.Set("X-Cluster", "cluster-a")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestQueryMultipleLabelsRequiresEveryValue(t *testing.T) {
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer m.Close()
+
+	r, err := NewRoutesWithLabelers(m.url, multiLabelEnforcers)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://prometheus.example.com/api/v1/query?query=up", nil)
+	req.Header.Set("X-Namespace", "team-a")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestQueryMultipleLabelsWithMultipleValues(t *testing.T) {
+	m := newMockUpstream(checkQueryHandler("", queryParam, `up{cluster=~"cluster-a|cluster-b",namespace=~"team-a|team-b"}`))
+	defer m.Close()
+
+	r, err := NewRoutesWithLabelers(m.url, multiLabelEnforcers)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://prometheus.example.com/api/v1/query?query=up", nil)
+	req.Header["X-Namespace"] = []string{"team-b", "team-a"}
+	req.Header["X-Cluster"] = []string{"cluster-b", "cluster-a"}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestMatchMultipleLabels(t *testing.T) {
+	m := newMockUpstream(checkQueryHandler("", matchersParam, `{job="prometheus",namespace="team-a",cluster="cluster-a"}`))
+	defer m.Close()
+
+	r, err := NewRoutesWithLabelers(m.url, multiLabelEnforcers)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, `http://prometheus.example.com/api/v1/series?match%5B%5D=%7Bjob%3D%22prometheus%22%7D`, nil)
+	req.Header.Set("X-Namespace", "team-a")
+	req.Header.Set("X-Cluster", "cluster-a")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
 func TestWithPassthroughPaths(t *testing.T) {
 	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) { w.Write(okResponse) }))
 	defer m.Close()
