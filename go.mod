@@ -1,6 +1,6 @@
 module github.com/prometheus-community/prom-label-proxy
 
-go 1.25.0
+go 1.25.8
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.3
@@ -8,10 +8,10 @@ require (
 	github.com/go-openapi/strfmt v0.27.0
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a
 	github.com/oklog/run v1.2.0
-	github.com/prometheus/alertmanager v0.33.1
+	github.com/prometheus/alertmanager v0.34.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/common v0.70.1
-	github.com/prometheus/prometheus v0.313.2
+	github.com/prometheus/prometheus v0.314.0
 	gotest.tools/v3 v3.5.2
 )
 
@@ -30,15 +30,14 @@ require (
 	github.com/go-openapi/loads v0.25.1 // indirect
 	github.com/go-openapi/runtime/server-middleware v0.33.1 // indirect
 	github.com/go-openapi/spec v0.22.9 // indirect
-	github.com/go-openapi/swag v0.26.0 // indirect
-	github.com/go-openapi/swag/cmdutils v0.26.0 // indirect
+	github.com/go-openapi/swag v0.28.0 // indirect
+	github.com/go-openapi/swag/cmdutils v0.28.0 // indirect
 	github.com/go-openapi/swag/conv v0.28.0 // indirect
 	github.com/go-openapi/swag/fileutils v0.28.0 // indirect
-	github.com/go-openapi/swag/jsonname v0.26.1 // indirect
 	github.com/go-openapi/swag/jsonutils v0.28.0 // indirect
 	github.com/go-openapi/swag/loading v0.28.0 // indirect
 	github.com/go-openapi/swag/mangling v0.28.0 // indirect
-	github.com/go-openapi/swag/netutils v0.26.0 // indirect
+	github.com/go-openapi/swag/netutils v0.28.0 // indirect
 	github.com/go-openapi/swag/pools v0.28.0 // indirect
 	github.com/go-openapi/swag/stringutils v0.28.0 // indirect
 	github.com/go-openapi/swag/typeutils v0.28.0 // indirect
@@ -63,5 +62,5 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 )
