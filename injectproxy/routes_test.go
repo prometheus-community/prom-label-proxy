@@ -27,6 +27,31 @@ import (
 
 var okResponse = []byte(`ok`)
 
+func TestHTTPTimeout(t *testing.T) {
+	done := make(chan struct{})
+	m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		<-done
+	}))
+	t.Cleanup(func() {
+		close(done)
+		m.Close()
+	})
+
+	r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel}, WithHTTPTimeout(time.Microsecond))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "http://prometheus.example.com/api/v1/query?namespace=default&query=up", nil)
+	r.ServeHTTP(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected status code %d, got %d", http.StatusServiceUnavailable, resp.StatusCode)
+	}
+}
+
 func checkParameterAbsent(param string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		kvs, err := url.ParseQuery(req.URL.RawQuery)
