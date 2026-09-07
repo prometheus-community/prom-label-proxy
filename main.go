@@ -66,6 +66,7 @@ func main() {
 		insecureListenAddress           string
 		internalListenAddress           string
 		upstream                        string
+		upstreamPathPrefix              string
 		upstreamCaCert                  string
 		upstreamClientCert              string
 		upstreamClientKey               string
@@ -99,6 +100,7 @@ func main() {
 	flagset.StringVar(&upstreamCaCert, "upstream-ca-cert", "", "The upstream ca certificate file.")
 	flagset.StringVar(&upstreamClientCert, "upstream-client-cert", "", "The client certificate file to present for mutual TLS with the upstream. Requires -upstream-client-key.")
 	flagset.StringVar(&upstreamClientKey, "upstream-client-key", "", "The client key file to present for mutual TLS with the upstream. Requires -upstream-client-cert.")
+	flagset.StringVar(&upstreamPathPrefix, "upstream-path-prefix", "", "The upstream prefix path to proxy to.")
 	flagset.StringVar(&upstreamServerName, "upstream-server-name", "", "The server name used to verify the upstream's TLS certificate. Useful when the upstream URL host does not match the certificate.")
 	flagset.StringVar(&label, "label", "", "The label name to enforce in all proxied PromQL queries.")
 	flagset.Var(&labelValues, "label-value", "A fixed label value to enforce in all proxied PromQL queries. At most one of -query-param, -header-name and -label-value should be given. It can be repeated in which case the proxy will enforce the union of values.")
@@ -185,6 +187,10 @@ func main() {
 	}
 
 	opts := []injectproxy.Option{injectproxy.WithPrometheusRegistry(reg)}
+	if upstreamPathPrefix != "" {
+		opts = append(opts, injectproxy.WithUpstreamPathPrefix(upstreamPathPrefix))
+	}
+
 	if upstreamCaCert != "" {
 		opts = append(opts, injectproxy.WithUpstreamCaCert(upstreamCaCert))
 	}
