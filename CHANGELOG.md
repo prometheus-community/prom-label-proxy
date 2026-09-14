@@ -1,3 +1,7 @@
+## 0.15.1 / 2026-07-31
+
+Release resolving the missing container image. No changes.
+
 ## 0.15.0 / 2026-07-30
 
 * [FEATURE] Add `-rewrite-host-header-to` flag to override the `Host` header in the requests forwarded to upstream (the proxy also adds the `X-Forwarded-Host` and `X-Forwarded-Proto` headers). #383
