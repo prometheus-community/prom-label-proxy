@@ -1,6 +1,6 @@
 ## 0.15.1 / 2026-07-31
 
-Release resolving the missing container image. No changes.
+* [FEATURE] Add the `-http-timeout` flag. #419
 
 ## 0.15.0 / 2026-07-30
 
