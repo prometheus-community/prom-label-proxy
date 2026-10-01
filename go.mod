@@ -1,11 +1,11 @@
 module github.com/prometheus-community/prom-label-proxy
 
-go 1.25.8
+go 1.26.0
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.3
 	github.com/go-openapi/runtime v0.33.1
-	github.com/go-openapi/strfmt v0.27.0
+	github.com/go-openapi/strfmt v0.27.2
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a
 	github.com/oklog/run v1.2.0
 	github.com/prometheus/alertmanager v0.34.0
