@@ -607,10 +607,10 @@ const keyLabel ctxKey = iota
 func MustLabelValues(ctx context.Context) []string {
 	labels, ok := ctx.Value(keyLabel).([]string)
 	if !ok {
-		panic(fmt.Sprintf("can't find the %q value in the context", keyLabel))
+		panic("can't find the keyLabel value in the context")
 	}
 	if len(labels) == 0 {
-		panic(fmt.Sprintf("empty %q value in the context", keyLabel))
+		panic("empty keyLabel value in the context")
 	}
 
 	sort.Strings(labels)
