@@ -1,7 +1,7 @@
 ---
 go:
     # This must match .github/workflows/ci.yml.
-    version: 1.26
+    version: 1.27
 repository:
     path: github.com/prometheus-community/prom-label-proxy
 build:
