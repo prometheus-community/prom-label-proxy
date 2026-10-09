@@ -45,10 +45,11 @@ const (
 )
 
 type routes struct {
-	upstream *url.URL
-	handler  http.Handler
-	label    string
-	el       ExtractLabeler
+	upstream   *url.URL
+	handler    http.Handler
+	httpClient *http.Client
+	label      string
+	el         ExtractLabeler
 
 	mux                   http.Handler
 	modifiers             map[string]func(*http.Response) error
@@ -540,6 +541,8 @@ func NewRoutes(upstream *url.URL, label string, extractLabeler ExtractLabeler, o
 
 		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
 	}
+
+	r.httpClient = &http.Client{Transport: transport}
 
 	proxy.Transport = transport
 	proxy.ModifyResponse = r.ModifyResponse
