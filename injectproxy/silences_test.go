@@ -575,6 +575,94 @@ func TestUpdateSilence(t *testing.T) {
 		})
 	}
 }
+func TestAlertmanagerErrorShape(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+		query  url.Values
+		body   string
+
+		expCode int
+	}{
+		{
+			name:   "invalid filter",
+			method: http.MethodGet,
+			path:   "/api/v2/silences",
+			query: url.Values{
+				proxyLabel: []string{"default"},
+				"filter":   []string{`job="promethe`},
+			},
+			expCode: http.StatusBadRequest,
+		},
+		{
+			name:   "missing matcher on POST",
+			method: http.MethodPost,
+			path:   "/api/v2/silences",
+			query: url.Values{
+				proxyLabel: []string{"default"},
+			},
+			body: `{
+    "comment":"foo",
+    "createdBy":"bar",
+    "endsAt":"2020-02-13T13:00:02.084Z",
+    "matchers": [],
+    "startsAt":"2020-02-13T12:02:01Z"
+}`,
+			expCode: http.StatusBadRequest,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				http.Error(w, "upstream should not be called", http.StatusInternalServerError)
+			}))
+			defer m.Close()
+			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			u, err := url.Parse("http://alertmanager.example.com" + tc.path)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			u.RawQuery = tc.query.Encode()
+
+			var reqBody io.Reader
+			if tc.body != "" {
+				reqBody = bytes.NewBufferString(tc.body)
+			}
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, u.String(), reqBody)
+			r.ServeHTTP(w, req)
+
+			resp := w.Result()
+			body, _ := io.ReadAll(resp.Body)
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tc.expCode {
+				t.Fatalf("expected status code %d, got %d (%s)", tc.expCode, resp.StatusCode, body)
+			}
+
+			ct := resp.Header.Get("Content-Type")
+			if !strings.HasPrefix(ct, "application/json") {
+				t.Fatalf("expected Content-Type application/json, got %q", ct)
+			}
+
+			var msg string
+			if err := json.Unmarshal(body, &msg); err != nil {
+				t.Fatalf("expected JSON string body, got %q: %v", body, err)
+			}
+			if msg == "" {
+				t.Fatalf("expected non-empty JSON string error, got %q", body)
+			}
+			if strings.Contains(string(body), `"status":"error"`) {
+				t.Fatalf("expected Alertmanager JSON string, got Prometheus API error %q", body)
+			}
+		})
+	}
+}
+
 func TestGetAlertGroups(t *testing.T) {
 	for _, tc := range []struct {
 		labelv         []string

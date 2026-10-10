@@ -30,3 +30,16 @@ func prometheusAPIError(w http.ResponseWriter, errorMessage string, code int) {
 		slog.Error("Failed to encode json", "error", err)
 	}
 }
+
+// alertmanagerAPIError writes an error using the same JSON-string body shape
+// as Alertmanager non-2xx responses, e.g. a 400 with Content-Type
+// application/json and a body like "Failed to create silence: ...\n".
+func alertmanagerAPIError(w http.ResponseWriter, errorMessage string, code int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(code)
+
+	if err := json.NewEncoder(w).Encode(errorMessage); err != nil {
+		slog.Error("Failed to encode json", "error", err)
+	}
+}
