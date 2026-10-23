@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -1365,5 +1366,68 @@ func TestQuery(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestSeriesWithPostMatchersLocation(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		urlMatchers  []string
+		bodyMatchers []string
+		expURL       []string
+		expBody      []string
+	}{
+		{
+			name:         "matcher only in the body is not duplicated in the URL",
+			bodyMatchers: []string{"up"},
+			expBody:      []string{`{__name__="up",namespace="default"}`},
+		},
+		{
+			name:        "matcher only in the URL is not duplicated in the body",
+			urlMatchers: []string{"up"},
+			expURL:      []string{`{__name__="up",namespace="default"}`},
+		},
+		{
+			name:         "matchers in both the URL and the body are enforced in place",
+			urlMatchers:  []string{"up"},
+			bodyMatchers: []string{"down"},
+			expURL:       []string{`{__name__="up",namespace="default"}`},
+			expBody:      []string{`{__name__="down",namespace="default"}`},
+		},
+	} {
+		t.Run(strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
+			var gotURL, gotBody []string
+			m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if err := req.ParseForm(); err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				gotURL = req.URL.Query()[matchersParam]
+				gotBody = req.PostForm[matchersParam]
+				w.Write(okResponse)
+			}))
+			defer m.Close()
+
+			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			q := url.Values{proxyLabel: {"default"}, matchersParam: tc.urlMatchers}
+			body := url.Values{matchersParam: tc.bodyMatchers}.Encode()
+			req := httptest.NewRequest(http.MethodPost, "http://prometheus.example.com/api/v1/series?"+q.Encode(), strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+			}
+			if !reflect.DeepEqual(gotURL, tc.expURL) {
+				t.Fatalf("expected URL matchers %q, got %q", tc.expURL, gotURL)
+			}
+			if !reflect.DeepEqual(gotBody, tc.expBody) {
+				t.Fatalf("expected body matchers %q, got %q", tc.expBody, gotBody)
+			}
+		})
 	}
 }
