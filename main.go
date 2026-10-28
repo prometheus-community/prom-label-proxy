@@ -79,6 +79,7 @@ func main() {
 		insecureSkipVerify              bool
 		errorOnReplace                  bool
 		regexMatch                      bool
+		queryParamOnly                  bool
 		headerUsesListSyntax            bool
 		rulesWithActiveAlerts           bool
 		labelMatchersForRulesAPI        bool
@@ -112,6 +113,7 @@ func main() {
 	flagset.BoolVar(&errorOnReplace, "error-on-replace", false, "When specified, the proxy will return HTTP status code 400 if the query already contains a label matcher that differs from the one the proxy would inject.")
 	flagset.StringVar(&rewriteHostHeader, "rewrite-host-header-to", "", "Rewrite the Host header to the supplied value when proxying requests to the upstream URL. Useful when the upstream is behind an ingress that routes based on the Host header.")
 	flagset.BoolVar(&regexMatch, "regex-match", false, "When specified, the tenant name is treated as a regular expression. In this case, only one tenant name should be provided.")
+	flagset.BoolVar(&queryParamOnly, "query-param-only", false, "Use only URL query values for the tenant parameter; reject non-empty POST form values (HTTP 400). Effective only with -query-param (explicit or defaulted from -label); otherwise ignored. For URL-only authz proxies (see README).")
 	flagset.BoolVar(&headerUsesListSyntax, "header-uses-list-syntax", false, "When specified, the header line value will be parsed as a comma-separated list. This allows a single tenant header line to specify multiple tenant names.")
 	flagset.BoolVar(&rulesWithActiveAlerts, "rules-with-active-alerts", false, "When true, the proxy will return alerting rules with active alerts matching the tenant label even when the tenant label isn't present in the rule's labels.")
 	flagset.BoolVar(&labelMatchersForRulesAPI, "enable-label-matchers-for-rules-api", false, "When true, the proxy uses label matchers when querying the /api/v1/rules endpoint. NOTE: Enable with care because filtering by label matcher is not implemented in older versions of Prometheus (>= 2.54.0 required) and Thanos (>= v0.25.0 required). If not implemented by upstream, the response will not be filtered accordingly.")
@@ -269,7 +271,7 @@ func main() {
 	case len(labelValues) > 0:
 		extractLabeler = injectproxy.StaticLabelEnforcer(labelValues)
 	case queryParam != "":
-		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam}
+		extractLabeler = injectproxy.HTTPFormEnforcer{ParameterName: queryParam, QueryOnly: queryParamOnly}
 	case headerName != "":
 		extractLabeler = injectproxy.HTTPHeaderEnforcer{Name: http.CanonicalHeaderKey(headerName), ParseListSyntax: headerUsesListSyntax}
 	}
