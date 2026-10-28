@@ -203,7 +203,7 @@ func (r *routes) deleteSilence(w http.ResponseWriter, req *http.Request) {
 
 func (r *routes) getSilenceByID(ctx context.Context, id string) (*models.GettableSilence, error) {
 	amc := client.New(
-		runtimeclient.New(r.upstream.Host, path.Join(r.upstream.Path, "/api/v2"), []string{r.upstream.Scheme}),
+		runtimeclient.NewWithClient(r.upstream.Host, path.Join(r.upstream.Path, "/api/v2"), []string{r.upstream.Scheme}, r.httpClient),
 		strfmt.Default,
 	)
 	params := silence.NewGetSilenceParams().WithContext(ctx)
