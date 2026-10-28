@@ -287,9 +287,12 @@ type ExtractLabeler interface {
 	ExtractLabel(next http.HandlerFunc) http.Handler
 }
 
-// HTTPFormEnforcer enforces a label value extracted from the HTTP form and query parameters.
+// HTTPFormEnforcer enforces a label value extracted from the HTTP form and/or query parameters.
 type HTTPFormEnforcer struct {
 	ParameterName string
+	// QueryOnly when true extracts ParameterName only from the URL query parameters. Requests with non-empty
+	// POST form values for that parameter are rejected with HTTP 400.
+	QueryOnly bool
 }
 
 // ExtractLabel implements the ExtractLabeler interface.
@@ -332,7 +335,15 @@ func (hff HTTPFormEnforcer) getLabelValues(r *http.Request) ([]string, error) {
 		return nil, fmt.Errorf("the form data can not be parsed: %w", err)
 	}
 
-	formValues := removeEmptyValues(r.Form[hff.ParameterName])
+	values := r.Form
+	if hff.QueryOnly {
+		if len(removeEmptyValues(r.PostForm[hff.ParameterName])) > 0 {
+			return nil, fmt.Errorf("the %q parameter must not be provided in the POST form body when query-param-only mode is enabled", hff.ParameterName)
+		}
+		values = r.URL.Query()
+	}
+
+	formValues := removeEmptyValues(values[hff.ParameterName])
 	if len(formValues) == 0 {
 		return nil, fmt.Errorf("the %q query parameter must be provided", hff.ParameterName)
 	}

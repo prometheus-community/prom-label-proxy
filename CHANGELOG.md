@@ -1,3 +1,7 @@
+## Unreleased
+
+* [FEATURE] Add the `-query-param-only` flag to extract the tenant label from the URL query string only and reject non-empty POST form values for that parameter. Use with authorization proxies that SAR URL query values only (e.g. kube-rbac-proxy `byQueryParameter`). Effective only when `-query-param` is used; otherwise ignored.
+
 ## 0.15.1 / 2026-07-31
 
 * [FEATURE] Add the `-http-timeout` flag. #419

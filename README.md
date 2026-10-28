@@ -98,6 +98,29 @@ It also works with POST requests:
 {"status":"success","data":{"resultType":"vector","result":[]}}%
 ```
 
+When an upstream authorization proxy (for example kube-rbac-proxy
+`byQueryParameter`) authorizes only URL query values, enable
+`-query-param-only` so `prom-label-proxy` does not merge a POST form tenant
+parameter into the enforced matcher. Requests with non-empty POST form values for that parameter are rejected
+with HTTP 400. `-query-param-only` is effective only when `-query-param` is used (either explicitly or implicitly) otherwise it is ignored.
+
+```
+prom-label-proxy \
+   -label tenant \
+   -query-param-only \
+   -upstream http://demo.do.prometheus.io:9090 \
+   -insecure-listen-address 127.0.0.1:8080
+```
+
+```bash
+# Perses-style: tenant on URL, PromQL in the form body — OK
+➜  ~ curl -d 'query=up' 'http://127.0.0.1:8080/api/v1/query?tenant=team-a'
+{"status":"success","data":{"resultType":"vector","result":[]}}%
+# Form-body tenant rejected — would otherwise widen enforcement beyond URL-only authz
+➜  ~ curl -d 'tenant=team-b&query=up' 'http://127.0.0.1:8080/api/v1/query?tenant=team-a'
+{"error":"The \"tenant\" parameter must not be provided in the POST form body when query-param-only mode is enabled.","errorType":"prom-label-proxy","status":"error"}
+```
+
 Alternatively, `prom-label-proxy` can use a custom HTTP header instead HTTP parameters:
 
 ```
