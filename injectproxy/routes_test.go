@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -1365,5 +1366,94 @@ func TestQuery(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestSeriesWithPostMatchersLocation(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		method       string
+		urlMatchers  []string
+		bodyMatchers []string
+		expURL       []string
+		expBody      []string
+	}{
+		{
+			name:         "POST matcher only in the body is not duplicated in the URL",
+			method:       http.MethodPost,
+			bodyMatchers: []string{"up"},
+			expBody:      []string{`{__name__="up",namespace="default"}`},
+		},
+		{
+			name:        "POST matcher only in the URL is not duplicated in the body",
+			method:      http.MethodPost,
+			urlMatchers: []string{"up"},
+			expURL:      []string{`{__name__="up",namespace="default"}`},
+		},
+		{
+			name:         "POST matchers in both the URL and the body are enforced in place",
+			method:       http.MethodPost,
+			urlMatchers:  []string{"up"},
+			bodyMatchers: []string{"down"},
+			expURL:       []string{`{__name__="up",namespace="default"}`},
+			expBody:      []string{`{__name__="down",namespace="default"}`},
+		},
+		{
+			name:    "POST without matchers gets the label matcher in the URL and the body",
+			method:  http.MethodPost,
+			expURL:  []string{`{namespace="default"}`},
+			expBody: []string{`{namespace="default"}`},
+		},
+		{
+			name:        "GET matcher in the URL is enforced",
+			method:      http.MethodGet,
+			urlMatchers: []string{"up"},
+			expURL:      []string{`{__name__="up",namespace="default"}`},
+		},
+		{
+			name:   "GET without matchers gets the label matcher in the URL",
+			method: http.MethodGet,
+			expURL: []string{`{namespace="default"}`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotURL, gotBody []string
+			m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if err := req.ParseForm(); err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				gotURL = req.URL.Query()[matchersParam]
+				gotBody = req.PostForm[matchersParam]
+				w.Write(okResponse)
+			}))
+			defer m.Close()
+
+			r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			q := url.Values{proxyLabel: {"default"}, matchersParam: tc.urlMatchers}
+			var body io.Reader
+			if tc.method == http.MethodPost {
+				body = strings.NewReader(url.Values{matchersParam: tc.bodyMatchers}.Encode())
+			}
+			req := httptest.NewRequest(tc.method, "http://prometheus.example.com/api/v1/series?"+q.Encode(), body)
+			if tc.method == http.MethodPost {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+			}
+			if !reflect.DeepEqual(gotURL, tc.expURL) {
+				t.Fatalf("expected URL matchers %q, got %q", tc.expURL, gotURL)
+			}
+			if !reflect.DeepEqual(gotBody, tc.expBody) {
+				t.Fatalf("expected body matchers %q, got %q", tc.expBody, gotBody)
+			}
+		})
 	}
 }
