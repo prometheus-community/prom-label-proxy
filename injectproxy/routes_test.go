@@ -1372,30 +1372,51 @@ func TestQuery(t *testing.T) {
 func TestSeriesWithPostMatchersLocation(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
+		method       string
 		urlMatchers  []string
 		bodyMatchers []string
 		expURL       []string
 		expBody      []string
 	}{
 		{
-			name:         "matcher only in the body is not duplicated in the URL",
+			name:         "POST matcher only in the body is not duplicated in the URL",
+			method:       http.MethodPost,
 			bodyMatchers: []string{"up"},
 			expBody:      []string{`{__name__="up",namespace="default"}`},
 		},
 		{
-			name:        "matcher only in the URL is not duplicated in the body",
+			name:        "POST matcher only in the URL is not duplicated in the body",
+			method:      http.MethodPost,
 			urlMatchers: []string{"up"},
 			expURL:      []string{`{__name__="up",namespace="default"}`},
 		},
 		{
-			name:         "matchers in both the URL and the body are enforced in place",
+			name:         "POST matchers in both the URL and the body are enforced in place",
+			method:       http.MethodPost,
 			urlMatchers:  []string{"up"},
 			bodyMatchers: []string{"down"},
 			expURL:       []string{`{__name__="up",namespace="default"}`},
 			expBody:      []string{`{__name__="down",namespace="default"}`},
 		},
+		{
+			name:    "POST without matchers gets the label matcher in the URL and the body",
+			method:  http.MethodPost,
+			expURL:  []string{`{namespace="default"}`},
+			expBody: []string{`{namespace="default"}`},
+		},
+		{
+			name:        "GET matcher in the URL is enforced",
+			method:      http.MethodGet,
+			urlMatchers: []string{"up"},
+			expURL:      []string{`{__name__="up",namespace="default"}`},
+		},
+		{
+			name:   "GET without matchers gets the label matcher in the URL",
+			method: http.MethodGet,
+			expURL: []string{`{namespace="default"}`},
+		},
 	} {
-		t.Run(strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			var gotURL, gotBody []string
 			m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				if err := req.ParseForm(); err != nil {
@@ -1413,9 +1434,14 @@ func TestSeriesWithPostMatchersLocation(t *testing.T) {
 			}
 
 			q := url.Values{proxyLabel: {"default"}, matchersParam: tc.urlMatchers}
-			body := url.Values{matchersParam: tc.bodyMatchers}.Encode()
-			req := httptest.NewRequest(http.MethodPost, "http://prometheus.example.com/api/v1/series?"+q.Encode(), strings.NewReader(body))
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			var body io.Reader
+			if tc.method == http.MethodPost {
+				body = strings.NewReader(url.Values{matchersParam: tc.bodyMatchers}.Encode())
+			}
+			req := httptest.NewRequest(tc.method, "http://prometheus.example.com/api/v1/series?"+q.Encode(), body)
+			if tc.method == http.MethodPost {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
 
