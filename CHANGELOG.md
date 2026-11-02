@@ -1,3 +1,7 @@
+## 0.16.1 / 2026-11-02
+
+Maintenance release because the CI workflow failed to publish the `v0.16.0` container images.
+
 ## 0.16.0 / 2026-10-28
 
 * [FEATURE] Add the `-query-param-only` flag to extract the tenant label from the URL query string only and reject non-empty POST form values for that parameter. Use with authorization proxies that SAR URL query values only (e.g. kube-rbac-proxy `byQueryParameter`). Effective only when `-query-param` is used; otherwise ignored.
