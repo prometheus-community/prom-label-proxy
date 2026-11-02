@@ -537,7 +537,7 @@ func TestRules(t *testing.T) {
 			golden:  "rules_no_match.golden",
 		},
 		{
-			// Gzipped response should be handled when explictly asked by the original client.
+			// Gzipped response should be handled when explicitly asked by the original client.
 			labelv:   []string{"not_present_gzip_requested"},
 			upstream: gzipHandler(validRules()),
 			reqHeaders: map[string][]string{
