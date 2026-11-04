@@ -1,3 +1,7 @@
+## 0.16.2 / 2026-11-04
+
+Maintenance release because the CI workflow failed to publish the `v0.16.1` container images.
+
 ## 0.16.1 / 2026-11-02
 
 Maintenance release because the CI workflow failed to publish the `v0.16.0` container images.
