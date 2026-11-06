@@ -117,9 +117,9 @@ func main() {
 	flagset.BoolVar(&headerUsesListSyntax, "header-uses-list-syntax", false, "When specified, the header line value will be parsed as a comma-separated list. This allows a single tenant header line to specify multiple tenant names.")
 	flagset.BoolVar(&rulesWithActiveAlerts, "rules-with-active-alerts", false, "When true, the proxy will return alerting rules with active alerts matching the tenant label even when the tenant label isn't present in the rule's labels.")
 	flagset.BoolVar(&labelMatchersForRulesAPI, "enable-label-matchers-for-rules-api", false, "When true, the proxy uses label matchers when querying the /api/v1/rules endpoint. NOTE: Enable with care because filtering by label matcher is not implemented in older versions of Prometheus (>= 2.54.0 required) and Thanos (>= v0.25.0 required). If not implemented by upstream, the response will not be filtered accordingly.")
-	flagset.BoolVar(&promQLDurationExpressionParsing, "enable-promql-duration-expression-parsing", false, "When true, the proxy supports arithmetic for durations in PromQL expressions.")
+	flagset.BoolVar(&promQLDurationExpressionParsing, "enable-promql-duration-expression-parsing", false, "Deprecated: arithmetic for durations in PromQL expressions is always enabled, Prometheus v0.316.0 is required.")
 	flagset.BoolVar(&promQLExperimentalFunctions, "enable-promql-experimental-functions", false, "When true, the proxy supports experimental functions in PromQL expressions.")
-	flagset.BoolVar(&promQLExtendedRangeSelectors, "enable-promql-extended-range-selectors", false, "When true, the proxy supports extended range selectors in PromQL expressions.")
+	flagset.BoolVar(&promQLExtendedRangeSelectors, "enable-promql-extended-range-selectors", false, "Deprecated: extended range selectors in PromQL expressions are always enabled, Prometheus v0.316.0 is required.")
 	flagset.BoolVar(&promQLBinopFillModifiers, "enable-promql-binop-fill-modifiers", false, "When true, the proxy supports binary operation fill modifiers in PromQL expressions.")
 	flagset.DurationVar(&httpTimeout, "http-timeout", 0, "Timeout for proxied HTTP requests. If zero, no timeout is applied.")
 
@@ -150,6 +150,13 @@ func main() {
 	flagset.Parse(os.Args[1:])
 	logger := promslog.New(promslogConfig)
 	slog.SetDefault(logger)
+
+	if promQLDurationExpressionParsing {
+		logger.Warn("The -enable-promql-duration-expression-parsing flag is deprecated and will be removed in a future version, arithmetic for durations in PromQL expressions is always enabled.")
+	}
+	if promQLExtendedRangeSelectors {
+		logger.Warn("The -enable-promql-extended-range-selectors flag is deprecated and will be removed in a future version, extended range selectors in PromQL expressions are always enabled.")
+	}
 
 	if label == "" {
 		fatal("-label flag cannot be empty")
@@ -246,16 +253,8 @@ func main() {
 		opts = append(opts, injectproxy.WithRegexMatch())
 	}
 
-	if promQLDurationExpressionParsing {
-		opts = append(opts, injectproxy.WithPromqlDurationExpressionParsing())
-	}
-
 	if promQLExperimentalFunctions {
 		opts = append(opts, injectproxy.WithPromqlExperimentalFunctions())
-	}
-
-	if promQLExtendedRangeSelectors {
-		opts = append(opts, injectproxy.WithPromqlExtendedRangeSelectors())
 	}
 
 	if promQLBinopFillModifiers {

@@ -169,24 +169,10 @@ func WithRegexMatch() Option {
 	})
 }
 
-// WithPromqlDurationExpressionParsing enables parsing of duration expressions in the PromQL parser.
-func WithPromqlDurationExpressionParsing() Option {
-	return optionFunc(func(o *options) {
-		o.parserOptions.ExperimentalDurationExpr = true
-	})
-}
-
 // WithPromqlExperimentalFunctions enables parsing of experimental functions in the PromQL parser.
 func WithPromqlExperimentalFunctions() Option {
 	return optionFunc(func(o *options) {
 		o.parserOptions.EnableExperimentalFunctions = true
-	})
-}
-
-// WithPromqlExtendedRangeSelectors enables extended range selectors in the PromQL parser.
-func WithPromqlExtendedRangeSelectors() Option {
-	return optionFunc(func(o *options) {
-		o.parserOptions.EnableExtendedRangeSelectors = true
 	})
 }
 

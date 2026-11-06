@@ -1022,38 +1022,26 @@ func TestEnforceWithParserOptions(t *testing.T) {
 			check:      errorIs(ErrQueryParse),
 		},
 
-		// ExperimentalDurationExpr
+		// Duration expressions are always enabled since Prometheus v0.316.0.
 		{
-			name:       "experimental duration expression enabled",
+			name:       "duration expression",
 			expression: `rate(metric[5m * 2])`,
-			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{ExperimentalDurationExpr: true}, ns),
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{}, ns),
 			check: checks(
 				noError(),
 				hasExpression(`rate(metric{namespace="NS"}[5m * 2])`),
 			),
 		},
-		{
-			name:       "experimental duration expression disabled",
-			expression: `rate(metric[5m * 2])`,
-			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{}, ns),
-			check:      errorIs(ErrQueryParse),
-		},
 
-		// EnableExtendedRangeSelectors
+		// Extended range selectors are always enabled since Prometheus v0.316.0.
 		{
-			name:       "extended range selectors enabled",
+			name:       "extended range selectors",
 			expression: `metric anchored`,
-			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{EnableExtendedRangeSelectors: true}, ns),
+			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{}, ns),
 			check: checks(
 				noError(),
 				hasExpression(`metric{namespace="NS"} anchored`),
 			),
-		},
-		{
-			name:       "extended range selectors disabled",
-			expression: `metric anchored`,
-			enforcer:   NewPromQLEnforcerWithOptions(false, parser.Options{}, ns),
-			check:      errorIs(ErrQueryParse),
 		},
 
 		// EnableBinopFillModifiers
