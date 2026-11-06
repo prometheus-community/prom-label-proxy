@@ -41,19 +41,19 @@ func TestRewriteHostHeader(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newMockUpstream(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				if req.Host != tc.wantHost {
-					prometheusAPIError(w, fmt.Sprintf("unexpected Host: got %q, want %q", req.Host, tc.wantHost), http.StatusBadRequest)
+					prometheusAPIError(w, req, fmt.Sprintf("unexpected Host: got %q, want %q", req.Host, tc.wantHost), http.StatusBadRequest)
 					return
 				}
 				if req.Header.Get("X-Forwarded-For") == "" {
-					prometheusAPIError(w, "X-Forwarded-For not set", http.StatusBadRequest)
+					prometheusAPIError(w, req, "X-Forwarded-For not set", http.StatusBadRequest)
 					return
 				}
 				if got := req.Header.Get("X-Forwarded-Host"); got != "example.com" {
-					prometheusAPIError(w, fmt.Sprintf("unexpected X-Forwarded-Host: got %q, want %q", got, "example.com"), http.StatusBadRequest)
+					prometheusAPIError(w, req, fmt.Sprintf("unexpected X-Forwarded-Host: got %q, want %q", got, "example.com"), http.StatusBadRequest)
 					return
 				}
 				if got := req.Header.Get("X-Forwarded-Proto"); got != "http" {
-					prometheusAPIError(w, fmt.Sprintf("unexpected X-Forwarded-Proto: got %q, want %q", got, "http"), http.StatusBadRequest)
+					prometheusAPIError(w, req, fmt.Sprintf("unexpected X-Forwarded-Proto: got %q, want %q", got, "http"), http.StatusBadRequest)
 					return
 				}
 				w.Write(okResponse)
