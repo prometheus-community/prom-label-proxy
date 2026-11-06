@@ -1,3 +1,7 @@
+## Unreleased
+
+* [CHANGE] Arithmetic for durations and extended range selectors in PromQL expressions are now always enabled with no way to disable them (matching with Prometheus >= v3.16.0). The `-enable-promql-duration-expression-parsing` and `-enable-promql-extended-range-selectors` flags are deprecated and will be removed in a future version. #454
+
 ## 0.16.2 / 2026-11-04
 
 Maintenance release because the CI workflow failed to publish the `v0.16.1` container images.
