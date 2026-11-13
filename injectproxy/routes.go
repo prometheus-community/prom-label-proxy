@@ -818,10 +818,19 @@ func (r *routes) injectMatcher(q url.Values, matcher *labels.Matcher) error {
 
 	// Inject label into existing matchers.
 	p := parser.NewParser(r.parserOpts)
+	e := NewPromQLEnforcerWithOptions(r.errorOnReplace, r.parserOpts, matcher)
 	for i, m := range matchers {
 		ms, err := p.ParseMetricSelector(m)
 		if err != nil {
 			return err
+		}
+
+		if r.errorOnReplace {
+			// Reject selectors that conflict with the enforced matcher, as
+			// the query endpoints do.
+			if _, err := e.EnforceMatchers(ms); err != nil {
+				return err
+			}
 		}
 
 		matchers[i] = matchersToString(append(ms, matcher)...)
