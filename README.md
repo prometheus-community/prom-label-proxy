@@ -181,7 +181,7 @@ prom-label-proxy \
 
 > :warning: The above feature is experimental. Be careful when using this option, it may expose sensitive metrics if you use a too permissive expression.
 
-To error out when the query already contains a label matcher that conflicts with the one the proxy would inject, you can use the `-error-on-replace` option. For example:
+To error out when the query already contains a label matcher that conflicts with the one the proxy would inject, you can use the `-error-on-replace` option. It also applies to the `match[]` parameters of the `/api/v1/series`, `/api/v1/labels`, `/api/v1/label/<name>/values` and `/federate` endpoints. For example:
 
 ```
 prom-label-proxy \
