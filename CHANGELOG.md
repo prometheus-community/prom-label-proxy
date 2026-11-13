@@ -1,6 +1,7 @@
 ## Unreleased
 
 * [CHANGE] Arithmetic for durations and extended range selectors in PromQL expressions are now always enabled with no way to disable them (matching with Prometheus >= v3.16.0). The `-enable-promql-duration-expression-parsing` and `-enable-promql-extended-range-selectors` flags are deprecated and will be removed in a future version. #454
+* [BUGFIX] Return a 400 error instead of an empty 200 response when a `match[]` parameter in the POST body of the `/api/v1/series` and `/api/v1/labels` endpoints can't be parsed.
 
 ## 0.16.2 / 2026-11-04
 

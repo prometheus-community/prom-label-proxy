@@ -780,6 +780,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 	)
 	if req.Method == http.MethodPost {
 		if err := req.ParseForm(); err != nil {
+			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		bodyQ = req.PostForm
@@ -796,6 +797,7 @@ func (r *routes) matcher(w http.ResponseWriter, req *http.Request) {
 
 	if req.Method == http.MethodPost && (hasBodyMatchers || !hasURLMatchers) {
 		if err := r.injectMatcher(bodyQ, matcher); err != nil {
+			prometheusAPIError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
