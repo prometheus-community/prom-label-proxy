@@ -597,13 +597,14 @@ func TestMatchWithPost(t *testing.T) {
 
 func TestSeries(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		labelv      []string
-		promQuery   string
-		expResponse []byte
-		expCode     int
-		expMatch    []string
-		expBody     []byte
+		name           string
+		labelv         []string
+		promQuery      string
+		errorOnReplace bool
+		expResponse    []byte
+		expCode        int
+		expMatch       []string
+		expBody        []byte
 	}{
 		{
 			name:    `No "namespace" parameter returns an error`,
@@ -667,6 +668,29 @@ func TestSeries(t *testing.T) {
 			expMatch:    []string{`{instance="localhost:9090",namespace="something",__name__="up",namespace=~"default|something"}`},
 			expResponse: okResponse,
 		},
+		{
+			name:           `Series with conflicting matcher and errorOnReplace`,
+			labelv:         []string{"default"},
+			promQuery:      `up{namespace="other"}`,
+			errorOnReplace: true,
+			expCode:        http.StatusBadRequest,
+		},
+		{
+			name:           `Series with conflicting matcher, multiple label values and errorOnReplace`,
+			labelv:         []string{"default", "something"},
+			promQuery:      `up{namespace="other"}`,
+			errorOnReplace: true,
+			expCode:        http.StatusBadRequest,
+		},
+		{
+			name:           `Series with matching matcher and errorOnReplace`,
+			labelv:         []string{"default", "something"},
+			promQuery:      `up{namespace="something"}`,
+			errorOnReplace: true,
+			expCode:        http.StatusOK,
+			expMatch:       []string{`{namespace="something",__name__="up",namespace=~"default|something"}`},
+			expResponse:    okResponse,
+		},
 	} {
 		for _, endpoint := range []string{"series"} {
 			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
@@ -678,7 +702,11 @@ func TestSeries(t *testing.T) {
 				)
 				defer m.Close()
 
-				r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel})
+				var opts []Option
+				if tc.errorOnReplace {
+					opts = append(opts, WithErrorOnReplace())
+				}
+				r, err := NewRoutes(m.url, proxyLabel, HTTPFormEnforcer{ParameterName: proxyLabel}, opts...)
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
