@@ -806,6 +806,13 @@ func TestSeriesWithPost(t *testing.T) {
 			expMatch:      []string{`{instance="localhost:9090",namespace="something",__name__="up",namespace=~"default|something"}`},
 			expResponse:   okResponse,
 		},
+		{
+			name:          `Series POST with an invalid matcher returns an error`,
+			labelv:        []string{"default"},
+			promQueryBody: `up{instance=`,
+			method:        http.MethodPost,
+			expCode:       http.StatusBadRequest,
+		},
 	} {
 		for _, endpoint := range []string{"series"} {
 			t.Run(endpoint+"/"+strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
