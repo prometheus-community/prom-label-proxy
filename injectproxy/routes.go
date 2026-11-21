@@ -610,6 +610,8 @@ func MustLabelValues(ctx context.Context) []string {
 		panic("empty keyLabel value in the context")
 	}
 
+	// The slice can be shared between requests (e.g. StaticLabelEnforcer).
+	labels = slices.Clone(labels)
 	sort.Strings(labels)
 
 	return labels
