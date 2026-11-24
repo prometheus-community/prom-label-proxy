@@ -484,10 +484,11 @@ func validAlerts() http.Handler {
 
 func TestRules(t *testing.T) {
 	for _, tc := range []struct {
-		labelv     []string
-		upstream   http.Handler
-		reqHeaders http.Header
-		opts       []Option
+		labelv             []string
+		upstream           http.Handler
+		upstreamPathPrefix string
+		reqHeaders         http.Header
+		opts               []Option
 
 		expCode int
 		golden  string
@@ -610,10 +611,23 @@ func TestRules(t *testing.T) {
 			expCode: http.StatusOK,
 			golden:  "rules_with_label_matchers.golden",
 		},
+		{
+			labelv:             []string{"ns1"},
+			upstream:           validRules(),
+			upstreamPathPrefix: "/prometheus",
+
+			expCode: http.StatusOK,
+			golden:  "rules_match_namespace_ns1_non_root_upstream.golden",
+		},
 	} {
 		t.Run(fmt.Sprintf("%s=%s", proxyLabel, tc.labelv), func(t *testing.T) {
 			m := newMockUpstream(tc.upstream)
 			defer m.Close()
+
+			if tc.upstreamPathPrefix != "" {
+				m.url.Path = tc.upstreamPathPrefix + m.url.Path
+			}
+
 			r, err := NewRoutes(
 				m.url,
 				proxyLabel,
