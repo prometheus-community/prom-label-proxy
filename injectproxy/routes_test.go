@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -1462,5 +1463,26 @@ func TestSeriesWithPostMatchersLocation(t *testing.T) {
 				t.Fatalf("expected body matchers %q, got %q", tc.expBody, gotBody)
 			}
 		})
+	}
+}
+
+func TestStaticLabelEnforcerConcurrentRequests(t *testing.T) {
+	sle := StaticLabelEnforcer{"b", "a"}
+	handler := sle.ExtractLabel(func(w http.ResponseWriter, r *http.Request) {
+		if got := MustLabelValues(r.Context()); !reflect.DeepEqual(got, []string{"a", "b"}) {
+			t.Errorf("expected sorted label values [a b], got %v", got)
+		}
+	})
+
+	var wg sync.WaitGroup
+	for range 16 {
+		wg.Go(func() {
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+		})
+	}
+	wg.Wait()
+
+	if !reflect.DeepEqual(sle, StaticLabelEnforcer{"b", "a"}) {
+		t.Fatalf("expected the configured label values to be left as is, got %v", sle)
 	}
 }
