@@ -19,7 +19,27 @@ import (
 	"net/http"
 )
 
-func prometheusAPIError(w http.ResponseWriter, errorMessage string, code int) {
+// logAPIError logs an error response returned by the proxy itself. Client
+// errors (4xx) are logged at debug level since they are expected during normal
+// operation (e.g. invalid PromQL or a missing tenant), while server errors
+// (5xx) are logged at error level.
+func logAPIError(req *http.Request, errorMessage string, code int) {
+	level := slog.LevelDebug
+	if code >= http.StatusInternalServerError {
+		level = slog.LevelError
+	}
+
+	slog.Log(req.Context(), level, "Request rejected by proxy",
+		"status", code,
+		"error", errorMessage,
+		"method", req.Method,
+		"path", req.URL.Path,
+	)
+}
+
+func prometheusAPIError(w http.ResponseWriter, req *http.Request, errorMessage string, code int) {
+	logAPIError(req, errorMessage, code)
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
@@ -34,7 +54,9 @@ func prometheusAPIError(w http.ResponseWriter, errorMessage string, code int) {
 // alertmanagerAPIError writes an error using the same JSON-string body shape
 // as Alertmanager non-2xx responses, e.g. a 400 with Content-Type
 // application/json and a body like "Failed to create silence: ...\n".
-func alertmanagerAPIError(w http.ResponseWriter, errorMessage string, code int) {
+func alertmanagerAPIError(w http.ResponseWriter, req *http.Request, errorMessage string, code int) {
+	logAPIError(req, errorMessage, code)
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
